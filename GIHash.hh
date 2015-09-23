@@ -103,11 +103,18 @@ public:
   };
 
 //------------------------------------------------------------------
+// A simpler access to values, as they are stored directly
+// in the hash records (instead of pointers to data)
+// Requires the OBJ class to have a copy operator (operator=)!
+// operator[] behaves differently as r-value vs. l-value:
+//  * as r-value returns a pointer (NULL if the key does not exist)
+//  * as l-value can be directly assigned an OBJ value (it'll copy it)
+//---------------------------------------------------------------------
 template <class OBJ> class GIVHash {
  protected:
 	struct GIVHashRec {
 	     int64   key;             // Integer key (positive values preferred; -1 means no value)
-	     int64     hash : 48;        // Hash value of key (-1 means no valid value)
+	     int64   hash : 48;        // Hash value of key (-1 means no valid value)
 	     short int mark : 16;        // marked entry?
 	     OBJ data;            // Data COPY (not a pointer!)
 	     };
@@ -171,7 +178,7 @@ public:
   // Insert a new entry into the table given key and mark.
   // If there is already an entry with that key, it will update it (replace)!
   OBJ* Add(const int64 ky, const OBJ data, bool mrk=false);
-
+  OBJ* set(const int64 ky, const OBJ data, bool mrk=false) { return Add(ky, data, mrk); }
   // Replace data at key, if the entry's mark is less than
   // or equal to the given mark.  If there was no existing entry,
   // a new entry is inserted with the given mark.
@@ -270,7 +277,7 @@ uint32 mix_fasthash_64to32(int64 h) {
 // Resize table
 template <class OBJ> void GIHash<OBJ>::Resize(int m){
   register int i,n,p,x;
-  register uint32 h;
+  register int64 h;
   GIHashRec *k;
   GASSERT(fCount<=fCapacity);
   if(m<GIHASH_DEF_HASH_SIZE) m=GIHASH_DEF_HASH_SIZE;
@@ -605,7 +612,7 @@ template <class OBJ> GIVHash<OBJ>::GIVHash() {
 // Resize table
 template <class OBJ> void GIVHash<OBJ>::Resize(int m){
   register int i,n,p,x;
-  register uint32 h;
+  int64 h;
   GIVHashRec *k;
   GASSERT(fCount<=fCapacity);
   if(m<GIHASH_DEF_HASH_SIZE) m=GIHASH_DEF_HASH_SIZE;
@@ -792,7 +799,7 @@ template <class OBJ> OBJ* GIVHash<OBJ>::Find(const int64 ky) const{
   if(0<fCount){
     //h=strhash(ky);
     uint32 h=mix_fasthash_64to32(ky);
-    GASSERT(0<=h);
+    //GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
     x=GIHASH2(h,fCapacity);
