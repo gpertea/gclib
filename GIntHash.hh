@@ -96,9 +96,30 @@ private:
 public:
     void startIterate() {
        m_cur = &m_zeroCell;
-       if (!m_zeroUsed) Next();
+       if (!m_zeroUsed) NextCell();
     }
-    Cell* Next();
+    Cell* NextCell();
+    OBJ* Next(uint32& nextky) {
+        Cell* cell=NextCell();
+        if (cell) {
+          nextky=cell->key;
+          return & (cell->value);
+        }
+        else {
+          nextky=0;
+          return NULL;
+        }
+    }
+    uint32* NextKey() {
+       Cell* cell=NextCell();
+       if (cell) return & (cell->key);
+         else return NULL;
+    }
+    OBJ* NextValue() {
+       Cell* cell=NextCell();
+       if (cell) return & (cell->value);
+         else return NULL;
+    }
 };
 
 // from code.google.com/p/smhasher/wiki/MurmurHash3
@@ -307,7 +328,7 @@ template <class OBJ> void GIntHash<OBJ>::Resize(uint32 desiredSize)
 //--------------------------------------------------
 //  return next cell (requires startIterate() first)
 //--------------------------------------------------
-template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Next() {
+template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::NextCell() {
     // Already finished?
     if (!m_cur) return m_cur;
     // Iterate past zero cell
