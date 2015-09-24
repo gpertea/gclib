@@ -15,11 +15,9 @@
 template <class OBJ> class GIHash {
  protected:
 	struct GIHashRec {
-	     int64   key;             // Integer key (positive values preferred; -1 means no value)
-	     int64     hash : 48;        // Hash value of key (-1 means no valid value)
-	     short int mark : 16;        // marked entry?
+	     int     key;             // Integer key (positive values preferred; -1 means no value)
+	     int     hash;        // Hash value of key (-1 means no valid value)
 	     pointer data;            // Data
-	     //bool    mark;            // Entry is marked
 	     };
   GIHashRec* hash;       // array of hash records 
   int         fCapacity;     // table size
@@ -28,11 +26,9 @@ template <class OBJ> class GIHash {
   GIHashRec* lastptr; //pointer to last GIHashRec added
     //---------- Raw data retrieval (including empty entries
   // Return key at position pos.
-  int64 Key(uint pos) const { return hash[pos].key; }
+  int Key(uint pos) const { return hash[pos].key; }
   // return data OBJ* at given position
   OBJ* Data(uint pos) const { return (OBJ*) hash[pos].data; }
-  // Return mark flag of entry at position pos.
-  bool Mark(uint pos) const { return hash[pos].mark; }
   // Return position of first filled slot, or >= fCapacity
   int First() const;
   // Return position of last filled slot or -1
@@ -62,25 +58,24 @@ public:
   int Capacity() const { return fCapacity; } // table's size, including the empty slots.
   void Resize(int m);  // Resize the table to the given size.
   int Count() const { return fCount; }// the total number of entries in the table.
-  // Insert a new entry into the table given key and mark.
+  // Insert a new entry into the table for given key
   // If there is already an entry with that key, it will update it!
-  const OBJ* Add(const int64 ky, const OBJ* ptr=NULL, bool mrk=false);
+  const OBJ* Add(const int ky, const OBJ* ptr=NULL);
 
-  // Replace data at key, if the entry's mark is less than
-  // or equal to the given mark.  If there was no existing entry,
-  // a new entry is inserted with the given mark.
-  OBJ* Replace(const int64 ky, const OBJ* ptr, bool mrk=false);
+  // Replace data at key. If there was no existing entry,
+  // a new entry is inserted.
+  OBJ* Replace(const int ky, const OBJ* ptr);
   // Remove a given key and its data
-  OBJ* Remove(const int64 ky);
+  OBJ* Remove(const int ky);
   // Find data OBJ* given key.
-  OBJ* Find(const int64 ky);
-  bool hasKey(const int64 ky);
-  int64 getLastKey() { return lastptr ? lastptr->key : -1; }
-  OBJ* operator[](const int64 ky) { return Find(ky); }
+  OBJ* Find(const int ky);
+  bool hasKey(const int ky);
+  int getLastKey() { return lastptr ? lastptr->key : -1; }
+  OBJ* operator[](const int ky) { return Find(ky); }
   void startIterate(); //iterator-like initialization
-  int64 NextKey(); //returns next valid key in the table (NULL if no more)
+  int NextKey(); //returns next valid key in the table (NULL if no more)
   OBJ* NextData(); //returns next valid hash[].data
-  OBJ* NextData(int64& nextkey); //returns next valid hash[].data
+  OBJ* NextData(int& nextkey); //returns next valid hash[].data
                                 //or NULL if no more
                                 //nextkey is SET to the corresponding key
   GIHashRec* NextEntry() { //returns a pointer to a GIHashRec
@@ -113,10 +108,9 @@ public:
 template <class OBJ> class GIVHash {
  protected:
 	struct GIVHashRec {
-	     int64   key;             // Integer key (positive values preferred; -1 means no value)
-	     int64   hash : 48;        // Hash value of key (-1 means no valid value)
-	     short int mark : 16;        // marked entry?
-	     OBJ data;            // Data COPY (not a pointer!)
+	     int   key;           // Integer key (positive values preferred; -1 means no value)
+	     int   hash;          // Hash value of key (-1 means no valid value)
+	     OBJ data;            // Data COPY
 	     };
   GIVHashRec* hash;       // array of hash records
   int         fCapacity;     // table size
@@ -125,11 +119,9 @@ template <class OBJ> class GIVHash {
   GIVHashRec* lastptr; //pointer to last GIHashRec accessed (added or retrieved)
     //---------- Raw data retrieval (including empty entries
   // Return key at position pos.
-  int64 Key(uint pos) const { return hash[pos].key; }
+  int Key(uint pos) const { return hash[pos].key; }
   // return data OBJ* at given position
   OBJ* Data(uint pos) const { return (OBJ*) hash[pos].data; }
-  // Return mark flag of entry at position pos.
-  bool Mark(uint pos) const { return hash[pos].mark; }
   // Return position of first filled slot, or >= fCapacity
   int First() const;
   // Return position of last filled slot or -1
@@ -147,9 +139,9 @@ template <class OBJ> class GIVHash {
 		friend class GIVHash;
 	protected:
 		GIVHash<OBJ>& ivhash;
-		int64 key;
+		int key;
 	public:
-		GIVHashPh(GIVHash<OBJ>& ivh, int64 k):
+		GIVHashPh(GIVHash<OBJ>& ivh, int k):
 			ivhash(ivh), key(k) {}
 		GIVHashPh& operator=(const OBJ data) {
 		  ivhash.Add(key, data);
@@ -175,30 +167,29 @@ public:
   int Capacity() const { return fCapacity; } // table's size, including the empty slots.
   void Resize(int m);  // Resize the table to the given size.
   int Count() const { return fCount; }// the total number of entries in the table.
-  // Insert a new entry into the table given key and mark.
+  // Insert a new entry into the table for the given key
   // If there is already an entry with that key, it will update it (replace)!
-  OBJ* Add(const int64 ky, const OBJ data, bool mrk=false);
-  OBJ* set(const int64 ky, const OBJ data, bool mrk=false) { return Add(ky, data, mrk); }
-  // Replace data at key, if the entry's mark is less than
-  // or equal to the given mark.  If there was no existing entry,
-  // a new entry is inserted with the given mark.
-  OBJ* Replace(const int64 ky, const OBJ data, bool mrk=false);
+  OBJ* Add(const int ky, const OBJ data);
+  OBJ* set(const int ky, const OBJ data) { return Add(ky, data); }
+  // Replace data at key. If there was no existing entry,
+  // a new entry is inserted.
+  OBJ* Replace(const int ky, const OBJ data);
   // Remove a given key and its data
-  OBJ Remove(const int64 ky); //returns a copy of the value removed
+  OBJ Remove(const int ky); //returns a copy of the value removed
   // Find data OBJ* given key.
-  OBJ* Find(const int64 ky) const; //NULL if not present
-  bool hasKey(const int64 ky);
-  bool exists(const int64 ky) { return hasKey(ky); }
-  int64 getLastKey() { return lastptr ? lastptr->key : -1; }
-  GIVHashPh operator[](int64 ky) {
+  OBJ* Find(const int ky) const; //NULL if not present
+  bool hasKey(const int ky);
+  bool exists(const int ky) { return hasKey(ky); }
+  int getLastKey() { return lastptr ? lastptr->key : -1; }
+  GIVHashPh operator[](int ky) {
 	  return GIVHashPh(*this, ky);
   }
-  OBJ* operator[](const int64 ky) const { return Find(ky);  }
+  OBJ* operator[](const int ky) const { return Find(ky);  }
 
   void startIterate(); //iterator-like initialization
-  int64 NextKey(); //returns next valid key in the table (NULL if no more)
+  int NextKey(); //returns next valid key in the table (NULL if no more)
   OBJ* NextData(); //returns next valid hash[].data
-  OBJ* NextData(int64& nextkey); //returns next valid hash[].data
+  OBJ* NextData(int& nextkey); //returns next valid hash[].data
                                 //or NULL if no more
                                 //nextkey is SET to the corresponding key
   GIVHashRec* NextEntry() { //returns a pointer to a GIHashRec
@@ -266,18 +257,17 @@ template <class OBJ> GIHash<OBJ>::GIHash(bool doFree) {
   }
 
 
-uint32 mix_fasthash_64to32(int64 h) {
-        h ^= (h) >> 23;               
-        h *= 0x2127599bf4325c37ULL;   
-        h ^= (h) >> 47; \
-        return (uint32)( (h-(h >> 32)) & 0xFFFFFFFF);
+int32 mix_fasthash_64to32(int64 h) { //always returns a positive integer!
+        h ^= (h) >> 23;
+        h *= 0x2127599bf4325c37ULL;
+        h ^= (h) >> 47;
+        return (int32)( (h-(h >> 32)) & 0x7FFFFFFF);
 }
 
 
 // Resize table
 template <class OBJ> void GIHash<OBJ>::Resize(int m){
-  register int i,n,p,x;
-  register int64 h;
+  register int i,n,p,h,x;
   GIHashRec *k;
   GASSERT(fCount<=fCapacity);
   if(m<GIHASH_DEF_HASH_SIZE) m=GIHASH_DEF_HASH_SIZE;
@@ -309,15 +299,14 @@ template <class OBJ> void GIHash<OBJ>::Resize(int m){
   }
 
 // add a new entry, or update it if it already exists
-template <class OBJ> const OBJ* GIHash<OBJ>::Add(const int64 ky,
-                      const OBJ* pdata,bool mrk){
-  register int p,i,x,n;
+template <class OBJ> const OBJ* GIHash<OBJ>::Add(const int ky,
+                      const OBJ* pdata){
+  register int p,i,x,h,n;
   //if(!ky) GError("GIHash::insert: NULL key argument.\n");
   GASSERT(fCount<fCapacity);
   //h=strhash(ky);
-  int64 h = mix_fasthash_64to32(ky);
-  //GASSERT(0<=h); ?
-  
+  h = mix_fasthash_64to32(ky);
+  //GASSERT(0<=h);
   p=GIHASH1(h,fCapacity);
   GASSERT(0<=p && p<fCapacity);
   x=GIHASH2(h,fCapacity);
@@ -342,7 +331,6 @@ template <class OBJ> const OBJ* GIHash<OBJ>::Add(const int64 ky,
   GASSERT(0<=i && i<fCapacity);
   GASSERT(hash[i].hash<0);
   hash[i].hash=h;
-  hash[i].mark=mrk;
   hash[i].key=ky;
   //hash[i].keyalloc=true;
   //lastptr=hash[i].key;
@@ -355,12 +343,12 @@ template <class OBJ> const OBJ* GIHash<OBJ>::Add(const int64 ky,
   }
 
 // Add or replace entry
-template <class OBJ>  OBJ* GIHash<OBJ>::Replace(const int64 ky,const OBJ* pdata, bool mrk){
-  register int p,i,x,n;
+template <class OBJ>  OBJ* GIHash<OBJ>::Replace(const int ky,const OBJ* pdata){
+  register int p,i,x,h,n;
   //if(!ky){ GError("GIHash::replace: NULL key argument.\n"); }
   GASSERT(fCount<fCapacity);
   //h=strhash(ky);
-  uint32 h=mix_fasthash_64to32(ky);
+  h=mix_fasthash_64to32(ky);
   GASSERT(0<=h);
   p=GIHASH1(h,fCapacity);
   GASSERT(0<=p && p<fCapacity);
@@ -371,12 +359,9 @@ template <class OBJ>  OBJ* GIHash<OBJ>::Replace(const int64 ky,const OBJ* pdata,
   while(n && hash[p].hash!=-1){
     if((i==-1)&&(hash[p].hash==-2)) i=p;
     if(hash[p].hash==h && hash[p].key==ky){
-      if(hash[p].mark<=mrk){
-        GTRACE(("GIHash::replace: %08x: replacing: \"%s\"\n",this,ky));
-        if (fFreeProc!=NULL) (*fFreeProc)(hash[p].data);
-        hash[p].mark=mrk;
-        hash[p].data=pdata;
-        }
+      GTRACE(("GIHash::replace: %08x: replacing: \"%s\"\n",this,ky));
+      if (fFreeProc!=NULL) (*fFreeProc)(hash[p].data);
+      hash[p].data=pdata;
       return hash[p].data;
       }
     p=(p+x)%fCapacity;
@@ -387,7 +372,6 @@ template <class OBJ>  OBJ* GIHash<OBJ>::Replace(const int64 ky,const OBJ* pdata,
   GASSERT(0<=i && i<fCapacity);
   GASSERT(hash[i].hash<0);
   hash[i].hash=h;
-  hash[i].mark=mrk;
   hash[i].key=ky;
   hash[i].data=pdata;
   fCount++;
@@ -398,13 +382,13 @@ template <class OBJ>  OBJ* GIHash<OBJ>::Replace(const int64 ky,const OBJ* pdata,
 
 
 // Remove entry
-template <class OBJ> OBJ* GIHash<OBJ>::Remove(const int64 ky){
-  register int p,x,n;
+template <class OBJ> OBJ* GIHash<OBJ>::Remove(const int ky){
+  register int p,x,h,n;
   //if(!ky){ GError("GIHash::remove: NULL key argument.\n"); }
   OBJ* removed=NULL;
   if(0<fCount){
     //h=strhash(ky);
-    uint32 h=mix_fasthash_64to32(ky);
+    h=mix_fasthash_64to32(ky);
     GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
@@ -416,7 +400,6 @@ template <class OBJ> OBJ* GIHash<OBJ>::Remove(const int64 ky){
       if(hash[p].hash==h && hash[p].key==ky){
         //GTRACE(("GIHash::remove: %08x removing: \"%s\"\n",this,ky));
         hash[p].hash=-2;
-        hash[p].mark=false;
         //if (hash[p].keyalloc) GFREE((hash[p].key));
         if (fFreeProc!=NULL) (*fFreeProc)(hash[p].data);
             else removed=(OBJ*)hash[p].data;
@@ -436,12 +419,12 @@ template <class OBJ> OBJ* GIHash<OBJ>::Remove(const int64 ky){
 
 
 // Find entry
-template <class OBJ> bool GIHash<OBJ>::hasKey(const int64 ky) {
-  register int p,x,n;
+template <class OBJ> bool GIHash<OBJ>::hasKey(const int ky) {
+  register int p,x,h,n;
   //if(!ky){ GError("GIHash::find: NULL key argument.\n"); }
   if(0<fCount){
     //h=strhash(ky);
-    uint32 h=mix_fasthash_64to32(ky);
+    h=mix_fasthash_64to32(ky);
     GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
@@ -460,7 +443,7 @@ template <class OBJ> bool GIHash<OBJ>::hasKey(const int64 ky) {
   return false;
 }
 
-template <class OBJ> OBJ* GIHash<OBJ>::Find(const int64 ky){
+template <class OBJ> OBJ* GIHash<OBJ>::Find(const int ky){
   register int p,x,n;
   //if(!ky){ GError("GIHash::find: NULL key argument.\n"); }
   if(0<fCount){
@@ -489,7 +472,7 @@ template <class OBJ> void GIHash<OBJ>::startIterate() { //initialize a hash iter
  fCurrentEntry=0;
 }
 
-template <class OBJ> int64 GIHash<OBJ>::NextKey() {
+template <class OBJ> int GIHash<OBJ>::NextKey() {
  register int pos=fCurrentEntry;
  while (pos<fCapacity && hash[pos].hash<0) pos++;
  if (pos==fCapacity) {
@@ -516,7 +499,7 @@ template <class OBJ> OBJ* GIHash<OBJ>::NextData() {
 
 }
 
-template <class OBJ> OBJ* GIHash<OBJ>::NextData(int64 &nextkey) {
+template <class OBJ> OBJ* GIHash<OBJ>::NextData(int &nextkey) {
  register int pos=fCurrentEntry;
  while (pos<fCapacity && hash[pos].hash<0) pos++;
  if (pos==fCapacity) {
@@ -611,8 +594,7 @@ template <class OBJ> GIVHash<OBJ>::GIVHash() {
 
 // Resize table
 template <class OBJ> void GIVHash<OBJ>::Resize(int m){
-  register int i,n,p,x;
-  int64 h;
+  register int i,n,p,h,x;
   GIVHashRec *k;
   GASSERT(fCount<=fCapacity);
   if(m<GIHASH_DEF_HASH_SIZE) m=GIHASH_DEF_HASH_SIZE;
@@ -644,14 +626,14 @@ template <class OBJ> void GIVHash<OBJ>::Resize(int m){
   }
 
 // add a new entry, or update it if it already exists
-template <class OBJ> OBJ* GIVHash<OBJ>::Add(const int64 ky,
-                      const OBJ data,bool mrk){
-  register int p,i,x,n;
+template <class OBJ> OBJ* GIVHash<OBJ>::Add(const int ky,
+                      const OBJ data){
+  register int p,i,x,h,n;
   //if(!ky) GError("GIHashV::insert: NULL key argument.\n");
   GASSERT(fCount<fCapacity);
   //h=strhash(ky);
-  int64 h = mix_fasthash_64to32(ky);
-  //GASSERT(0<=h); ?
+  h = mix_fasthash_64to32(ky);
+  GASSERT(0<=h);
 
   p=GIHASH1(h,fCapacity);
   GASSERT(0<=p && p<fCapacity);
@@ -677,7 +659,6 @@ template <class OBJ> OBJ* GIVHash<OBJ>::Add(const int64 ky,
   GASSERT(0<=i && i<fCapacity);
   GASSERT(hash[i].hash<0);
   hash[i].hash=h;
-  hash[i].mark=mrk;
   hash[i].key=ky;
   //hash[i].keyalloc=true;
   //lastptr=hash[i].key;
@@ -690,12 +671,12 @@ template <class OBJ> OBJ* GIVHash<OBJ>::Add(const int64 ky,
   }
 
 // Add or replace entry
-template <class OBJ>  OBJ* GIVHash<OBJ>::Replace(const int64 ky,const OBJ data, bool mrk){
-  register int p,i,x,n;
+template <class OBJ>  OBJ* GIVHash<OBJ>::Replace(const int ky,const OBJ data){
+  register int p,i,x,h,n;
   //if(!ky){ GError("GIHashV::replace: NULL key argument.\n"); }
   GASSERT(fCount<fCapacity);
   //h=strhash(ky);
-  uint32 h=mix_fasthash_64to32(ky);
+  h=mix_fasthash_64to32(ky);
   GASSERT(0<=h);
   p=GIHASH1(h,fCapacity);
   GASSERT(0<=p && p<fCapacity);
@@ -706,11 +687,8 @@ template <class OBJ>  OBJ* GIVHash<OBJ>::Replace(const int64 ky,const OBJ data, 
   while(n && hash[p].hash!=-1){
     if((i==-1)&&(hash[p].hash==-2)) i=p;
     if(hash[p].hash==h && hash[p].key==ky){
-      if(hash[p].mark<=mrk){
-        GTRACE(("GIHashV::replace: %08x: replacing: \"%s\"\n",this,ky));
-        hash[p].mark=mrk;
-        hash[p].data=data; //copy operator
-        }
+      GTRACE(("GIHashV::replace: %08x: replacing: \"%s\"\n",this,ky));
+      hash[p].data=data; //copy operator
       return &(hash[p].data);
       }
     p=(p+x)%fCapacity;
@@ -721,24 +699,23 @@ template <class OBJ>  OBJ* GIVHash<OBJ>::Replace(const int64 ky,const OBJ data, 
   GASSERT(0<=i && i<fCapacity);
   GASSERT(hash[i].hash<0);
   hash[i].hash=h;
-  hash[i].mark=mrk;
   hash[i].key=ky;
   hash[i].data=data; //copy operator
   fCount++;
   if((100*fCount)>=(GIHASH_MAX_LOAD*fCapacity)) Resize(fCount);
   GASSERT(fCount<fCapacity);
   return &(hash[i].data);
-  }
+}
 
 
 // Remove entry
-template <class OBJ> OBJ GIVHash<OBJ>::Remove(const int64 ky){
-  register int p,x,n;
+template <class OBJ> OBJ GIVHash<OBJ>::Remove(const int ky){
+  register int p,x,h,n;
   //if(!ky){ GError("GIHashV::remove: NULL key argument.\n"); }
   OBJ removed;
   if(0<fCount){
     //h=strhash(ky);
-    uint32 h=mix_fasthash_64to32(ky);
+    h=mix_fasthash_64to32(ky);
     GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
@@ -750,7 +727,6 @@ template <class OBJ> OBJ GIVHash<OBJ>::Remove(const int64 ky){
       if(hash[p].hash==h && hash[p].key==ky){
         //GTRACE(("GIHashV::remove: %08x removing: \"%s\"\n",this,ky));
         hash[p].hash=-2;
-        hash[p].mark=false;
         //if (hash[p].keyalloc) GFREE((hash[p].key));
         removed=hash[p].data; //old data copied
         hash[p].key=-1;
@@ -769,12 +745,12 @@ template <class OBJ> OBJ GIVHash<OBJ>::Remove(const int64 ky){
 
 
 // Find entry
-template <class OBJ> bool GIVHash<OBJ>::hasKey(const int64 ky) {
-  register int p,x,n;
+template <class OBJ> bool GIVHash<OBJ>::hasKey(const int ky) {
+  register int p,x,h,n;
   //if(!ky){ GError("GIHashV::find: NULL key argument.\n"); }
   if(0<fCount){
     //h=strhash(ky);
-    uint32 h=mix_fasthash_64to32(ky);
+    h=mix_fasthash_64to32(ky);
     GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
@@ -793,12 +769,12 @@ template <class OBJ> bool GIVHash<OBJ>::hasKey(const int64 ky) {
   return false;
 }
 
-template <class OBJ> OBJ* GIVHash<OBJ>::Find(const int64 ky) const{
-  register int p,x,n;
+template <class OBJ> OBJ* GIVHash<OBJ>::Find(const int ky) const{
+  register int p,x,h,n;
   //if(!ky){ GError("GIHashV::find: NULL key argument.\n"); }
   if(0<fCount){
     //h=strhash(ky);
-    uint32 h=mix_fasthash_64to32(ky);
+    h=mix_fasthash_64to32(ky);
     //GASSERT(0<=h);
     p=GIHASH1(h,fCapacity);
     GASSERT(0<=p && p<fCapacity);
@@ -822,7 +798,7 @@ template <class OBJ> void GIVHash<OBJ>::startIterate() { //initialize a hash ite
  fCurrentEntry=0;
 }
 
-template <class OBJ> int64 GIVHash<OBJ>::NextKey() {
+template <class OBJ> int GIVHash<OBJ>::NextKey() {
  register int pos=fCurrentEntry;
  while (pos<fCapacity && hash[pos].hash<0) pos++;
  if (pos==fCapacity) {
@@ -849,7 +825,7 @@ template <class OBJ> OBJ* GIVHash<OBJ>::NextData() {
 
 }
 
-template <class OBJ> OBJ* GIVHash<OBJ>::NextData(int64 &nextkey) {
+template <class OBJ> OBJ* GIVHash<OBJ>::NextData(int &nextkey) {
  register int pos=fCurrentEntry;
  while (pos<fCapacity && hash[pos].hash<0) pos++;
  if (pos==fCapacity) {
