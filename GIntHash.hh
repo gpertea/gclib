@@ -1,15 +1,15 @@
-#ifndef _GINTHASH_HH
-#define _GINTHASH_HH
+#ifndef _GHASHT_HH
+#define _GHASHT_HH
 #include "GBase.h"
 //----------------------------------------------
-//  Hash table with integer keys, based on Jeff Preshing's code 
+//  Hash table templates based on Jeff Preshing's code
 // ---------------------------------------------
 //  Maps 32-bit integers to user data
 //  Uses open addressing with linear probing.
 //  In the m_cells array, key = 0 is reserved to indicate an unused cell.
 //  Actual value for key 0 (if any) is stored in m_zeroCell.
 //  The hash table automatically doubles in size when it becomes 75% full.
-//  The hash table never shrinks in size, even after Clear(), 
+//  The hash table never shrinks in size, even after Clear(),
 //  unless you explicitly call Compact().
 //----------------------------------------------
 inline uint32_t upper_power_of_two(uint32_t v) {
@@ -29,40 +29,26 @@ inline uint64_t upper_power_of_two(uint64_t v) {
   return v;
 }
 
-template <class OBJ> class GIntHash {
+template <typename OBJ, typename CELL> class GHashT {
 public:
-  struct Cell {
-    uint32 key;
-    OBJ value;
-    Cell():key(0) { }
-  };
-
-private:
-    Cell* m_cells;
+//protected:
+    CELL* m_cells;
     uint32 m_arraySize;
     uint32 m_population;
     bool m_zeroUsed;
-    Cell m_zeroCell;
+    CELL m_zeroCell;
     void Resize(uint32 desiredSize);
     //for iteration over elements
-public:
+//public:
     void init(uint32 initialSize = 32);
-    GIntHash(uint32 initialSize = 32):m_cells(NULL),m_arraySize(0),
+    GHashT(uint32 initialSize = 32):m_cells(NULL),m_arraySize(0),
        m_population(0),m_zeroUsed(false), m_zeroCell(), m_cur(NULL) { init(initialSize); }
-    ~GIntHash() {  delete[] m_cells; }
+    ~GHashT() {  delete[] m_cells; }
     uint32 Count() { return m_population; }
     // Basic operations
-    Cell* Lookup(uint32 key);
-    Cell* Insert(uint32 key, OBJ val);
-    OBJ* Add(uint32 key, OBJ val) {
-    	Cell* c=Insert(key, val);
-    	return &(c->value);
-    }
-    OBJ* set(uint32 key, OBJ val) {
-    	Cell* c=Insert(key, val);
-    	return &(c->value);
-    }
-    void Delete(Cell* cell);
+    CELL* Lookup(uint32 key);
+    CELL* Insert(uint32 key);//Important: set the value to Insert()->value
+    void Delete(CELL* cell);
     void Clear(uint32 initSize = 32) {
       delete[] m_cells;
       init(initSize);
@@ -70,57 +56,160 @@ public:
     void Compact() {
       Resize(upper_power_of_two((m_population * 4 + 3) / 3));
     }
-    
-    void Delete(uint32 key) {
-        Cell* cell = Lookup(key);
-        if (cell) Delete(cell);
-    }
-    OBJ* Find(uint32 key) {
-    	Cell* cell = Lookup(key);
-    	return (cell ? & cell->value : NULL);
-    }
-    OBJ* get(uint32 key) {
-    	Cell* cell = Lookup(key);
-    	return (cell ? & cell->value : NULL);
-    }
-    OBJ* operator[](const uint32 ky) {
-    	Cell* cell = Lookup(ky);
-    	return (cell ? & cell->value : NULL);
-    }
-
-//----------------------------------------------
-//  Iteration 
-//----------------------------------------------
-private:
-    Cell* m_cur;
-public:
+ //----------------------------------------------
+ //  Iteration
+ //----------------------------------------------
+ //protected:
+    CELL* m_cur;
+ //public:
     void startIterate() {
        m_cur = &m_zeroCell;
        if (!m_zeroUsed) NextCell();
     }
-    Cell* NextCell();
-    OBJ* Next(uint32& nextky) {
-        Cell* cell=NextCell();
-        if (cell) {
-          nextky=cell->key;
-          return & (cell->value);
-        }
-        else {
-          nextky=0;
-          return NULL;
-        }
-    }
-    uint32* NextKey() {
-       Cell* cell=NextCell();
-       if (cell) return & (cell->key);
-         else return NULL;
-    }
-    OBJ* NextValue() {
-       Cell* cell=NextCell();
-       if (cell) return & (cell->value);
-         else return NULL;
-    }
+    CELL* NextCell();
 };
+
+template <class OBJ> class GIntHash {
+protected:
+	struct Cell {
+		uint32 key;
+		OBJ value;
+		Cell():key(0) { }
+	};
+	GHashT<OBJ, Cell> ghash;
+public:
+  GIntHash():ghash() {}
+  OBJ* Add(uint32 key, OBJ val) {
+  	Cell* c=ghash.Insert(key);
+  	c->value = val;
+  	return &(c->value);
+  }
+  OBJ* set(uint32 key, OBJ val) {
+  	Cell* c=ghash.Insert(key);
+  	c->value = val;
+  	return &(c->value);
+  }
+  void Clear() { ghash.Clear(); }
+  void Compact() { ghash.Compact(); }
+  void startIterate() { ghash.startIterate(); }
+  void Delete(uint32 key) {
+      Cell* cell = ghash.Lookup(key);
+      if (cell) Delete(cell);
+  }
+  OBJ* Find(uint32 key) {
+  	Cell* cell = ghash.Lookup(key);
+  	return (cell ? & cell->value : NULL);
+  }
+  OBJ* get(uint32 key) {
+  	Cell* cell = ghash.Lookup(key);
+  	return (cell ? & cell->value : NULL);
+  }
+  OBJ* operator[](const uint32 ky) {
+  	Cell* cell = ghash.Lookup(ky);
+  	return (cell ? & cell->value : NULL);
+  }
+  OBJ* Next(uint32& nextky) {
+      Cell* cell=ghash.NextCell();
+      if (cell) {
+        nextky=cell->key;
+        return & (cell->value);
+      }
+      else {
+        nextky=0;
+        return NULL;
+      }
+  }
+  uint32 NextKey() {
+     Cell* cell=ghash.NextCell();
+     if (cell) return cell->key;
+       else return NULL;
+  }
+  OBJ* NextValue() {
+     Cell* cell=ghash.NextCell();
+     if (cell) return & (cell->value);
+       else return NULL;
+  }
+};
+
+template <class OBJ> class GIntHashP {
+protected:
+	struct Cell {
+		uint32 key;
+		OBJ* value;
+		Cell():key(0),value(NULL) { }
+	};
+	GHashT<OBJ, Cell> ghash;
+	bool doFreeItems;
+public:
+  GIntHashP(bool freeItems=true):ghash(),doFreeItems(freeItems) {}
+  ~GIntHashP() { Clear(); }
+  OBJ* Add(uint32 key, OBJ* val) {
+  	Cell* c=ghash.Insert(key);
+  	c->value = val;
+  	return c->value;
+  }
+  OBJ* set(uint32 key, OBJ* val) {
+  	Cell* c=ghash.Insert(key);
+  	c->value = val;
+  	return c->value;
+  }
+  void startIterate() { ghash.startIterate(); }
+  void Compact() { ghash.Compact(); }
+
+  void Clear() {
+	if (doFreeItems) {
+		if (ghash.m_zeroUsed) delete ghash.m_zeroCell.value;
+		ghash.startIterate();
+		while (Cell* cell=ghash.NextCell()) {
+			delete cell->value;
+		}
+	}
+	ghash.Clear();
+  }
+  void Delete(uint32 key) {
+      Cell* cell = ghash.Lookup(key);
+      if (cell) {
+    	  if (doFreeItems) {
+    		  delete cell->value;
+    	  }
+    	  Delete(cell);
+      }
+  }
+  OBJ* Find(uint32 key) {
+  	Cell* cell = ghash.Lookup(key);
+  	return (cell ? cell->value : NULL);
+  }
+  OBJ* get(uint32 key) {
+  	Cell* cell = ghash.Lookup(key);
+  	return (cell ? cell->value : NULL);
+  }
+  OBJ* operator[](const uint32 ky) {
+  	Cell* cell = ghash.Lookup(ky);
+  	return (cell ? cell->value : NULL);
+  }
+  OBJ* Next(uint32& nextky) {
+      Cell* cell=ghash.NextCell();
+      if (cell) {
+        nextky=cell->key;
+        return cell->value;
+      }
+      else {
+        nextky=0;
+        return NULL;
+      }
+  }
+  uint32 NextKey() {
+     Cell* cell=ghash.NextCell();
+     if (cell) return cell->key;
+       else return NULL;
+  }
+  OBJ* NextValue() {
+     Cell* cell=ghash.NextCell();
+     if (cell) return cell->value;
+       else return NULL;
+  }
+};
+
 
 // from code.google.com/p/smhasher/wiki/MurmurHash3
 inline uint32_t integerHash(uint32_t h)
@@ -152,12 +241,12 @@ inline uint64_t integerHash(uint64_t k)
 //----------------------------------------------
 //  constructor
 //----------------------------------------------
-template <class OBJ> void GIntHash<OBJ>::init(uint32 initialSize) {
+template <typename OBJ, typename CELL> void GHashT<OBJ,CELL>::init(uint32 initialSize) {
     // Initialize regular cells
     m_arraySize = initialSize;
     GASSERT((m_arraySize & (m_arraySize - 1)) == 0);   // Must be a power of 2
-    m_cells = new Cell[m_arraySize];
-    memset(m_cells, 0, sizeof(Cell) * m_arraySize);
+    m_cells = new CELL[m_arraySize];
+    memset(m_cells, 0, sizeof(CELL) * m_arraySize);
     m_population = 0;
 
     // Initialize zero cell
@@ -166,14 +255,13 @@ template <class OBJ> void GIntHash<OBJ>::init(uint32 initialSize) {
     //m_zeroCell.value = 0;
 }
 
-
 //----------------------------------------------
 //  Lookup key
 //----------------------------------------------
-template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Lookup(uint32 key) {
+template <typename OBJ, typename CELL> CELL* GHashT<OBJ, CELL>::Lookup(uint32 key) {
   if (key) {
     // Check regular cells
-    for (Cell* cell = GIHASH_FIRST_CELL(integerHash(key));;  
+    for (CELL* cell = GIHASH_FIRST_CELL(integerHash(key));;
                 cell = GIHASH_CIRCULAR_NEXT(cell)) {
       if (cell->key == key) return cell;
       if (!cell->key) return NULL;
@@ -186,18 +274,19 @@ template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Lookup(uint32 
   }
 };
 
-//----------------------------------------------
-//  Adding a key-value pair to the hash table
-//----------------------------------------------
-template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Insert(uint32 key, OBJ val) {
+//-----------------------------------------------------------------------
+// Adding a key pair to the hash table, returns CELL
+//IMPORTANT: Caller is responsible of setting the value into CELL->value
+//-----------------------------------------------------------------------
+template <typename OBJ, typename CELL> CELL* GHashT<OBJ, CELL>::Insert(uint32 key) {
     if (key) {
         // Check regular cells
         for (;;) {
-            for (Cell* cell = GIHASH_FIRST_CELL(integerHash(key));; 
+            for (CELL* cell = GIHASH_FIRST_CELL(integerHash(key));;
                     cell = GIHASH_CIRCULAR_NEXT(cell)) {
                 if (cell->key == key) {
                   // Found
-                  cell->value=val;
+                  //cell->value=val;
                   return cell;
                 }
                 if (cell->key == 0) {
@@ -209,14 +298,13 @@ template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Insert(uint32 
                     }
                     ++m_population;
                     cell->key = key;
-                    cell->value = val;
+                    //cell->value = val;
                     return cell;
                 }
             }
         }
     }
-    else
-    {
+    else   {
       // Check zero cell
       if (!m_zeroUsed) {
         // Insert here
@@ -226,7 +314,7 @@ template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Insert(uint32 
           Resize(m_arraySize * 2);
         }
       }
-      m_zeroCell.value=val;
+      //m_zeroCell.value=val;
       return &m_zeroCell;
     }
 }
@@ -234,24 +322,24 @@ template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::Insert(uint32 
 //----------------------------------------------
 //  Delete a key-value pair in the hash table
 //----------------------------------------------
-template <class OBJ> void GIntHash<OBJ>::Delete(Cell* cell) {
+template <typename OBJ, typename CELL> void GHashT<OBJ,CELL>::Delete(CELL* cell) {
     if (cell != &m_zeroCell) {
         // Delete from regular cells
         GASSERT(cell >= m_cells && cell - m_cells < m_arraySize);
         GASSERT(cell->key);
         // Remove this cell by shuffling neighboring cells so there are no gaps in anyone's probe chain
-        for (Cell* neighbor = GIHASH_CIRCULAR_NEXT(cell);; 
+        for (CELL* neighbor = GIHASH_CIRCULAR_NEXT(cell);;
                   neighbor = GIHASH_CIRCULAR_NEXT(neighbor)) {
             if (!neighbor->key) {
                 // There's nobody to swap with. Go ahead and clear this cell, then return
                 cell->key = 0;
-                cell->value = 0;
+                //cell->value = 0;
                 m_population--;
                 if (m_population<m_arraySize/2) Compact();
                 return;
             }
-            Cell* ideal = GIHASH_FIRST_CELL(integerHash(neighbor->key));
-            if (GIHASH_CIRCULAR_OFFSET(ideal, cell) < 
+            CELL* ideal = GIHASH_FIRST_CELL(integerHash(neighbor->key));
+            if (GIHASH_CIRCULAR_OFFSET(ideal, cell) <
                      GIHASH_CIRCULAR_OFFSET(ideal, neighbor)) {
                 // Swap with neighbor, then make neighbor the new cell to remove.
                 *cell = *neighbor;
@@ -263,7 +351,7 @@ template <class OBJ> void GIntHash<OBJ>::Delete(Cell* cell) {
         // Delete zero cell
         GASSERT(m_zeroUsed);
         m_zeroUsed = false;
-        cell->value = 0;
+        //cell->value = 0;
         m_population--;
         if (m_population<m_arraySize/2) Compact();
         return;
@@ -271,48 +359,25 @@ template <class OBJ> void GIntHash<OBJ>::Delete(Cell* cell) {
 }
 
 //----------------------------------------------
-//  Clear the hash table
-//----------------------------------------------
-/*
-template <class OBJ> void GIntHash<OBJ>::Clear(uint32 initsize)
-{
-    // (Does not resize the array)
-    // Clear regular cells
-    memset(m_cells, 0, sizeof(Cell) * m_arraySize);
-    m_population = 0;
-    // Clear zero cell
-    m_zeroUsed = false;
-    m_zeroCell.value = 0;
-}
-*/
-
-//----------------------------------------------
 //  Resize hash table
 //----------------------------------------------
-template <class OBJ> void GIntHash<OBJ>::Resize(uint32 desiredSize)
-{
+template <typename OBJ, typename CELL> void GHashT<OBJ,CELL>::Resize(uint32 desiredSize) {
     GASSERT((desiredSize & (desiredSize - 1)) == 0);   // Must be a power of 2
     GASSERT(m_population * 4  <= desiredSize * 3);
-
     // Get start/end pointers of old array
-    Cell* oldCells = m_cells;
-    Cell* end = m_cells + m_arraySize;
-
+    CELL* oldCells = m_cells;
+    CELL* end = m_cells + m_arraySize;
     // Allocate new array
     m_arraySize = desiredSize;
-    m_cells = new Cell[m_arraySize];
-    memset(m_cells, 0, sizeof(Cell) * m_arraySize);
-
+    m_cells = new CELL[m_arraySize];
+    memset(m_cells, 0, sizeof(CELL) * m_arraySize);
     // Iterate through old array
-    for (Cell* c = oldCells; c != end; c++)
-    {
-        if (c->key)
-        {
+    for (CELL* c = oldCells; c != end; c++)  {
+        if (c->key) {
             // Insert this element into new array
-            for (Cell* cell = GIHASH_FIRST_CELL(integerHash(c->key));; cell = GIHASH_CIRCULAR_NEXT(cell))
-            {
-                if (!cell->key)
-                {
+            for (CELL* cell = GIHASH_FIRST_CELL(integerHash(c->key));;
+            		cell = GIHASH_CIRCULAR_NEXT(cell))  {
+                if (!cell->key) {
                     // Insert here
                     *cell = *c;
                     break;
@@ -320,21 +385,19 @@ template <class OBJ> void GIntHash<OBJ>::Resize(uint32 desiredSize)
             }
         }
     }
-
-    // Delete old array
-    delete[] oldCells;
+    delete[] oldCells; // Delete old array
 }
 
 //--------------------------------------------------
 //  return next cell (requires startIterate() first)
 //--------------------------------------------------
-template <class OBJ> typename GIntHash<OBJ>::Cell* GIntHash<OBJ>::NextCell() {
+template <typename OBJ, typename CELL> CELL* GHashT<OBJ,CELL>::NextCell() {
     // Already finished?
     if (!m_cur) return m_cur;
     // Iterate past zero cell
-    if (m_cur == m_zeroCell) m_cur = m_cells[-1];
+    if (m_cur == &m_zeroCell) m_cur = & (m_cells[-1]);
     // Iterate through the regular cells
-    Cell* end = m_cells + m_arraySize;
+    CELL* end = m_cells + m_arraySize;
     while (++m_cur != end) {
       if (m_cur->key) return m_cur;
     }
