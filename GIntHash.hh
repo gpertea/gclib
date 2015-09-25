@@ -163,7 +163,7 @@ template <class OBJ> void GIntHash<OBJ>::init(uint32 initialSize) {
     // Initialize zero cell
     m_zeroUsed = 0;
     m_zeroCell.key = 0;
-    m_zeroCell.value = 0;
+    //m_zeroCell.value = 0;
 }
 
 
