@@ -487,10 +487,11 @@ char* fgetline(char* & buf, int& buf_cap, FILE *stream, off_t* f_pos, int* linel
   }
 
 char* GLineReader::getLine(FILE* stream, off_t& f_pos) {
-   if (pushed) { pushed=false; return buf(); }
+   if (pushed) { pushed=false; return lbuf(); }
    //reads a char at a time until \n and/or \r are encountered
    //len=0;
    int c=0;
+   lbuf.Clear();
    while ((c=getc(stream))!=EOF) {
      //if (len>=allocated-1) {
      //   allocated+=1024;
@@ -498,31 +499,30 @@ char* GLineReader::getLine(FILE* stream, off_t& f_pos) {
      //}
      if (c=='\n' || c=='\r') {
        //buf[len]='\0';
-       buf.Push('\0');
+       lbuf.Push('\0');
        if (c=='\r') { //DOS file -- special case
          if ((c=getc(stream))!='\n') ungetc(c,stream);
                                 else f_pos++;
          }
        f_pos++;
        lcount++;
-       return buf();
+       return lbuf();
        }
      f_pos++;
      //buf[len]=(char)c;
-     buf.Push(c);
+     lbuf.Push(c);
      //len++;
      } //while i<buf_cap-1
    if (c==EOF) {
      isEOF=true;
      //if (len==0) return NULL;
-     if (buf.Count()==0) return NULL;
+     if (lbuf.Count()==0) return NULL;
      }
    //buf[len]='\0';
-   buf.Push('\0');
+   lbuf.Push('\0');
    lcount++;
-   return buf();
+   return lbuf();
 }
-
 
 //strchr but with a set of chars instead of only one
 char* strchrs(const char* s, const char* chrs) {
@@ -569,7 +569,6 @@ char* strupper(char * str) {//changes string in place
 }
 
 
-
 //test if a char is in a given string (set)
 bool chrInStr(char c, const char* str) {
  if (str==NULL || *str=='\0') return false;
@@ -578,8 +577,6 @@ bool chrInStr(char c, const char* str) {
    }
  return false;
  }
-
-
 
 char* rstrfind(const char* str, const char* substr) {
 /* like rindex() for a string */
@@ -616,8 +613,6 @@ char* strifind(const char* str,  const char* substr) {
   return NULL;
 }
 
-
-
 // tests if string s has the given prefix
 bool startsWith(const char* s, const char* prefix) {
  if (prefix==NULL || s==NULL) return false;
@@ -644,7 +639,6 @@ bool endsWith(const char* s, const char* suffix) {
  while (j>=0 && s[i]==suffix[j]) { i--; j--; }
  return (j==-1);
  }
-
 
 char* reverseChars(char* str, int slen) {
   if (slen==0) slen=strlen(str);

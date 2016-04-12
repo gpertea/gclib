@@ -6,42 +6,42 @@
 int GXMemPool::kMinSpace = 1000000;
 
 // ifdef TRIMDEBUG
- char buf[6]={0x1B,'[', 'n','m','m','\0'};
+ char COLOR_buf[6]={0x1B,'[', 'n','m','m','\0'};
 
 void color_fg(int c,FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"%dm",c+30);
- fwrite(buf,1,strlen(buf), f);
+ sprintf((char *)(&COLOR_buf[2]),"%dm",c+30);
+ fwrite(COLOR_buf,1,strlen(COLOR_buf), f);
 }
 
 void color_bg(int c, FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"%dm",c+40);
- fwrite(buf,1,strlen(buf),f);
+ sprintf((char *)(&COLOR_buf[2]),"%dm",c+40);
+ fwrite(COLOR_buf,1,strlen(COLOR_buf),f);
 };
 
 void color_resetfg(FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"39m");
- fwrite(buf,1,strlen(buf), f);
+ sprintf((char *)(&COLOR_buf[2]),"39m");
+ fwrite(COLOR_buf,1,strlen(COLOR_buf), f);
 };
 
 void color_resetbg(FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"49m");
- fwrite(buf,1,strlen(buf), f);
+ sprintf((char *)(&COLOR_buf[2]),"49m");
+ fwrite(COLOR_buf,1,strlen(COLOR_buf), f);
 }
 
 void color_reset(FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"0m");
- fwrite(buf,1,strlen(buf), f);
+ sprintf((char *)(&COLOR_buf[2]),"0m");
+ fwrite(COLOR_buf,1,strlen(COLOR_buf), f);
 };
 
 void color_normal(FILE* f) {
  if (f!=stderr && f!=stdout) return;
- sprintf((char *)(&buf[2]),"22m");
- fwrite(buf,1,strlen(buf), f);
+ sprintf((char *)(&COLOR_buf[2]),"22m");
+ fwrite(COLOR_buf,1,strlen(COLOR_buf), f);
 };
 
 // endif
