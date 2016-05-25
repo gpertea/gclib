@@ -455,6 +455,7 @@ struct GXAlnInfo {
  int score;
  double pid;
  bool strong;
+ int udata;
  GXEditScript* editscript;
  CAlnGapInfo* gapinfo;
  GXAlnInfo(const char* q, int q_l, int q_r, const char* s, int s_l, int s_r,
@@ -468,6 +469,7 @@ struct GXAlnInfo {
     score=sc;
     pid=percid;
     strong=false;
+    udata=0;
     editscript=NULL;
     gapinfo=NULL;
     }
