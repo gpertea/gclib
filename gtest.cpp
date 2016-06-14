@@ -145,8 +145,14 @@ int main(int argc, char * const argv[]) {
       }
     }
  if (args.getOpt(OPT_BITVEC)) {
-    GBitVec bits(2044);
-    GMessage(">>> -- Start BitVec Test -- \n");
+    uint numbits=4156888234;
+    GBitVec bits(numbits);
+    GMessage(">>> -- BitVec(%u) created (size=%u, mem=%lu) -- \n", numbits, bits.size(),
+    		bits.getMemorySize());
+    bits[405523342]=true;
+    GMessage("      memory size: %lu , size()=%u, count()=%d \n", bits.getMemorySize(), bits.size(), bits.count());
+    /*
+    //GMessage(">>> -- Start BitVec Test -- \n");
     if (bits[1092]) bitError(1092);
     bits.resize(2049);
     if (bits[2048]) bitError(2048);
@@ -161,8 +167,8 @@ int main(int argc, char * const argv[]) {
     Gswap(bits, bits2);
     if (!bits2[2048]) bitError(2048);
     if (!bits2[4096]) bitError(4096);
-    
-    GMessage("<<< -- End BitVec Test (size: %d, count: %d, bits2 size=%d, count=%d) --\n", 
-           bits.size(), bits.count(), bits2.size(), bits2.count());
+    */
+    //GMessage("<<< -- End BitVec Test (size: %d, count: %d, bits2 size=%d, count=%d) --\n",
+    ///       bits.size(), bits.count(), bits2.size(), bits2.count());
     }
 }
