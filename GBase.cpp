@@ -487,42 +487,33 @@ char* fgetline(char* & buf, int& buf_cap, FILE *stream, off_t* f_pos, int* linel
   }
 
 char* GLineReader::getLine(FILE* stream, off_t& f_pos) {
-   if (pushed) { pushed=false; return lbuf(); }
+   if (pushed) { pushed=false; return buf(); }
    //reads a char at a time until \n and/or \r are encountered
-   //len=0;
    int c=0;
-   lbuf.Clear();
+   buf.reset(); //len = 0
    while ((c=getc(stream))!=EOF) {
-     //if (len>=allocated-1) {
-     //   allocated+=1024;
-     //   GREALLOC(buf, allocated);
-     //}
      if (c=='\n' || c=='\r') {
-       //buf[len]='\0';
-       lbuf.Push('\0');
+       buf.Push('\0');
        if (c=='\r') { //DOS file -- special case
          if ((c=getc(stream))!='\n') ungetc(c,stream);
                                 else f_pos++;
          }
        f_pos++;
        lcount++;
-       return lbuf();
+       return buf();
        }
      f_pos++;
-     //buf[len]=(char)c;
-     lbuf.Push(c);
-     //len++;
+     buf.Push(c);
      } //while i<buf_cap-1
    if (c==EOF) {
      isEOF=true;
-     //if (len==0) return NULL;
-     if (lbuf.Count()==0) return NULL;
+     if (buf.Count()==0) return NULL;
      }
-   //buf[len]='\0';
-   lbuf.Push('\0');
+   buf.Push('\0');
    lcount++;
-   return lbuf();
+   return buf();
 }
+
 
 //strchr but with a set of chars instead of only one
 char* strchrs(const char* s, const char* chrs) {
@@ -569,6 +560,7 @@ char* strupper(char * str) {//changes string in place
 }
 
 
+
 //test if a char is in a given string (set)
 bool chrInStr(char c, const char* str) {
  if (str==NULL || *str=='\0') return false;
@@ -577,6 +569,8 @@ bool chrInStr(char c, const char* str) {
    }
  return false;
  }
+
+
 
 char* rstrfind(const char* str, const char* substr) {
 /* like rindex() for a string */
@@ -613,6 +607,8 @@ char* strifind(const char* str,  const char* substr) {
   return NULL;
 }
 
+
+
 // tests if string s has the given prefix
 bool startsWith(const char* s, const char* prefix) {
  if (prefix==NULL || s==NULL) return false;
@@ -639,6 +635,7 @@ bool endsWith(const char* s, const char* suffix) {
  while (j>=0 && s[i]==suffix[j]) { i--; j--; }
  return (j==-1);
  }
+
 
 char* reverseChars(char* str, int slen) {
   if (slen==0) slen=strlen(str);
@@ -683,6 +680,30 @@ int strhash(const char* str){
   GASSERT(h<=0x0fffffff);
   return h;
   }
+
+int djb_hash(const char* cp)
+{
+    int h = 5381;
+    while (*cp)
+        h = (int)(33 * h ^ (unsigned char) *cp++);
+    return (h & 0x7FFFFFFF); //always positive
+    //return h;
+    //return absolute value of this int:
+    //int mask = (h >> (sizeof(int) * CHAR_BIT - 1));
+    //return (h + mask) ^ mask;
+}
+
+/* Fowler/Noll/Vo (FNV) hash function, variant 1a */
+int fnv1a_hash(const char* cp) {
+    int h = 0x811c9dc5;
+    while (*cp) {
+        h ^= (unsigned char) *cp++;
+        h *= 0x01000193;
+    }
+    //return h;
+    return (h & 0x7FFFFFFF);
+}
+
 
 // removes the last part (file or directory name) of a full path
 // this is a destructive operation for the given string!!!

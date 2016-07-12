@@ -282,7 +282,9 @@ bool endsWith(const char* s, const char* suffix);
 // ELF hash function for strings
 int strhash(const char* str);
 
-
+//alternate hash functions:
+int fnv1a_hash(const char* cp);
+int djb_hash(const char* cp);
 
 //---- generic base GSeg : genomic segment (interval) --
 // coordinates are considered 1-based (so 0 is invalid)
@@ -396,7 +398,7 @@ template<class OBJ> class GDynArray {
     GDynArray& operator = (const GDynArray &a) { // assignment operator
         if (this == &a) return *this;
     	if (a.fCount == 0) {
-    		Clear(true);
+    		Clear();
     		return *this;
     	}
     	setCapacity(a.fCapacity); //set size
@@ -446,21 +448,22 @@ template<class OBJ> class GDynArray {
     uint Count() { return fCount; } // get size of array (elements)
     uint Capacity() { return fCapacity; }
     virtual void setCapacity(uint newcap) {
-    	if (newcap==0) { Clear(true); return; } //better use Clear(true) instead
+    	if (newcap==0) { Clear(); return; } //better use Clear() instead
     	if (newcap <= fCapacity) return; //never shrink -- use GVec for this
     	GREALLOC(fArray, newcap*sizeof(OBJ));
     	fCapacity=newcap;
     }
 
-    void Clear(bool memReset=false) { // clear array
+    void Clear() { // clear array
     	fCount = 0;
-    	if (memReset)  {
-    	   GREALLOC(fArray, sizeof(OBJ)*dyn_array_defcap);
-    	   // set initial memory size again
-    	   fCapacity = dyn_array_defcap;
-    	}
+    	GREALLOC(fArray, sizeof(OBJ)*dyn_array_defcap);
+    	// set initial memory size again
+    	fCapacity = dyn_array_defcap;
     }
 
+    void reset() {
+    	fCount = 0; //do not deallocate, just show it empty
+    }
 	//pointer getptr() { return (pointer) fArray; }
 	OBJ* operator()() { return fArray; }
 };
@@ -473,42 +476,41 @@ class GLineReader {
    bool closeFile;
    //int len;
    //int allocated;
-   GDynArray<char> lbuf;
+   GDynArray<char> buf;
    bool isEOF;
    FILE* file;
    off_t filepos; //current position
    bool pushed; //pushed back
    int lcount; //line counter (read lines)
  public:
-   char* chars() { return lbuf(); }
-   char* line() { return lbuf(); }
+   char* chars() { return buf(); }
+   char* line() { return buf(); }
    int readcount() { return lcount; } //number of lines read
    void setFile(FILE* stream) { file=stream; }
-   int length() { return lbuf.Count(); }
-   int size() { return lbuf.Count(); } //same as size();
+   int length() { return buf.Count(); }
+   int size() { return buf.Count(); } //same as size();
    bool isEof() {return isEOF; }
    bool eof() { return isEOF; }
    off_t getfpos() { return filepos; }
    off_t getFpos() { return filepos; }
    char* nextLine() { return getLine(); }
-   char* getLine() { if (pushed) { pushed=false; return lbuf(); }
+   char* getLine() { if (pushed) { pushed=false; return buf(); }
                             else return getLine(file);  }
    char* getLine(FILE* stream) {
-                 if (pushed) { pushed=false; return lbuf(); }
+                 if (pushed) { pushed=false; return buf(); }
                           else return getLine(stream, filepos); }
    char* getLine(FILE* stream, off_t& f_pos); //read a line from a stream and update
                            // the given file position
    void pushBack() { if (lcount>0) pushed=true; } // "undo" the last getLine request
-            // the next getLine() will in fact return the same line
-   GLineReader(const char* fname):closeFile(false),lbuf(1024),isEOF(false),file(NULL),
+            // so the next call will in fact return the same line
+   GLineReader(const char* fname):closeFile(false),buf(1024),isEOF(false),file(NULL),
 		   filepos(0), pushed(false), lcount(0) {
       FILE* f=fopen(fname, "rb");
       if (f==NULL) GError("Error opening file '%s'!\n",fname);
       closeFile=true;
       file=f;
-      //s_init(f);
       }
-   GLineReader(FILE* stream=NULL, off_t fpos=0):closeFile(false),lbuf(1024),isEOF(false),file(stream),
+   GLineReader(FILE* stream=NULL, off_t fpos=0):closeFile(false),buf(1024),isEOF(false),file(stream),
 		   filepos(fpos), pushed(false), lcount(0) {
      }
    ~GLineReader() {
