@@ -1278,15 +1278,17 @@ void GfList::finalize(GffReader* gfr, bool mergeCloseExons,
 }
 
 GffObj* GffObj::finalize(GffReader* gfr, bool mergeCloseExons, bool keepAttrs, bool noExonAttr) {
- if (isGene()) {
+  /* if (isGene()) {
 	 if (children.Count()==0) {
 	     isTranscript(true);
-	     //bacterial annotation: childless gene is in fact a transcript
+	     //some bacterial annotation, childless genes may be in fact transcripts
 	 }
-	 else if (gfr->transcriptsOnly) {
+	 else
+	 if (gfr->transcriptsOnly) {
 		 isDiscarded(true);
-  }
+	 }
  }
+ */
  //always merge adjacent or overlapping segments
  //but if mergeCloseExons then merge even when distance is up to 5 bases
  if (gfr->transcriptsOnly && !(isTranscript() || (isGene() && children.Count()==0))) {
