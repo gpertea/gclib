@@ -1042,6 +1042,7 @@ class GffReader {
     };
   };
   bool gff_warns; //warn about duplicate IDs, etc. even when they are on different chromosomes
+  char* lastReadNext;
   FILE* fh;
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
   GffLine* gffline;
@@ -1077,7 +1078,7 @@ class GffReader {
   GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline,
                                          bool keepAttr);
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
-  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>& pex, bool noExonAttr);
+  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL, bool noExonAttr=false);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
 		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
@@ -1086,6 +1087,7 @@ class GffReader {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
+      lastReadNext=NULL;
       }
   void init(FILE *f, bool t_only=false, bool sortbyloc=false) {
       fname=NULL;
@@ -1107,6 +1109,7 @@ class GffReader {
       fh=fopen(fname, "rb");
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
+      lastReadNext=NULL;
       }
 
  ~GffReader() {
@@ -1120,6 +1123,7 @@ class GffReader {
       phash.Clear();
       GFREE(fname);
       GFREE(linebuf);
+      GFREE(lastReadNext);
       gffnames_unref(GffObj::names);
       }
 
@@ -1135,7 +1139,7 @@ class GffReader {
   void readAll(bool keepAttr=false, bool mergeCloseExons=false, bool noExonAttr=true);
 
   //only for well-formed files: BED or GxF where exons are strictly grouped by their transcript_id/Parent
-  GffObj* readNext();
+  GffObj* readNext(); //user must free the returned GffObj* !
 
 #ifdef CUFFLINKS
     boost::crc_32_type current_crc_result() const { return _crc_result; }

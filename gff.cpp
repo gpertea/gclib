@@ -1239,7 +1239,7 @@ GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline,
 }
 
 
-bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>& pex, bool noExonAttr) {
+bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex, bool noExonAttr) {
 	bool r=true;
 	if (gffline->strand!=prevgfo->strand) {
 		if (prevgfo->strand=='.') {
@@ -1262,10 +1262,10 @@ bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon
 		if (!gff_warns) exit(1);
 	}
 	int eidx=prevgfo->addExon(this, gffline, !noExonAttr, noExonAttr);
-	if (eidx>=0) {
+	if (pex!=NULL && eidx>=0) {
 		//if (eidx==0 && gffline->exontype>0) prevgfo->isTranscript(true);
 		if (gffline->ID!=NULL && gffline->exontype==0)
-		   subfPoolAdd(pex, prevgfo);
+		   subfPoolAdd(*pex, prevgfo);
 	}
 	return r;
 }
@@ -1307,7 +1307,7 @@ GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonEx
 }
 
 
-GffObj* GffReader::readNext() {
+GffObj* GffReader::readNext() { //user must free the returned GffObj*
  GffObj* gfo=NULL;
  if (is_BED) {
 	 if (nextBEDLine()) {
@@ -1315,8 +1315,37 @@ GffObj* GffReader::readNext() {
 		 delete bedline;
 		 bedline=NULL;
 	 } else return NULL;
- } else {
+ } else { //GFF parsing
+    while (nextGffLine()!=NULL) {
+    	char* tid=gffline->ID;
+    	if (gffline->is_exon) tid=gffline->parents[0];
+    	else if (!gffline->is_transcript) tid=NULL; //sorry, only parsing transcript && their exons this way
+    	//silly gene-only transcripts will be missed here
+    	if (tid==NULL || gffline->num_parents>1) {
+    		delete gffline;
+    		gffline=NULL;
+    		continue;
+    	}
+    	bool sameID=(lastReadNext!=NULL && strcmp(lastReadNext, tid)==0);
+    	if (sameID) {
+    		if (gfo==NULL) GError("Error: same transcript ID but GffObj inexistent?!(%s)\n", tid);
+    		updateGffRec(gfo, gffline, true);
+    	} else {
+    		//new transcript
+    		if (gfo==NULL) {
+    			//fresh start
 
+    		}
+    		else {
+    			//return what we've got so far
+    			//TODO: check for GffObj integrity?
+    			return gfo;
+    		}
+			GFREE(lastReadNext);
+			lastReadNext=Gstrdup(tid);
+    	} //transcript ID change
+
+    }
  }
  return gfo;
 }
@@ -1471,7 +1500,7 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 								  addExon=true;
 							}
 							if (addExon)
-								if (!addExonFeature(parentgfo, gffline, pex, noExonAttr))
+								if (!addExonFeature(parentgfo, gffline, &pex, noExonAttr))
 								   validation_errors=true;
 
 						}
@@ -1489,7 +1518,7 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 							//promote that subfeature to a full GffObj
 							GffObj* gfoh=promoteFeature(subp, subp_name, pex, keepAttr, noExonAttr);
 							//add current gffline as an exon of the newly promoted subfeature
-							if (!addExonFeature(gfoh, gffline, pex, noExonAttr))
+							if (!addExonFeature(gfoh, gffline, &pex, noExonAttr))
 								validation_errors=true;
 						}
 					}
