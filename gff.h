@@ -902,6 +902,8 @@ public:
       if (isValidTranscript())
          printGxf(fout, showCDS ? pgffBoth : pgffExon, tlabel, gfparent, cvtChars);
       }
+   void printExonList(FILE* fout); //print comma delimited list of exon intervals
+   void printBED(FILE* fout); //print a basic BED-12 line
    void printSummary(FILE* fout=NULL);
    void getCDS_ends(uint& cds_start, uint& cds_end);
    void mRNA_CDS_coords(uint& cds_start, uint& cds_end);

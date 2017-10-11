@@ -1309,12 +1309,15 @@ GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonEx
 
 GffObj* GffReader::readNext() { //user must free the returned GffObj*
  GffObj* gfo=NULL;
+ GSeg tseg(0,0);
  if (is_BED) {
 	 if (nextBEDLine()) {
 		 gfo=new GffObj(this, bedline);
+		 tseg.start=gfo->start;
+		 tseg.end=gfo->end;
 		 delete bedline;
 		 bedline=NULL;
-	 } else return NULL;
+	 } //else return NULL;
  } else { //GFF parsing
     while (nextGffLine()!=NULL) {
     	char* tid=gffline->ID;
@@ -1329,23 +1332,42 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
     	bool sameID=(lastReadNext!=NULL && strcmp(lastReadNext, tid)==0);
     	if (sameID) {
     		if (gfo==NULL) GError("Error: same transcript ID but GffObj inexistent?!(%s)\n", tid);
-    		updateGffRec(gfo, gffline, true);
+    		addExonFeature(gfo, gffline);
     	} else {
     		//new transcript
     		if (gfo==NULL) {
     			//fresh start
-
+    			gfo=new GffObj(this, gffline);
+    			if (gffline->is_transcript) {
+    				tseg.start=gffline->fstart;
+    				tseg.end=gffline->fend;
+    			}
     		}
     		else {
+    			//this gffline is for the next record
     			//return what we've got so far
-    			//TODO: check for GffObj integrity?
-    			return gfo;
+    			//return gfo;
+    			break;
     		}
 			GFREE(lastReadNext);
 			lastReadNext=Gstrdup(tid);
     	} //transcript ID change
-
-    }
+    	//gffline processed, move on
+		delete gffline;
+		gffline=NULL;
+    } //while nextgffline()
+ } //GFF records
+ if (gfo!=NULL) {
+		if (gfo->exons.Count()==0) {
+			gfo->addExon(gfo->start, gfo->end);
+		}
+	if (tseg.start>0) {
+		if (tseg.start!=gfo->exons.First()->start ||
+				tseg.end!=gfo->exons.Last()->end) {
+			GMessage("Warning: boundary mismatch for exons of transcript %s (%d-%d) ?\n",
+					gfo->getID(), gfo->start, gfo->end);
+		}
+	}
  }
  return gfo;
 }
@@ -1691,6 +1713,32 @@ GffObj* GffObj::finalize(GffReader* gfr, bool mergeCloseExons, bool keepAttrs, b
 	 addExon(this->start, this->end);
  }
  return this;
+}
+
+void GffObj::printExonList(FILE* fout) {
+	//print comma delimited list of exon intervals
+	for (int i=0;i<exons.Count();++i) {
+		if (i) fprintf(fout, ",");
+		fprintf(fout, "%d-%d",exons[i]->start, exons[i]->end);
+	}
+}
+
+void GffObj::printBED(FILE* fout) {
+	//print a basic BED-12 line
+ fprintf(fout, "%s\t%d\t%d\t%s\t%d\t%c\t%d\t%d\t\%d", getGSeqName(), start-1, end, getID(),
+		 100, strand, start-1, start-1, 0);
+ if (exons.Count()>0) {
+	 int i;
+	 fprintf(fout, "\t%d\t", exons.Count());
+	 for (i=0;i<exons.Count();++i)
+		 fprintf(fout,"%d,",exons[i]->len());
+	 fprintf(fout, "\t");
+	 for (i=0;i<exons.Count();++i)
+		 fprintf(fout,"%d,",exons[i]->start-start);
+	 fprintf(fout, "\n");
+ } else {
+	 fprintf(fout, "\t1\t%d,\t0,\n", len());
+ }
 }
 
 void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon) {
