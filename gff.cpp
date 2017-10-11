@@ -237,6 +237,8 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
 		  ex.start=exonstart;ex.end=exonend;
 		  exons.Add(ex);
 	  }
+	  GFREE(blen);
+	  GFREE(bstart);
   }
   else { //take it as single-exon transcript
 	  GSeg v(fstart, fend);
