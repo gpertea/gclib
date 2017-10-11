@@ -2269,6 +2269,25 @@ void decodeHexChars(char* dbuf, const char* s, int maxlen=1023) {
 	dbuf[dlen]=0;
 }
 
+void GffObj::printGTab(FILE* fout, char** extraAttrs) {
+	fprintf(fout, "%s\t%c\t%d\t%d\t%s\t", this->getGSeqName(), this->strand,
+			this->start, this->end, this->getID());
+	if (exons.Count()) printExonList(fout);
+	else fprintf(fout, ".");
+	if (extraAttrs!=NULL) {
+		//print a list of "attr=value;" pairs here as the last column
+		//for requested attributes
+		bool t1=true;
+		for (int i=0;extraAttrs[i]!=NULL;++i) {
+			const char* v=this->getAttr(extraAttrs[i]);
+			if (v==NULL) continue;
+			if (t1) { fprintf(fout, "\t"); t1=false; }
+			fprintf(fout, "%s=%s;", extraAttrs[i], v);
+		}
+	}
+	fprintf(fout,"\n");
+}
+
 void GffObj::printGxfLine(FILE* fout, const char* tlabel, const char* gseqname, bool iscds,
                              uint segstart, uint segend, int exidx, char phase, bool gff3, bool cvtChars) {
   char dbuf[1024];

@@ -904,6 +904,7 @@ public:
       }
    void printExonList(FILE* fout); //print comma delimited list of exon intervals
    void printBED(FILE* fout); //print a basic BED-12 line
+   void printGTab(FILE* fout, char** extraAttrs=NULL);
    void printSummary(FILE* fout=NULL);
    void getCDS_ends(uint& cds_start, uint& cds_end);
    void mRNA_CDS_coords(uint& cds_start, uint& cds_end);
