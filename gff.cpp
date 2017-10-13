@@ -230,7 +230,7 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
 		  }
 		  exonstart+=fstart;
 		  uint exonend=exonstart+exonlen-1;
-		  if ((uint)exonstart>=fend || exonend>fend) {
+		  if ((uint)exonstart>fend || exonend>fend) {
 			  GMessage("Warning: BED exon %d-%d is outside record boundary at line:\n%s\n",exonstart,exonend, l);
 			  return;
 		  }
