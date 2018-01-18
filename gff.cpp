@@ -153,10 +153,11 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
     }
    i++;
    }
-  if (tidx<6) { // require BED-6+ lines
+  /* if (tidx<6) { // require BED-6+ lines
    GMessage("Warning: 6+ BED columns expected, instead found:\n%s\n", l);
    return;
    }
+  */
   gseqname=t[0];
   char* p=t[1];
   if (!parseUInt(p,fstart)) {
@@ -170,11 +171,14 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
     return;
     }
   if (fend<fstart) Gswap(fend,fstart); //make sure fstart<=fend, always
-  strand=*t[5];
-  if (strand!='-' && strand !='.' && strand !='+') {
-	  GMessage("Warning: unrecognized BED strand at line:\n%s\n",l);
-	  return;
+  if (tidx>5) {
+	  strand=*t[5];
+	  if (strand!='-' && strand !='.' && strand !='+') {
+		  GMessage("Warning: unrecognized BED strand at line:\n%s\n",l);
+		  return;
+	  }
   }
+  else strand='.';
   if (tidx>12) ID=t[12];
           else ID=t[3];
   //now parse the exons, if any
