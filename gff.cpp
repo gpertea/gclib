@@ -668,49 +668,61 @@ int GffObj::addExon(GffReader* reader, GffLine* gl, bool keepAttr, bool noExonAt
 
 
 int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int qe, bool iscds, char exontype) {
+  if (segstart>segend) { Gswap(segstart, segend); }
   if (exons.Count()==0) {
       if (iscds) isCDS=true; //for now, assume CDS only if first "exon" given is a CDS
       if (exon_ftype_id<0) {
          exon_ftype_id = isTranscript() ? gff_fid_exon : ftype_id;
          }
-      }
-  //special treatment of start/stop codon features, they might be broken/split between exons
-  //and in that case some providers will still give the wrong end coordinate as start+2 (e.g. UCSC)
-  //so we should not trust the end coordinate for such features
+  }
+  //special treatment of start/stop codon features, they might be broken/split between exons (?)
+  //we consider these as part of the CDS
   if (exontype==exgffStart || exontype==exgffStop) {
-     if (strand=='-') segstart=segend;
-                else  segend=segstart;
-     if (exontype==exgffStart) {
-           if (CDstart==0 || segstart<CDstart) CDstart=segstart;
-           }
-         else {
-           if (segstart>CDend) CDend=segstart;
-           }
-     }
-    else if (iscds) { //update CDS anchors:
+	 iscds=true;
+	 //if (CDend==0 || segend>CDend) CDend=segend;
+	 //if (CDstart==0 || segstart<CDstart) CDstart=segstart;
+   }
+   if (iscds) { //update CDS anchors:
      if (CDstart==0 || segstart<CDstart)  {
            CDstart=segstart;
            if (exontype==exgffCDS && strand=='+') CDphase=fr;
            }
-     if (segend>CDend) {
-           if (exontype==exgffCDS && strand=='-') CDphase=fr;
+     if (CDend==0 || segend>CDend) {
            CDend=segend;
+           if (exontype==exgffCDS && strand=='-') CDphase=fr;
            }
-     }
+   }
    else { // not a CDS/start/stop
-     isCDS=false;
-     }
+    isCDS=false; //not a CDS-only feature
+   }
+  //if (exontype==exgffStart || exontype==exgffStop) exontype=exgffCDS;
   if (qs || qe) {
     if (qs>qe) Gswap(qs,qe);
     if (qs==0) qs=1;
 	}
   int ovlen=0;
   if (exontype>0) { //check for overlaps between exon-type segments
-      int oi=exonOverlapIdx(segstart, segend, &ovlen);
-      if (oi>=0) { //overlap existing segment
+	  int oi=-1;
+      while ((oi=exonOverlapIdx(segstart, segend, &ovlen, oi+1))>=0) {
+    	//ovlen==0 for adjacent segment
+	    if (exons[oi]->exontype>0) {
+	    	if (exons[oi]->start<=segstart && exons[oi]->end>=segend) {
+	    		//existing feature includes this segment
+	    		return oi;
+	    	}
+	    	else {
+			 expandExon(oi, segstart, segend, exgffExon, sc, fr, qs, qe);
+			 return oi;
+	    	}
+	    }
+	  }
+      /*
+      if (oi>=0) { //overlap existing segment (exon)
+
          if (ovlen==0) {
-			  //adjacent segments will be merged
-			  //e.g. CDS to (UTR|exon)
+			 //adjacent exon-type segments will be merged
+			 //e.g. CDS to (UTR|exon|stop_codon)
+
 			  if ((exons[oi]->exontype>=exgffUTR && exontype==exgffCDS) ||
 				  (exons[oi]->exontype==exgffCDS && exontype>=exgffUTR)) {
 					expandExon(oi, segstart, segend, exgffCDSUTR, sc, fr, qs, qe);
@@ -722,9 +734,10 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
 					expandExon(oi, segstart, segend, exgffCDS, sc, fr, qs, qe);
 					return oi;
 					}
+
         }
-		 //only allow this for CDS within exon, stop_codon within (CDS|UTR|exon),
-         //                   start_codon within (CDS|exon)
+		//segment inclusion: only allow this for CDS within exon, stop_codon within (CDS|UTR|exon),
+        //                   start_codon within (CDS|exon)
         if (exons[oi]->start<=segstart && exons[oi]->end>=segend) {
           //larger segment given first, now the smaller included one is redundant
            if (exons[oi]->exontype>exontype &&
@@ -732,11 +745,11 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
               return oi; //only used to store attributes from current GffLine
               }
            else {
-          	 /*if (gff_show_warnings && (exons[oi]->start<segstart || exons[oi]->end>segend)) {
-          		 GMessage("GFF Warning: unusual segment inclusion: %s(%d-%d) within %s(%d-%d) (ID=%s)\n",
-          				 strExonType(exontype), segstart, segend, strExonType(exons[oi]->exontype),
-          				 exons[oi]->start, exons[oi]->end, this->gffID);
-          	 }*/
+          	 //if (gff_show_warnings && (exons[oi]->start<segstart || exons[oi]->end>segend)) {
+          	//	 GMessage("GFF Warning: unusual segment inclusion: %s(%d-%d) within %s(%d-%d) (ID=%s)\n",
+          	//			 strExonType(exontype), segstart, segend, strExonType(exons[oi]->exontype),
+          	//			 exons[oi]->start, exons[oi]->end, this->gffID);
+          	 //}
             return oi;
            }
         }
@@ -752,21 +765,11 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
         //where two CDS segments may actually overlap for 1 or 2 bases, but there should be only one encompassing exon
 		//if (ovlen>2 || exons[oi]->exontype!=exgffCDS || exontype!=exgffCDS) {
 		// had to relax this because of some weird UCSC annotations with exons partially overlapping the CDS segments
-		/*
-		if (ovlen>2 && exons[oi]->exontype!=exgffUTR && exontype!=exgffUTR) {
-		   if (gff_show_warnings)
-			   GMessage("GFF Warning: discarding overlapping feature segment (%d-%d) (vs %d-%d (%s)) for GFF ID %s on %s\n",
-			   segstart, segend, exons[oi]->start, exons[oi]->end, getSubfName(), gffID, getGSeqName());
-		   hasErrors(true);
-		   return -1; //segment NOT added
-		   }
-		*/
 
 		 if ((ovlen>2 || ovlen==0) || exons[oi]->exontype!=exgffCDS || exontype!=exgffCDS) {
-		  /*if (gff_show_warnings)
-			 GMessage("GFF Warning: merging overlapping/adjacent feature segment %s (%d-%d) with %s (%d-%d) for GFF ID %s on %s\n",
-					 strExonType(exontype), segstart, segend, strExonType(exons[oi]->exontype), exons[oi]->start, exons[oi]->end, gffID, getGSeqName());
-		   */
+		  //if (gff_show_warnings)
+		   //	 GMessage("GFF Warning: merging overlapping/adjacent feature segment %s (%d-%d) with %s (%d-%d) for GFF ID %s on %s\n",
+		   //		 strExonType(exontype), segstart, segend, strExonType(exons[oi]->exontype), exons[oi]->start, exons[oi]->end, gffID, getGSeqName());
 			expandExon(oi, segstart, segend, exontype, sc, fr, qs, qe);
 			return oi;
 		 }
@@ -774,8 +777,8 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
 		//TODO: we might want to add an attribute here with the slippage coordinate and size?
         covlen-=ovlen;
 		}//overlap or adjacent to existing segment
-	 } //check for overlap
-   // --- no overlap, or accepted micro-overlap (ribosomal slippage)
+		*/
+   } //exon type, check for overlap with existing exons
    // create & add the new segment
    /*
    if (start>0 && exontype==exgffCDS && exons.Count()==0) {
@@ -801,7 +804,6 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
      start=exons.First()->start;
      }
    if (end<exons.Last()->end) end=exons.Last()->end;
-
    return eidx;
 }
 
@@ -816,34 +818,34 @@ void GffObj::expandExon(int oi, uint segstart, uint segend, char exontype, doubl
   if (qe && qe>exons[oi]->qend) exons[oi]->qend=qe;
   //warning: score cannot be properly adjusted! e.g. if it's a p-value it's just going to get worse
   if (sc!=0) exons[oi]->score=sc;
-  covlen+=exons[oi]->len();
+  //covlen+=exons[oi]->len();
   //if (exons[oi]->exontype< exontype) -- always true
   exons[oi]->exontype = exontype;
   if (exontype==exgffCDS) exons[oi]->phase=fr;
   //we must check if any more exons are also overlapping this
   int ni=oi+1; //next exon index after oi
-  while (ni<exons.Count() && segend>=exons[ni]->start) { // next segment overlaps new enlarged segment
-     //only allow this if next segment is fully included, and a subordinate
-     if (exons[ni]->exontype<exontype && exons[ni]->end<=segend) {
-/* I guess we have to relax this due to stupid UCSC hg18 files having a start_codon sticking out
-chr1	hg18_knownGene	start_codon	69806911	69806913	0.000000	+	.
-chr1	hg18_knownGene	CDS	69806911	69806912	0.000000	+	0
-chr1	hg18_knownGene	exon	69805456	69806912	0.000000	+	.
-*/
+  while (ni<exons.Count() && exons[ni]->start<=segend+1) { // next segment overlaps OR adjacent to newly enlarged segment
+     //if (exons[ni]->exontype<exontype && exons[ni]->end<=segend) {
+	  if (exons[ni]->exontype>0) {
+         if (exons[ni]->start<exons[oi]->start) exons[oi]->start=exons[ni]->start;
+         if (exons[ni]->end>exons[oi]->end) exons[oi]->end=exons[ni]->end;
          if (exons[ni]->qstart<exons[oi]->qstart) exons[oi]->qstart=exons[ni]->qstart;
          if (exons[ni]->qend>exons[oi]->qend) exons[oi]->qend=exons[ni]->qend;
          exons.Delete(ni);
-         }
-      else {
+      } else ++ni;
+      /*else {
          if (gff_show_warnings) GMessage("GFF Warning: overlapping existing exon(%d-%d) while expanding to %d-%d for GFF ID %s\n",
                 exons[ni]->start, exons[ni]->end, segstart, segend, gffID);
          //hasErrors(true);
          break;
-         }
-     }
+      }*/
+  } //until no more overlapping/adjacent segments found
   // -- make sure any other related boundaries are updated:
   start=exons.First()->start;
   end=exons.Last()->end;
+  //recalculate covlen
+  covlen=0;
+  for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
   /*
   if (uptr!=NULL) { //collect stats about the underlying genomic sequence
     GSeqStat* gsd=(GSeqStat*)uptr;
