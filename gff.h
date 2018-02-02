@@ -1103,6 +1103,7 @@ class GffReader {
       gflst.sortedByLoc(sortbyloc);
       gene2exon=g2exon;
       }
+  void set_gene2exon(bool v) { gene2exon=v;}
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
   GffReader(const char* fn, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
 	  		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(NULL), fname(NULL),
