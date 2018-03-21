@@ -264,7 +264,7 @@ buf[0]='\0';
 int accrd=0; //accumulated read length so far -- excludes interseg gaps!
 int rgpos=0; //accumulated offset including interseg gaps!
 char *r = linebuf->getLine(f,f_pos);
-int linelen=linebuf->length();
+int linelen=linebuf->tlength();
 char r_splice=0, l_splice=0;
 while (linelen>0) {
    if (r==NULL) {
@@ -333,7 +333,7 @@ while (linelen>0) {
    */
 
    r=linebuf->getLine(f,f_pos);
-   linelen=linebuf->length();
+   linelen=linebuf->tlength();
    }//while linelen>0
 
 //add the 0-ending

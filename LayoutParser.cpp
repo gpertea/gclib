@@ -266,7 +266,7 @@ bool LayoutParser::loadContig(int ctgidx, fnLytSeq* seqfn, bool re_pos) {
     int ctg_numSeqs=ctgdata->numseqs;
     int numseqs=0;
     while ((r=linebuf->getLine(f,f_pos))!=NULL) {
-       if (linebuf->length()<4) continue;
+       if (linebuf->blength()<4) continue;
        if (linebuf->chars()[0]=='>') {
             linebuf->pushBack();
             break; //reached next contig
