@@ -2,11 +2,10 @@
 #define GFASTAFILE_H
 
 #include "GBase.h"
-//#include "gdna.h" -- for the reverseComplement() method
 
 #define CAPINC 64
 #define SEQCAPINC 256
-#define DEF_FASTA_DELIM ">"
+#define DEF_FASTA_DELIM (char*)">"
 
 class FastaSeq {  /* fasta record storage */
    public:
