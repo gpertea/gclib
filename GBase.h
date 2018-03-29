@@ -222,8 +222,16 @@ char* Gsubstr(const char* str, char* from, char* to=NULL);
 //extracts a substring, allocating it, including boundaries (from/to)
 
 int strsplit(char* str, char** fields, int maxfields, const char* delim);
+//splits a string by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+//of each field (stopping after maxfields); returns number of fields parsed
+
 int strsplit(char* str, char** fields, int maxfields, const char delim);
+//splits a string by placing 0 where the delim char is found, setting fields[] to the beginning
+//of each field (stopping after maxfields); returns number of fields parsed
+
 int strsplit(char* str, char** fields, int maxfields); //splits by tab or space
+//splits a string by placing 0 where tab or space is found, setting fields[] to the beginning
+//of each field (stopping after maxfields); returns number of fields parsed
 
 char* replaceStr(char* &str, char* newvalue);
 

@@ -8,7 +8,7 @@
 #define DEF_FASTA_DELIM (char*)">"
 
 class FastaSeq {  /* fasta record storage */
-   public:
+   protected:
      int  id_cap; /* allocated size of the sequence name string*/
      char    *id; /* id only, up to first space */
      int namelen;   // real length of seq name
@@ -20,6 +20,15 @@ class FastaSeq {  /* fasta record storage */
      int   len; /* the actual string length of seq */
      char* seq; /* the sequence buffer itself */
      //----
+     void detach() {
+    	 //when pointers are taken over by another object
+    	 //clear and forget
+       id=NULL;
+       descr=NULL;
+       seq=NULL;
+  	   init();
+     }
+
      void init(const char* cname, const char* cdescr=NULL,
                 const char* cseq=NULL, int sbeg=-1, int send=-1) {
                 //Warning: sbeg and send are 0-based!
@@ -81,8 +90,8 @@ class FastaSeq {  /* fasta record storage */
               s_cap=l+1;
               }
            }
-      } //init(alldata, range)
-      
+     } //init(alldata, range)
+
      void init(int seqalloc=0) {
        //ntCompTableInit();
        GMALLOC(id, CAPINC);
@@ -104,21 +113,38 @@ class FastaSeq {  /* fasta record storage */
        seq[0]='\0';
        len=0;
        }
+   public:
      FastaSeq(const char* cname, const char* cdescr=NULL, const char* cseq=NULL) {
        init(cname, cdescr, cseq);
        }
      FastaSeq(int seqalloc=0) {
        init(seqalloc);
        }
-     
+
      //copy constructor:
      FastaSeq(const FastaSeq& fa,int sbeg=-1,int send=-1) {
        if (sbeg<0) { sbeg=0; send=fa.len-1; }
              else if (send<0) send=fa.len-1;
        if (send>fa.len-1) send=fa.len-1;
        init(fa.id, fa.descr, fa.seq, sbeg, send);
-       }
-       
+     }
+
+     FastaSeq(FastaSeq& fa, bool takeover) {
+    	if (takeover) {
+    	   id_cap=fa.id_cap;
+    	   id=fa.id;
+    	   namelen=fa.namelen;
+    	   descr=fa.descr;
+    	   d_cap=fa.d_cap;
+    	   descrlen=fa.descrlen;
+    	   s_cap=fa.s_cap;
+    	   len=fa.len;
+    	   seq=fa.seq;
+    	   fa.detach();
+    	}else {
+    	  init(fa.id, fa.descr, fa.seq);
+    	}
+     }
      void clear() {
        GFREE(id);id_cap=0;namelen=0;id=NULL;
        GFREE(descr);d_cap=0;descrlen=0;descr=NULL;
@@ -233,8 +259,6 @@ class FastaSeq {  /* fasta record storage */
                                   const int linelen=70, const int seqlen=0) {
       writeFasta(fh, seqid, descr, seq, linelen, seqlen); //from GBase.cpp
       }
-
-
 };
 
 typedef int charFunc(char c, int pos, FastaSeq* fseq); //char processing function
@@ -376,8 +400,8 @@ class GFastaFile {
      char** buf;
      int before;
      if (feof(fh)) return NULL;
-     int c = getc(fh); 
-     if (c==EOF) return NULL; 
+     int c = getc(fh);
+     if (c==EOF) return NULL;
      cur_fpos++;
      while (c!=EOF && c<=32) { c=getc(fh); cur_fpos++; }//skip spaces etc.
      if (c == EOF) return NULL;
@@ -424,7 +448,7 @@ class GFastaFile {
    /* seq must be a pointer to a initialized FastaSeq structure
    if seq is NULL, the sequence is not actually read,
      but just skipped and the file pointer set accordingly, while
-     the returned "pointer" will not be a FastaSeq one but just NULL or not NULL 
+     the returned "pointer" will not be a FastaSeq one but just NULL or not NULL
      (depending if eof was encountered)
    if callbackFn is NULL, the sequence is read entirely in memory in a FastaSeq.seq field
    otherwise only the defline is parsed into FastaSeq::id and FastaSeq::descr but actual
