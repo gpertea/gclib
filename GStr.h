@@ -163,6 +163,7 @@ class GStr {
           //a marker where the block should stop
         const char* chars() const;
         const char* text() const;
+        char* detach(); //returns pointer to the string, giving up on its memory management
     protected:
         char* fTokenDelimiter;
         int fLastTokenStart;

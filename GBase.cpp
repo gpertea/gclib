@@ -316,7 +316,7 @@ int Gstricmp(const char* a, const char* b, int n) {
   }
 }
 
-int strsplit(char* str, char** fields, int maxfields, const char* delim) {
+int strsplit(char* str, char** fields, const char* delim, int maxfields) {
  //splits by placing 0 where any of the delim chars are found, setting fields[] to the beginning
  //of each field (stopping after maxfields); returns number of fields parsed
  int tidx=0;
@@ -340,7 +340,7 @@ int strsplit(char* str, char** fields, int maxfields, const char* delim) {
  return tidx;
 }
 
-int strsplit(char* str, char** fields, int maxfields, const char delim) {
+int strsplit(char* str, char** fields, const char delim, int maxfields) {
   //splits by placing 0 where delim is found, setting fields[] to the beginning
   //of each field (stopping after maxfields); returns number of fields parsed
   int tidx=0;

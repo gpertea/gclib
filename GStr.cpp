@@ -114,6 +114,20 @@ GStr::GStr():my_data(&null_data) {
  readbufsize=0;
  }
 
+//detach from the string data, returning a pointer to it
+char* GStr::detach() {
+ make_unique();
+ char *r=my_data->chars;
+ my_data=&null_data;
+ fTokenDelimiter=NULL;
+ fTokenizeMode=tkCharSet;
+ fLastTokenStart=0;
+ readbuf=NULL;
+ readbufsize=0;
+ return r;
+}
+
+
 GStr::GStr(const GStr& s): my_data(&null_data){
  fTokenDelimiter=NULL;
  fTokenizeMode=tkCharSet;

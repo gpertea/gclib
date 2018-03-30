@@ -7,18 +7,25 @@
 #define SEQCAPINC 256
 #define DEF_FASTA_DELIM (char*)">"
 
+class GFastaCharHandler;
+class GFastaFile;
+
 class FastaSeq {  /* fasta record storage */
+   friend GFastaCharHandler;
+   friend GFastaFile;
    protected:
      int  id_cap; /* allocated size of the sequence name string*/
-     char    *id; /* id only, up to first space */
      int namelen;   // real length of seq name
-     char *descr; /* any comment on the defline, after the first space */
      int   d_cap; /* allocated size of the description */
      int descrlen; /* real length of the description */
      //-------actual sequence :
      int s_cap; /* allocated length of the sequence string */
+   public:
      int   len; /* the actual string length of seq */
+     char    *id; /* id only, up to first space */
+     char *descr; /* any comment on the defline, after the first space */
      char* seq; /* the sequence buffer itself */
+   protected:
      //----
      void detach() {
     	 //when pointers are taken over by another object
