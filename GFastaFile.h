@@ -374,14 +374,13 @@ class GFastaFile {
      //caller is responsible for deallocating returned FastaSeq memory!
      FastaSeq* r=readHeader(NULL, seqalloc);
      int len=0;
-     char before=1; //newline before indicator
      int c=-1;
      //load the whole sequence in FastaSeq
       while ((c = getc(fh)) != EOF && c != '>') {
            cur_fpos++;
            //if (isspace(c) || c<31)
            if (c<=32) {
-                  before = (c=='\n' || c=='\r')?1:0;
+                  //before = (c=='\n' || c=='\r')?1:0;
                   continue; /* skip spaces */
                   }
            if (len >= r->s_cap-1) {
@@ -389,7 +388,7 @@ class GFastaFile {
                  r->s_cap+=SEQCAPINC;
                  }
            r->seq[len] = c;
-           before=0;
+           //before=0;
            len++;
            }
      r->seq[len] = '\0';
@@ -565,7 +564,6 @@ class GFastaFile {
   uint getSeqRange(FastaSeq& seq, uint rcoord, uint rlen=0) {
       int c;
       uint len;
-      int before;
       rec_fpos=cur_fpos;
       if (!seqcoord || seqcoord>rcoord) {
           // slow -- go back to the beginning of the record
@@ -583,7 +581,6 @@ class GFastaFile {
       seq.len=0;
       //----- read the actual subsequence now:
       len=0;
-      before=1; //"newline before" flag
       while ((c = getc(fh)) != EOF && c != '>') {
                 cur_fpos++;
                 if (c<=32) continue; // skip spaces

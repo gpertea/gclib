@@ -298,6 +298,7 @@ GCdbYank::GCdbYank(const char* fidx, const char* recsep) {
  is_compressed=false;
  fd=-1;
  cdb=NULL;
+ warnings=0;
 #ifdef ENABLE_COMPRESSION
  cdbz=NULL;
 #endif 
