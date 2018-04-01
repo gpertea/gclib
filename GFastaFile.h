@@ -121,8 +121,10 @@ class FastaSeq {  /* fasta record storage */
        len=0;
        }
    public:
-     FastaSeq(const char* cname, const char* cdescr=NULL, const char* cseq=NULL) {
-       init(cname, cdescr, cseq);
+     FastaSeq(const char* cname, const char* cdescr=NULL,
+    		    const char* bseq=NULL,int bseq_len=0) {
+    	if (bseq_len>0) init(cname, cdescr, bseq, 0, bseq_len-1);
+    	else init(cname, cdescr, bseq);
        }
      FastaSeq(int seqalloc=0) {
        init(seqalloc);
