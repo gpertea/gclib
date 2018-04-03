@@ -50,9 +50,11 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
 
 void GStr::prep_data(uint len, uint addcap) {
 
-    if (len+addcap == my_data->cap && my_data->ref_count <= 1)
+    if (len+addcap <= my_data->cap && my_data->ref_count <= 1) {
+    	my_data->length=len;
+    	my_data->chars[len]=0;
         return;
-
+    }
     if (my_data != &null_data && --my_data->ref_count == 0)
         GFREE(my_data);
 
@@ -66,6 +68,14 @@ void GStr::prep_data(uint len, uint addcap) {
     else
         my_data = &null_data;
 }
+
+GStr& GStr::clear(int init_cap) {
+  make_unique(); //edit operation ahead
+
+  prep_data(0, init_cap);
+  return *this;
+  }
+
 
 void GStr::replace_data(Data *data) {
     if (my_data != &null_data && --my_data->ref_count == 0)
@@ -215,7 +225,7 @@ GStr& GStr::operator=(const char *s) {
   if (s==NULL) {
     prep_data(0);
     return *this;
-    }
+  }
   const int len = ::strlen(s); prep_data(len);
   ::memcpy(my_data->chars, s, len);
   return *this;
@@ -342,12 +352,6 @@ GStr GStr::copy() const {
  GStr newstring(*this);
  return newstring;
  }
-
-GStr& GStr::clear() {
-  make_unique(); //edit operation ahead
-  prep_data(0);
-  return *this;
-  }
 
 int GStr::index(const GStr& s, int start_index) const {
  return index(s.chars(), start_index);

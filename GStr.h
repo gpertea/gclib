@@ -104,7 +104,7 @@ class GStr {
 
         GStr& upper();
         GStr& lower();
-        GStr& clear();//make empty
+        GStr& clear(int init_cap=0);//make empty, but can specify initial capacity
         //character translation or removal:
         GStr& tr(const char* from, const char* to=NULL);
         //number of occurences of a char in the string:
@@ -184,10 +184,11 @@ class GStr {
               };
         static Data* new_data(uint len, uint addcap=0); //alloc a specified length string's Data
         static Data* new_data(const char* str, uint addcap=0); //alloc a copy of a specified string, with an additional cap
-        void prep_data(uint len, uint addcap=0); //allocates memory for the string
+        void prep_data(uint len, uint addcap=0); //allocates memory for the string, if needed
         void replace_data(Data* data);
+        //WARNING (dangerous): direct access to pointer; string editing cannot change the length!
+        char* chrs();
         void make_unique();
-        char* chrs(); // this is dangerous, length should not be affected
         static Data null_data; //a null (empty) string Data is available here
         Data* my_data; //pointer to a Data object holding actual string data
 };
@@ -203,7 +204,7 @@ inline const char *GStr::chars() const {
  return my_data->chars;
  }
 
-inline char *GStr::chrs() { //protected version, allows modification of the chars
+inline char *GStr::chrs() { //allows direct modification of the chars !
  return my_data->chars;
  }
 
