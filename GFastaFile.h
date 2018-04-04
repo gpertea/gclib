@@ -397,7 +397,7 @@ class GFastaFile {
      r->len=len;
      return r;
     }
-   FastaSeq* readHeader(FastaSeq* seq=NULL, int seqalloc=0) {
+   FastaSeq* readHeader(FastaSeq* seq=NULL, int seqalloc=0, const char* trim_delim=NULL) {
     /* reads the Fasta sequence header
     the first character must be '>' for this call, after any spaces,
     if seq is NULL a new FastaSeq object is allocated and returned,
@@ -422,29 +422,58 @@ class GFastaFile {
      buflen=&(seq->id_cap);
      buf=&(seq->id);
      buflenstr=&(seq->namelen);
-     before=1;
+     before=1; //before seq ID was completed
+     bool trim_done=false;
+     int dt_len=0; //only set if defline trim was requested
+     int dt_match=0; // trim_delim match char idx+1
      while ((c = getc(fh)) != EOF) {
-              cur_fpos++;
-              if (c=='\n' || c=='\r') break;
-              if (len >= *buflen-1) {
-                      GREALLOC(*buf, *buflen + CAPINC);
-                      *buflen+=CAPINC;
-                      }
-              if (before && (c<=32)) {
-                 // space encountered => seq_name finished
-                 before=0;
-                 (*buf)[len]='\0';
-                 *buflenstr=len;
-                 buf=&seq->descr;
-                 buflen=&seq->d_cap;
-                 buflenstr=&seq->descrlen;
-                 len=0;
-                 if (c!=1)  // special case, nrdb concatenation
-                   continue; // skip this space
-                 }
-              (*buf)[len]=c;
-              len++;
-              }
+	   cur_fpos++;
+	   if (c=='\n' || c=='\r') break;
+	   if (trim_done) continue;
+	   if (len >= *buflen-1) {
+			  GREALLOC(*buf, *buflen + CAPINC);
+			  *buflen+=CAPINC;
+	   }
+	   if (before) {//seq ID parsing
+		 if (c<=32) {
+		   // space encountered => seq_name finished
+		   before=0;
+		   (*buf)[len]='\0';
+		   *buflenstr=len;
+		   buf=&seq->descr;
+		   buflen=&seq->d_cap;
+		   buflenstr=&seq->descrlen;
+		   len=0;
+		   if (trim_delim!=NULL) {
+			   //trimming the defline was requested
+			   dt_len=strlen(trim_delim);
+			   if (c<32 && c==trim_delim[0]) { trim_done=true; continue; }
+		   }
+		   //if (c!=1)  // special case, nrdb concatenation
+		   continue; // skip this "space"
+		 }
+	   } else { //seq description parsing
+		   if (c<32 && dt_len>0 && c==trim_delim[0]) {
+		     //end the defline parsing here (e.g. nrdb concatenation)
+			   trim_done=true; continue;
+	   	   }
+		   if (dt_len) {
+			   if (dt_match==0) {
+				 if (c==trim_delim[0]) {
+					 //quick way out?
+					 if (dt_len==1) { trim_done=true; continue; }
+					 dt_match=1;
+				 }
+			   }
+			   else if (c==trim_delim[dt_match-1]) {
+				   if (dt_match==dt_len) { len-=dt_len-1; trim_done=true; continue; }
+				   dt_match++;
+			   }  else dt_match=0; //cancel this match attempt
+		   } //trim delimiter matching
+	   }
+	   (*buf)[len]=c;
+	   len++;
+     } //while reading defline
      (*buf)[len]='\0'; /* terminate the comment string */
      *buflenstr = len;
      check_eof(c); /* it's wrong to have eof here */
@@ -452,7 +481,7 @@ class GFastaFile {
      return (seq->namelen==0) ? NULL : seq;
   }
 
-   FastaSeq *getFastaSeq(bool& is_last, FastaSeq* seq, charFunc* callbackFn = NULL ) {
+   FastaSeq *getFastaSeq(bool& is_last, FastaSeq* seq, charFunc* callbackFn = NULL, const char* trim_descr_at=NULL) {
    /* seq must be a pointer to a initialized FastaSeq structure
    if seq is NULL, the sequence is not actually read,
      but just skipped and the file pointer set accordingly, while
@@ -462,6 +491,8 @@ class GFastaFile {
    otherwise only the defline is parsed into FastaSeq::id and FastaSeq::descr but actual
        sequence letters are passed one by one to the callback function
       and the actual sequence is never stored in memory (unless the callback does it)
+   The optional trim_descr_at is there for nrdb-collapsed entries, it's supposed to discard any text from the
+   description line following the trim_descr_at string; special case for "\x01" string: ^A delimiter
    */
       int c, len;
       int before;
@@ -484,7 +515,7 @@ class GFastaFile {
          //we should end up at a '>' character here, or EOF
           } /* fasta fmt navigation to next sequence, no seq storage */
        else { // sequence storage:
-          if (!readHeader(seq)) {
+          if (!readHeader(seq, 0, trim_descr_at)) {
             is_last=true;
             return NULL;
             }
@@ -540,7 +571,12 @@ class GFastaFile {
      if (fh==NULL || feof(fh)) return NULL;
      return getFastaSeq(b, seq, callbackFn);
      }
-
+  FastaSeq *getFastaSeq(FastaSeq* seq, const char* trim_descr_at) {
+	  //special case to trim nrdb collapsed descriptions
+	     bool b;
+	     if (fh==NULL || feof(fh)) return NULL;
+	     return getFastaSeq(b, seq, NULL, trim_descr_at);
+  }
 
   uint seqSkip(uint slen, int& c){
    //assumes the header was read !
