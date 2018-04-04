@@ -1043,7 +1043,7 @@ GStr& GStr::append(const char* s, int len) {
 	  my_data->cap=newlen+1;
   }
   //strncpy(my_data->chars+my_data->length, s, len);
-  newlen=len;
+  newlen=my_data->length;
   for (int i=0;s[i]!='\0' && i<len;++i) {
 	my_data->chars[my_data->length+i]=s[i];
 	++newlen;
