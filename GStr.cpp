@@ -49,9 +49,11 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
  }
 
 void GStr::prep_data(uint len, uint addcap) {
-
-    if (len+addcap <= my_data->cap && my_data->ref_count <= 1) {
-    	my_data->length=len;
+	int newcap=len+addcap;
+    if (newcap > 0 && my_data->ref_count <= 1 &&
+    	   my_data->cap>=newcap && my_data->cap-newcap<(newcap>>1)+2) {
+    	//no need to shrink the already allocated space
+    	my_data->length = len;
     	my_data->chars[len]=0;
         return;
     }
@@ -71,7 +73,6 @@ void GStr::prep_data(uint len, uint addcap) {
 
 GStr& GStr::clear(int init_cap) {
   make_unique(); //edit operation ahead
-
   prep_data(0, init_cap);
   return *this;
   }
@@ -189,7 +190,8 @@ GStr::GStr(char c, int n): my_data(&null_data) {
   fLastTokenStart=0;
   readbuf=NULL;
   readbufsize=0;
-  prep_data(n); ::memset(chrs(), c, n);
+  prep_data(n);
+  ::memset(chrs(), c, n);
   }
 
 GStr::~GStr() {
