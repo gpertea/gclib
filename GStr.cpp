@@ -49,10 +49,10 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
  }
 
 void GStr::prep_data(uint len, uint addcap) {
-	int newcap=len+addcap;
+	uint newcap=len+addcap;
     if (newcap > 0 && my_data->ref_count <= 1 &&
     	   my_data->cap>=newcap && my_data->cap-newcap<(newcap>>1)+2) {
-    	//no need to shrink the already allocated space
+    	//no need to shrink/reallocate the already allocated space
     	my_data->length = len;
     	my_data->chars[len]=0;
         return;
