@@ -51,7 +51,7 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
 void GStr::prep_data(uint len, uint addcap) {
 	//this sets length, but the content is undefined!
 	uint newcap=len+addcap;
-    if (newcap > 0 && my_data->ref_count <= 1 &&
+    if (my_data != &null_data && newcap > 0 && my_data->ref_count <= 1 &&
     	   my_data->cap>=newcap && my_data->cap-newcap<(newcap>>1)+2) {
     	//no need to shrink/reallocate the already allocated space
     	my_data->length = len;
