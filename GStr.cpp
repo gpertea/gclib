@@ -16,12 +16,12 @@ GStr::Data GStr::null_data;
 GStr::Data * GStr::new_data(uint len, uint addcap) {
 //static method to return a new Data object (allocate length)
 //content is undefined, but it's null terminated
-    if (len > 0) {
-        Data* data;
-        GMALLOC(data, sizeof(Data)+len+addcap);
+    if (len + addcap > 0) {
+        Data* data=new Data(len+1+addcap);
+        //GMALLOC(data, sizeof(Data)+len+addcap);
         data->ref_count = 0;
         data->length = len;
-        data->cap=len+addcap;
+        //data->cap=len+addcap;
         data->chars[len] = '\0';
         return data;
         }
@@ -35,13 +35,13 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
  if (str==NULL) return &null_data;
  int len=strlen(str);
  if (len+addcap > 0) {
-        Data* data;
-        GMALLOC(data, sizeof(Data)+len+addcap);
+        Data* data=new Data(len+1+addcap);
+        //GMALLOC(data, sizeof(Data)+len+addcap);
         strcpy(data->chars, str);
         data->ref_count = 0;
-        data->cap=len+addcap;
+        //data->cap=len+addcap;
         data->length = len;
-        data->chars[len] = '\0';
+        //data->chars[len] = '\0';
         return data;
         }
     else
@@ -49,6 +49,7 @@ GStr::Data* GStr::new_data(const char* str, uint addcap) {
  }
 
 void GStr::prep_data(uint len, uint addcap) {
+	//this sets length, but the content is undefined!
 	uint newcap=len+addcap;
     if (newcap > 0 && my_data->ref_count <= 1 &&
     	   my_data->cap>=newcap && my_data->cap-newcap<(newcap>>1)+2) {
@@ -58,13 +59,15 @@ void GStr::prep_data(uint len, uint addcap) {
         return;
     }
     if (my_data != &null_data && --my_data->ref_count == 0)
-        GFREE(my_data);
+         //GFREE(my_data);
+    	 delete my_data;
 
     if (len + addcap> 0) {
-        GMALLOC(my_data, sizeof(Data)+len+addcap);
+        //GMALLOC(my_data, sizeof(Data)+len+addcap);
+    	my_data=new Data(len+1+addcap);
         my_data->ref_count = 1;
         my_data->length = len;
-        my_data->cap=len+addcap;
+        //my_data->cap=len+addcap;
         my_data->chars[len] = 0;
     }
     else
@@ -80,7 +83,8 @@ GStr& GStr::clear(int init_cap) {
 
 void GStr::replace_data(Data *data) {
     if (my_data != &null_data && --my_data->ref_count == 0)
-        GFREE(my_data);
+        //GFREE(my_data);
+    	delete my_data;
     if (data != &null_data)
         data->ref_count++;
     my_data = data;
@@ -88,8 +92,9 @@ void GStr::replace_data(Data *data) {
 
 void GStr::make_unique() {//make sure it's not a reference to other string
     if (my_data->ref_count > 1) {
-        Data *data = new_data(my_data->length, 0);
-        ::memcpy(data->chars, my_data->chars, my_data->length);
+        Data *data = new Data(my_data->cap);//new_data(my_data->length, 0);
+        data->length=my_data->length;
+        ::memcpy(data->chars, my_data->chars, my_data->length+1);
         my_data->ref_count--;
         my_data = data;
         my_data->ref_count++;
@@ -196,7 +201,7 @@ GStr::GStr(char c, int n): my_data(&null_data) {
 
 GStr::~GStr() {
   if (my_data != &null_data && --my_data->ref_count == 0)
-             GFREE(my_data);
+             delete my_data;
   GFREE(fTokenDelimiter);
   GFREE(readbuf);
   }

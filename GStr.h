@@ -176,11 +176,17 @@ class GStr {
         static void invalid_index_error(const char* fname);
         struct Data {//structure holding actual
                      //string data and reference count information
-               Data():ref_count(0), cap(0),length(0) { chars[0] = 0; }
+               Data(uint init_cap=0):ref_count(0), cap(0),length(0),chars(NULL) {
+            	    if (init_cap<2) init_cap=4;
+            	    GMALLOC(chars, init_cap);
+            	    cap=init_cap;
+            	    chars[0] = 0;
+               }
+               ~Data() { GFREE(chars); }
                uint ref_count; //reference count
                uint cap; //allocated string capacity (excluding \0 end char)
                uint length; //actual string length (excluding \0 end char)
-               char chars[1];
+               char *chars;
               };
         static Data* new_data(uint len, uint addcap=0); //alloc a specified length string's Data
         static Data* new_data(const char* str, uint addcap=0); //alloc a copy of a specified string, with an additional cap
