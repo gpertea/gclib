@@ -61,7 +61,7 @@ class GFaSeqGet {
   GFaSeqGet(const char* fn, off_t fofs, bool validate=false):fname(NULL), fh(NULL),
 		    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
 			lastsub(NULL), seqname("",42) {
-     finit(fn,fofs,validate); 
+     finit(fn,fofs,validate);
   }
 
   GFaSeqGet(const char* fn, bool validate=false):fname(NULL), fh(NULL),
@@ -82,6 +82,12 @@ class GFaSeqGet {
     }
     delete lastsub;
   }
+
+  const char* seq(uint cstart=1, int clen=0) {
+	  int cend = clen==0 ? 0 : cstart+clen-1;
+	  return getRange(cstart, cend);
+  }
+
   const char* subseq(uint cstart, int& clen);
   const char* getRange(uint cstart=1, uint cend=0) {
       if (cend==0) cend=(seq_len>0)?seq_len : MAX_FASUBSEQ;
@@ -89,7 +95,7 @@ class GFaSeqGet {
       int clen=cend-cstart+1;
       //int rdlen=clen;
       return subseq(cstart, clen);
-      }
+  }
 
   //caller is responsible for deallocating the return string
   char* copyRange(uint cstart, uint cend, bool revCmpl=false, bool upCase=false);

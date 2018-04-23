@@ -14,13 +14,13 @@
 /*
 #ifdef _DEFINE_WIN32_FSEEKO
  int fseeko(FILE *stream, off_t offset, int whence) {
-   
+
    }
 #endif
 
 #ifdef _DEFINE_WIN32_FTELLO
  off_t ftello(FILE *stream) {
-  
+
   }
 #endif
 */
@@ -87,7 +87,7 @@ void GError(const char* format,...){
   #endif
     exit(1);
   }
-  
+
 // Warning routine (just print message without exiting)
 void GMessage(const char* format,...){
   #ifdef __WIN32__
@@ -216,7 +216,7 @@ int Gmkdir(const char *path, bool recursive, int perms) {
 	mode_t process_mask = umask(0); //is this really needed?
 	if (!recursive) {
 	   int r=G_mkdir(path, perms);
-	   if (r!=0) 
+	   if (r!=0)
 	      GMessage("Warning: G_mkdir(%s) failed: %s\n", path, strerror(errno));
 	   umask(process_mask);
 	   return r;
@@ -733,7 +733,7 @@ const char* getFileExt(const char* filepath) {
  if (filepath==NULL) return NULL;
  for (p=filepath, dp=filepath, sep=filepath;*p!='\0';p++) {
      if (*p=='.') dp=p+1;
-       else if (*p=='/' || *p=='\\') 
+       else if (*p=='/' || *p=='\\')
                   sep=p+1;
      }
  return (dp>sep) ? dp : NULL ;
@@ -759,14 +759,24 @@ int fileExists(const char* fname) {
 }
 
 int64 fileSize(const char* fpath) {
+#ifdef __WIN32__
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (!GetFileAttributesEx(name, GetFileExInfoStandard, &fad))
+        return -1; // error condition, could call GetLastError to find out more
+    LARGE_INTEGER size;
+    size.HighPart = fad.nFileSizeHigh;
+    size.LowPart = fad.nFileSizeLow;
+    return size.QuadPart;
+#else
   struct stat results;
   if (stat(fpath, &results) == 0)
       // The size of the file in bytes is in
       return (int64)results.st_size;
   else
-      // An error occurred
+    //An error occurred
     //GMessage("Error at stat(%s)!\n", fpath);
-    return 0;
+    return -1;
+#endif
 }
 
 bool parseNumber(char* &p, double& v) {

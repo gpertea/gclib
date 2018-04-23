@@ -4,7 +4,6 @@
 
 GFaSeqGet* fastaSeqGet(GFastaDb& gfasta, const char* seqid) {
   if (gfasta.fastaPath==NULL) return NULL;
-  //if (gfasta.faIdx)
   return gfasta.fetch(seqid);
 }
 
