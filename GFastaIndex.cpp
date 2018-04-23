@@ -64,7 +64,8 @@ int GFastaIndex::loadIndex(const char* finame) { //load record info from existin
 }
 
 int GFastaIndex::buildIndex() {
-    //this parses the whole fasta file, so it could be slow
+    //this parses the whole fasta file, so it could be slow for large files
+	//builds the index in memory only
     if (fa_name==NULL)
        GError("Error: GFastaIndex::buildIndex() called with no fasta file!\n");
     FILE* fa=fopen(fa_name,"rb");
