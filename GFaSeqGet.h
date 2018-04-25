@@ -217,7 +217,8 @@ class GFastaDb {
 	 faseq=new GFaSeqGet(fname, checkFasta);
 	 faseq->loadall();
 	 //last_fetchid=gseq_id;
-	 last_seqname=faseq->seqname.chars();
+	 GFREE(last_seqname);
+	 last_seqname=Gstrdup(faseq->seqname.chars());
 	 return faseq;
   }
 
@@ -239,11 +240,12 @@ class GFastaDb {
 
  GFaSeqGet* fetch(const char* gseqname) {
     if (fastaPath==NULL) return NULL;
-    if (last_seqname!=NULL && (gseqname==last_seqname || strcmp(gseqname, last_seqname)==0)
+    if (last_seqname!=NULL && (strcmp(gseqname, last_seqname)==0)
     		&& faseq!=NULL) return faseq;
     delete faseq;
     faseq=NULL;
     //last_fetchid=-1;
+    GFREE(last_seqname);
     last_seqname=NULL;
     //char* gseqname=GffObj::names->gseqs.getName(gseq_id);
     if (faIdx!=NULL) { //fastaPath was the multi-fasta file name and it must have an index
@@ -253,7 +255,8 @@ class GFastaDb {
                                farec->line_len, farec->line_blen);
              faseq->loadall(); //just cache the whole sequence, it's faster
              //last_fetchid=gseq_id;
-             last_seqname=gseqname;
+
+             last_seqname=Gstrdup(gseqname);
         }
         else {
           GMessage("Warning: couldn't find fasta record for '%s'!\n",gseqname);
@@ -277,6 +280,7 @@ class GFastaDb {
 
    ~GFastaDb() {
      GFREE(fastaPath);
+     GFREE(last_seqname);
      //delete gcdb;
      delete faIdx;
      delete faseq;
