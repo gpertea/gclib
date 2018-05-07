@@ -405,31 +405,19 @@ class GffExon : public GSeg {
   double score; // gff score column
   char phase; //GFF phase column - for CDS segments only
              // '.' = undefined (UTR), '0','1','2' for CDS exons
-  char exontype; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+  struct {
+     char exontype:7; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+     bool oppStrand:1; // for trans-spliced features: this bit is set if the exon
+                       // is on the opposite strand of the transcript strand
+  };
   int qstart; // for mRNA/protein exon mappings: coordinates on query
   int qend;
-  GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0) {
-    uptr=NULL;
-    attrs=NULL;
-    if (s<e) {
-      start=s;
-      end=e;
-      }
-   else {
-     start=e;
-     end=s;
-    }
-   if (qs<qe) {
-     qstart=qs;
-     qend=qe;
-     } else {
-     qstart=qe;
-     qend=qs;
-     }
-   score=sc;
-   phase=fr;
-   exontype=et;
-   } //constructor
+  GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0, bool rev=false):
+	   GSeg(s,e),  uptr(NULL), attrs(NULL), score(sc), phase(fr), exontype(et), oppStrand(rev),
+	   qstart(qs), qend(qe) {
+   //if (s>e) { start=e; end=s; }
+   if (qs>qe) { qstart=qe; qend=qs; }
+  }
 
  char* getAttr(GffNames* names, const char* atrname) {
    if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
