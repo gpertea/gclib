@@ -1,9 +1,7 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-//#ifndef _POSIX_SOURCE
-////mostly for MinGW;breaks mkdtemp and possibly other functions on OS X
-//#define _POSIX_SOURCE
-//#endif
+#define VERSION "0.10.1"
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -249,10 +247,10 @@ char* rstrchr(char* str, char ch);
 char* strchrs(const char* s, const char* chrs);
 //strchr but with a set of chars instead of only one
 
-char* rstrfind(const char* str, const char *substr); 
+char* rstrfind(const char* str, const char *substr);
 // like rindex() but for strings;  right side version of strstr()
 
-char* reverseChars(char* str, int slen=0); //in place reversal of string 
+char* reverseChars(char* str, int slen=0); //in place reversal of string
 
 char* rstrstr(const char* rstart, const char *lend, const char* substr);
 /*the reversed, rightside equivalent of strstr: starts searching

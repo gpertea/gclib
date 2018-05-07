@@ -11,45 +11,6 @@
 #define S_ISREG(mode)  (((mode) & S_IFMT) == S_IFREG)
 #endif
 
-/*
-#ifdef _DEFINE_WIN32_FSEEKO
- int fseeko(FILE *stream, off_t offset, int whence) {
-
-   }
-#endif
-
-#ifdef _DEFINE_WIN32_FTELLO
- off_t ftello(FILE *stream) {
-
-  }
-#endif
-*/
-
-/*
-int saprintf(char **retp, const char *fmt, ...) {
-  va_list argp;
-  int len;
-  char *buf;
-
-  va_start(argp, fmt);
-  len = vsnprintf(NULL, 0, fmt, argp);
-  va_end(argp);
-  GMALLOC(buf, (len + 1));
-  if(buf == NULL)
-    {
-    *retp = NULL;
-    return -1;
-    }
-
-  va_start(argp, fmt);
-  vsnprintf(buf, len+1, fmt, argp);
-  va_end(argp);
-
-  *retp = buf;
-  return len;
-}
-*/
-
 //************************* Debug helpers **************************
 // Assert failed routine
 void GAssert(const char* expression, const char* filename, unsigned int lineno){
@@ -81,8 +42,8 @@ void GError(const char* format,...){
     vfprintf(stderr,format,arguments);
     va_end(arguments);
     #ifdef DEBUG
-     // modify here if you [don't] want a core dump
-     abort();
+     // uncomment this if you want a core dump:
+     //abort();
     #endif
   #endif
     exit(1);
@@ -186,7 +147,6 @@ int Gstrcmp(const char* a, const char* b, int n) {
    if (n<0) return strcmp(a,b);
        else return strncmp(a,b,n);
  }
-
 }
 
 int G_mkdir(const char* path, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) ) {
@@ -448,7 +408,7 @@ char* rstrchr(char* str, char ch) {  /* returns a pointer to the rightmost
     p--;
     }
  return NULL;
- }
+}
 
 
 /* DOS/UNIX safer fgets : reads a text line from a (binary) file and
@@ -561,8 +521,6 @@ char* strupper(char * str) {//changes string in place
   return str;
 }
 
-
-
 //test if a char is in a given string (set)
 bool chrInStr(char c, const char* str) {
  if (str==NULL || *str=='\0') return false;
@@ -591,7 +549,6 @@ char* rstrfind(const char* str, const char* substr) {
  return NULL;
 }
 
-
 char* strifind(const char* str,  const char* substr) {
  // case insensitive version of strstr -- finding a string within another
   int l,i;
@@ -608,8 +565,6 @@ char* strifind(const char* str,  const char* substr) {
      }
   return NULL;
 }
-
-
 
 // tests if string s has the given prefix
 bool startsWith(const char* s, const char* prefix) {
@@ -652,10 +607,9 @@ char* reverseChars(char* str, int slen) {
   return str;
 }
 
-
-char* rstrstr(const char* rstart, const char *lend, const char* substr) {  /*like strstr, but starts searching
- from right end, going up to lend and returns a pointer to the last (right)
- matching character in str */
+char* rstrstr(const char* rstart, const char *lend, const char* substr) {
+ //like strstr, but starts searching from right end, going up to lend and
+ //returns a pointer to the last (right) matching character in str
  char *p;
  int l,i;
  l=strlen(substr);
@@ -667,7 +621,6 @@ char* rstrstr(const char* rstart, const char *lend, const char* substr) {  /*lik
     }
  return NULL;
  }
-
 
 //hash function used for strings in GHash
 int strhash(const char* str){
@@ -705,7 +658,6 @@ int fnv1a_hash(const char* cp) {
     //return h;
     return (h & 0x7FFFFFFF);
 }
-
 
 // removes the last part (file or directory name) of a full path
 // this is a destructive operation for the given string!!!
