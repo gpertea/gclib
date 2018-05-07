@@ -408,7 +408,7 @@ class GffExon : public GSeg {
   struct {
      char exontype:7; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
      bool oppStrand:1; // for trans-spliced features: this bit is set if the exon
-                       // is on the opposite strand of the transcript strand
+                       // is on the strand opposite to the transcript strand
   };
   int qstart; // for mRNA/protein exon mappings: coordinates on query
   int qend;
