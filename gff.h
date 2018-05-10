@@ -39,6 +39,7 @@ extern const uint gfo_flag_BY_EXON;  //created by subfeature (exon) directly
                       //(GTF2 and some chado gff3 dumps with exons given before their mRNA)
 extern const uint gfo_flag_IS_TRANSCRIPT; //recognized as '*RNA' or '*transcript'
 extern const uint gfo_flag_DISCARDED; //should not be printed under the "transcriptsOnly" directive
+extern uint gfo_flag_TRANS_SPLICED;
 extern const uint gfo_flag_LST_KEEP; //GffObj from GffReader::gflst is to be kept (not deallocated)
                                      //when GffReader is destroyed
 extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
@@ -51,8 +52,8 @@ extern bool gff_show_warnings;
 
 
 enum GffExonType {
-  exgffIntron=-1, // useless "intron" feature
-	exgffNone=0,  //not a recognizable exonic segment
+  exgffIntron=-1, // "intron" feature, generally useless (and rarely seen)
+  exgffNone=0,  //not a recognizable exonic segment
   exgffStart, //from "start_codon" feature (within CDS)
   exgffStop, //from "stop_codon" feature (may be outside CDS)
   exgffCDS,  //from "CDS" feature
@@ -103,8 +104,8 @@ class GffLine {
     char* info; //the last, attributes' field, unparsed
     uint fstart;
     uint fend;
-    uint qstart; //overlap coords on query, if available
-    uint qend;
+    uint qalnstart; //overlap coords on query, if available
+    uint qalnend;
     uint qlen; //query len, if given
     double score;
     char strand;
@@ -143,7 +144,7 @@ class GffLine {
     char* extractAttr(const char* pre, bool caseStrict=false, bool enforce_GTF2=false, int* rlen=NULL);
     GffLine(GffLine& l): _parents(NULL), _parents_len(l._parents_len),
     		dupline(NULL), line(NULL), llen(l.llen), gseqname(NULL), track(NULL),
-    		ftype(NULL), ftype_id(l.ftype_id), info(NULL), fstart(l.fstart), fend(l.fend), qstart(l.fstart), qend(l.fend),
+    		ftype(NULL), ftype_id(l.ftype_id), info(NULL), fstart(l.fstart), fend(l.fend), qalnstart(l.fstart), qalnend(l.fend),
 			qlen(l.qlen), score(l.score), strand(l.strand), flags(l.flags), exontype(l.exontype), phase(l.phase),
 			gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(l.num_parents), ID(NULL) {
     	//if (l==NULL || l->line==NULL)
@@ -177,7 +178,7 @@ class GffLine {
     }
     GffLine(): _parents(NULL), _parents_len(0),
     		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
-    		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), qstart(0), qend(0), qlen(0),
+    		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), qalnstart(0), qalnend(0), qlen(0),
     		score(0), strand(0), flags(0), exontype(0), phase(0),
     		gene_name(NULL), gene_id(NULL),
     		parents(NULL), num_parents(0), ID(NULL) {
@@ -406,15 +407,22 @@ class GffExon : public GSeg {
   char phase; //GFF phase column - for CDS segments only
              // '.' = undefined (UTR), '0','1','2' for CDS exons
   struct {
-     char exontype:7; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
-     bool oppStrand:1; // for trans-spliced features: this bit is set if the exon
-                       // is on the strand opposite to the transcript strand
+     char exontype:6; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+     //for trans-spliced GffObj:
+     bool diffGSeq:1;  // set if exon on different chromosome/contig than the transcript
+                       //if set, qstart/gseq_id has it
+     bool oppStrand:1; // set if exon is on the strand opposite to the transcript strand
+
   };
-  int qstart; // for mRNA/protein exon mappings: coordinates on query
+  union {
+    int qstart; // for mRNA/protein exon mappings: coordinates on query
+    int gseq_id; //for trans-spliced GffObj: the reference sequence ID#
+  };
   int qend;
-  GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0, bool rev=false):
-	   GSeg(s,e),  uptr(NULL), attrs(NULL), score(sc), phase(fr), exontype(et), oppStrand(rev),
-	   qstart(qs), qend(qe) {
+
+  GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0):
+	   GSeg(s,e),  uptr(NULL), attrs(NULL), score(sc), phase(fr), exontype(et), diffGSeq(false),
+	   oppStrand(false),  qstart(qs), qend(qe) {
    //if (s>e) { start=e; end=s; }
    if (qs>qe) { qstart=qe; qend=qs; }
   }
@@ -422,7 +430,7 @@ class GffExon : public GSeg {
  char* getAttr(GffNames* names, const char* atrname) {
    if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
    return attrs->getAttr(names, atrname);
-   }
+ }
 
  char* getAttr(int aid) {
    if (attrs==NULL) return NULL;
@@ -517,7 +525,14 @@ public:
   void isTranscript(bool v) {
       if (v) flags |= gfo_flag_IS_TRANSCRIPT;
         else flags &= ~gfo_flag_IS_TRANSCRIPT;
-      }
+  }
+
+  bool isTransSpliced() { return ((flags & gfo_flag_TRANS_SPLICED)!=0); }
+  void isTransSpliced(bool v) {
+      if (v) flags |= gfo_flag_TRANS_SPLICED;
+        else flags &= ~gfo_flag_TRANS_SPLICED;
+  }
+
   bool promotedChildren() { return ((flags & gfo_flag_CHILDREN_PROMOTED)!=0); }
   void promotedChildren(bool v) {
     if (v) flags |= gfo_flag_CHILDREN_PROMOTED;
@@ -1032,6 +1047,7 @@ class GffReader {
     };
   };
   bool gff_warns; //warn about duplicate IDs, etc. even when they are on different chromosomes
+  bool gff_trans_splicing; //preserve trans-splicing
   char* lastReadNext;
   FILE* fh;
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
@@ -1073,7 +1089,7 @@ class GffReader {
   bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL, bool noExonAttr=false);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
-		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
+		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), gff_trans_splicing(false), fh(f), fname(NULL), gffline(NULL),
 		  bedline(NULL), transcriptsOnly(t_only), gene2exon(false), discarded_ids(true), phash(true), gseqtable(1,true),
 		  gflst(sortbyloc), gseqStats(1, false) {
       GMALLOC(linebuf, GFF_LINELEN);
@@ -1094,7 +1110,7 @@ class GffReader {
   void set_gene2exon(bool v) { gene2exon=v;}
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
   GffReader(const char* fn, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
-	  		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(NULL), fname(NULL),
+	  		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), gff_trans_splicing(false), fh(NULL), fname(NULL),
 			  gffline(NULL), bedline(NULL), transcriptsOnly(t_only), gene2exon(false), discarded_ids(true),
 			  phash(true), gseqtable(1,true), gflst(sort), gseqStats(1,false) {
       gff_warns=gff_show_warnings;
@@ -1125,6 +1141,11 @@ class GffReader {
       gff_warns=v;
       gff_show_warnings=v;
       }
+
+  void preserveTransSplicing(bool v=true) {
+      gff_trans_splicing=v;
+      }
+
 
   GffLine* nextGffLine();
   BEDLine* nextBEDLine();
