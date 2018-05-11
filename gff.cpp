@@ -851,7 +851,7 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline):GSeg(0,0), exons(true,true,fal
 	partial=false;
 	isCDS=false;
 	uptr=NULL;
-	ulink=NULL;
+	//ulink=NULL;
 	parent=NULL;
 	udata=0;
 	flags=0;
@@ -902,7 +902,7 @@ GffObj::GffObj(GffReader *gfrd, GffLine* gffline, bool keepAttr, bool noExonAttr
   partial=false;
   isCDS=false;
   uptr=NULL;
-  ulink=NULL;
+  //ulink=NULL;
   parent=NULL;
   udata=0;
   flags=0;

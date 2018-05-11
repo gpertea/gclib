@@ -381,7 +381,7 @@ class GffAttrs:public GList<GffAttr> {
          aid=names->attrs.addNewName(attrname);
          }
       this->Add(new GffAttr(aid, val));
-      }
+    }
 
     char* getAttr(GffNames* names, const char* attrname) {
       int aid=names->attrs.getId(attrname);
@@ -479,17 +479,19 @@ public:
   int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
-  GPVec<GffObj> children;
-  GffObj* parent;
+  GPVec<GffObj> children; //e.g. if this is a gene feature
+  GffObj* parent; //tree hierarchy enforced
   int udata; //user data, flags etc.
   void* uptr; //user pointer (to a parent object, cluster, locus etc.)
-  GffObj* ulink; //link to another GffObj (user controlled field)
+  //GffObj* ulink; //link to another GffObj (user controlled field)
   // mRNA specific fields:
-  bool isCDS; //just a CDS, no UTRs
-  bool partial; //partial CDS
   uint CDstart; //CDS start coord
   uint CDend;   //CDS end coord
-  char CDphase; //initial phase for CDS start
+  struct {
+    char CDphase:6; //initial phase for CDS start
+    bool isCDS:1; //just a CDS, no UTRs
+    bool partial:1; //partial CDS
+  };
   bool hasErrors() { return ((flags & gfo_flag_HAS_ERRORS)!=0); }
   void hasErrors(bool v) {
       if (v) flags |= gfo_flag_HAS_ERRORS;
