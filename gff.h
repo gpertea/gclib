@@ -39,7 +39,7 @@ extern const uint gfo_flag_BY_EXON;  //created by subfeature (exon) directly
                       //(GTF2 and some chado gff3 dumps with exons given before their mRNA)
 extern const uint gfo_flag_IS_TRANSCRIPT; //recognized as '*RNA' or '*transcript'
 extern const uint gfo_flag_DISCARDED; //should not be printed under the "transcriptsOnly" directive
-extern uint gfo_flag_TRANS_SPLICED;
+extern const uint gfo_flag_TRANS_SPLICED;
 extern const uint gfo_flag_LST_KEEP; //GffObj from GffReader::gflst is to be kept (not deallocated)
                                      //when GffReader is destroyed
 extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
@@ -124,8 +124,8 @@ class GffLine {
     	    bool skipLine:1;
     	};
     };
-    char exontype; // gffExonType
-    char phase;  // '.' , '0', '1' or '2'
+    int8_t exontype; // GffExonType
+    unsigned char phase;  // '.' , '0', '1' or '2'
     // -- allocated strings:
     char* gene_name; //value of gene_name attribute (GTF) if present or Name attribute of a gene feature (GFF3)
     char* gene_id; //value of gene_id attribute (GTF) if present or ID attribute of a gene feature (GFF3)
@@ -404,26 +404,14 @@ class GffExon : public GSeg {
   void* uptr; //for later extensions
   GffAttrs* attrs; //other attributes kept for this exon
   double score; // gff score column
-  char phase; //GFF phase column - for CDS segments only
+  unsigned char phase; //GFF phase column - for CDS segments only
              // '.' = undefined (UTR), '0','1','2' for CDS exons
-  struct {
-     char exontype:6; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
-     //for trans-spliced GffObj:
-     bool diffGSeq:1;  // set if exon on different chromosome/contig than the transcript
-                       //if set, qstart/gseq_id has it
-     bool oppStrand:1; // set if exon is on the strand opposite to the transcript strand
-
-  };
-  union {
-    int qstart; // for mRNA/protein exon mappings: coordinates on query
-    int gseq_id; //for trans-spliced GffObj: the reference sequence ID#
-  };
+  int8_t exontype;
+  int qstart; // for mRNA/protein exon mappings: coordinates on query
   int qend;
 
   GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0):
-	   GSeg(s,e),  uptr(NULL), attrs(NULL), score(sc), phase(fr), exontype(et), diffGSeq(false),
-	   oppStrand(false),  qstart(qs), qend(qe) {
-   //if (s>e) { start=e; end=s; }
+	   GSeg(s,e),  uptr(NULL), attrs(NULL), score(sc), phase(fr), exontype(et), qstart(qs), qend(qe) {
    if (qs>qe) { qstart=qe; qend=qs; }
   }
 
@@ -479,7 +467,10 @@ public:
   int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
-  GPVec<GffObj> children; //e.g. if this is a gene feature
+  GPVec<GffObj> children; //e.g. for gene features
+      //for trans-spliced transcripts, this must have exactly two elements: preceding GffObj* (NULL if first exon is in this)
+     //                                                                     next GffObj* (NULL if last exon is in this)
+
   GffObj* parent; //tree hierarchy enforced
   int udata; //user data, flags etc.
   void* uptr; //user pointer (to a parent object, cluster, locus etc.)
@@ -488,7 +479,7 @@ public:
   uint CDstart; //CDS start coord
   uint CDend;   //CDS end coord
   struct {
-    char CDphase:6; //initial phase for CDS start
+    unsigned char CDphase:6; //initial phase for CDS start
     bool isCDS:1; //just a CDS, no UTRs
     bool partial:1; //partial CDS
   };
@@ -595,7 +586,7 @@ public:
                                    //exons: sorted, free, non-unique
        gffID=NULL;
        uptr=NULL;
-       ulink=NULL;
+       //ulink=NULL;
        flags=0;
        udata=0;
        parent=NULL;
@@ -1002,16 +993,7 @@ class GfList: public GList<GffObj> {
      }
 
 };
-/*
-struct GfoHolder {
-   //int idx; //position in GffReader::gflst array
-   GffObj* gffobj;
-   GfoHolder(GffObj* gfo=NULL) { //, int i=0) {
-     //idx=i;
-     gffobj=gfo;
-     }
-};
-*/
+
 class CNonExon { //utility class used in subfeature promotion
  public:
    //int idx;

@@ -661,16 +661,6 @@ int GffObj::addExon(GffReader* reader, GffLine* gl, bool keepAttr, bool noExonAt
   int eidx=addExon(gl->fstart, gl->fend, gl->score, gl->phase,
          gl->qalnstart,gl->qalnend, gl->is_cds, gl->exontype);
   if (eidx<0) return eidx; //this should never happen (unless duplicated exon?)
-  if (isTranscript() && isTransSpliced()) {
-	  if (gl->strand!=this->strand) {
-	     exons[eidx]->oppStrand=true;
-	  }
-	  int f_gseqid=names->gseqs.addName(gl->gseqname);
-	  if (f_gseqid!=gseq_id) {
-		  exons[eidx]->diffGSeq=1;
-	      exons[eidx]->gseq_id=f_gseqid;
-	  }
-  }
   if (keepAttr) {
      if (noExonAttr) {
          if (attrs==NULL) //place the parsed attributes directly at transcript level
@@ -1915,10 +1905,6 @@ void GffObj::mRNA_CDS_coords(uint& cds_mstart, uint& cds_mend) {
   if (CDphase=='1' || CDphase=='2') {
       cdsadj=CDphase-'0';
       }
-  /*
-   uint seqstart=CDstart;
-   uint seqend=CDend;
-  */
   uint seqstart=exons.First()->start;
   uint seqend=exons.Last()->end;
   int s=0; //resulting nucleotide counter
