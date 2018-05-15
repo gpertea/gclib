@@ -1476,28 +1476,27 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 					found_parent=true; //parent already found in special GTF case
 				}
 				else {
-					GffObj* newgfo=prevseen;
 					GPVec<GffObj>* newgflst=NULL;
-					GVec<int> kparents; //kept parents (non-discarded)
+					//GVec<int> kparents; //kept parents (non-discarded)
 					GVec< GPVec<GffObj>* > kgflst(false);
 					GPVec<GffObj>* gflst0=NULL;
 					for (int i=0;i<gffline->num_parents;i++) {
 						newgflst=NULL;
 						//if (transcriptsOnly && (
-						if (discarded_ids.Find(gffline->parents[i])!=NULL) continue;
+						if (discarded_ids.Find(gffline->parents[i])!=NULL)
+							continue; //skip discarded parent feature
 						if (!gfoFindId(gffline->parents[i], newgflst))
-							continue; //skipping discarded parent feature
-						kparents.Add(i);
-						if (i==0) gflst0=newgflst;
+							continue; //skip parents not declared yet
+						if (gflst0==NULL) gflst0=newgflst; //first parent gffobj(s) found
 						kgflst.Add(newgflst);
 					}
-					if (gffline->num_parents>0 && kparents.Count()==0) {
-						kparents.cAdd(0);
+					if (gffline->num_parents>0 && // kparents.Count()==0
+							                kgflst.Count()==0) {
+						//in case no valid parent gffobjs were found:
 						kgflst.Add(gflst0);
 					}
-					for (int k=0;k<kparents.Count();k++) {
-						int i=kparents[k];
-						newgflst=kgflst[k];
+					for (int k=0;k<kgflst.Count();k++) {
+						newgflst=kgflst[k]; //could be NULL if no valid parent GffObj exists
 						GffObj* parentgfo=NULL;
 						if (gffline->is_transcript || gffline->exontype==0) {//likely a transcript
 							//parentgfo=gfoFind(gffline->parents[i], newgflst, gffline->gseqname,
@@ -1506,21 +1505,24 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 								parentgfo = newgflst->Get(0);
 						}
 						else {
-							//for exon-like entities we only need a parent to be in locus distance,
+							//for exon-like entities we need the parent to be in locus distance,
 							//on the same strand
-							parentgfo=gfoFindInLocus(gffline->parents[i], newgflst, gffline->gseqname,
-									gffline->strand, gffline->fstart);
+							//if (gfoFindId(gffline->parents[i], newgflst))
+							if (newgflst!=NULL)
+							  parentgfo=gfoFindInLocus(newgflst, gffline->gseqname,
+									gffline->strand, gffline->fstart); //first parent found in the region
+
 						}
-						if (parentgfo!=NULL) { //parent GffObj parsed earlier
+						if (parentgfo!=NULL) { //parent GffObj parsed earlier in the same region, update it
 							found_parent=true;
 							if (parentgfo->isGene() && (gffline->is_transcript ||
 									 gffline->exontype==0)) {
 								//not an exon, but a transcript parented by a gene
-								if (newgfo) {
-									updateParent(newgfo, parentgfo);
+								if (prevseen) {
+									updateParent(prevseen, parentgfo);
 								}
 								else {
-									newgfo=newGffRec(gffline, keepAttr, noExonAttr, parentgfo);
+									prevseen=newGffRec(gffline, keepAttr, noExonAttr, parentgfo);
 								}
 							}
 							else { //potential exon subfeature?
@@ -1537,39 +1539,40 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 									   validation_errors=true;
 
 							}
-						} //overlapping parent feature found
+						} //parent gffObj found in the region
+						if (!found_parent) { //this parent gffObj NOT found in the region
+							//new GTF-like record starting directly here as a subfeature
+							//or it could be some chado GFF3 with exons coming BEFORE their parent :(
+							//or it could also be a stray transcript without a parent gene defined previously
+							//check if this feature isn't parented by a previously stored "child" subfeature
+							char* subp_name=NULL;
+							CNonExon* subp=NULL;
+							if (!gffline->is_transcript) { //don't bother with this check for obvious transcripts
+								if (pex.Count()>0) subp=subfPoolCheck(gffline, pex, subp_name);
+								if (subp!=NULL) { //found a subfeature that is the parent of this (!)
+									//promote that subfeature to a full GffObj
+									GffObj* gfoh=promoteFeature(subp, subp_name, pex, keepAttr, noExonAttr);
+									//add current gffline as an exon of the newly promoted subfeature
+									if (!addExonFeature(gfoh, gffline, &pex, noExonAttr))
+										validation_errors=true;
+								}
+							}
+							if (subp==NULL) { //no parent subfeature seen before
+								//loc_debug=true;
+								GffObj* ngfo=prevseen;
+								if (ngfo==NULL) {
+									//if it's an exon type, create directly the parent with this exon
+									//but if it's recognized as a transcript, the object itself is created
+									ngfo=newGffRec(gffline, keepAttr, noExonAttr, NULL, NULL, newgflst);
+								}
+								if (!ngfo->isTranscript() &&
+										gffline->ID!=NULL && gffline->exontype==0)
+									subfPoolAdd(pex, ngfo);
+								//even those with errors will be added here!
+							}
+							GFREE(subp_name);
+						} //no previous parent found in the region
 					} //for each parsed parent Id
-					if (!found_parent) { //new GTF-like record starting directly here as a subfeature
-						//or it could be some chado GFF3 barf with exons coming BEFORE their parent :(
-						//or it could also be a stray transcript without a parent gene defined previously
-						//check if this feature isn't parented by a previously stored "child" subfeature
-						char* subp_name=NULL;
-						CNonExon* subp=NULL;
-						if (!gffline->is_transcript) { //don't bother with this check for obvious transcripts
-							if (pex.Count()>0) subp=subfPoolCheck(gffline, pex, subp_name);
-							if (subp!=NULL) { //found a subfeature that is the parent of this (!)
-								//promote that subfeature to a full GffObj
-								GffObj* gfoh=promoteFeature(subp, subp_name, pex, keepAttr, noExonAttr);
-								//add current gffline as an exon of the newly promoted subfeature
-								if (!addExonFeature(gfoh, gffline, &pex, noExonAttr))
-									validation_errors=true;
-							}
-						}
-						if (subp==NULL) { //no parent subfeature seen before
-							//loc_debug=true;
-							GffObj* ngfo=prevseen;
-							if (ngfo==NULL) {
-								//if it's an exon type, create directly the parent with this exon
-								//but if it's recognized as a transcript, the object itself is created
-								ngfo=newGffRec(gffline, keepAttr, noExonAttr, NULL, NULL, newgflst);
-							}
-							if (!ngfo->isTranscript() &&
-									gffline->ID!=NULL && gffline->exontype==0)
-								subfPoolAdd(pex, ngfo);
-							//even those with errors will be added here!
-						}
-						GFREE(subp_name);
-					} //no previous parent found
 				}
 			} //parented feature
 			//--
