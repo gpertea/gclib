@@ -402,7 +402,7 @@ class GffAttrs:public GList<GffAttr> {
 
 class GffExon : public GSeg {
  public:
-  void* uptr; //for later extensions
+  void* uptr; //for custom extensions
   GffAttrs* attrs; //other attributes kept for this exon
   double score; // gff score column
   unsigned char phase; //GFF phase column - for CDS segments only
@@ -438,6 +438,16 @@ class GffCDSeg:public GSeg {
   int exonidx;
 };
 
+class GffObj;
+
+//keeping track of discontinuous features and their order
+struct GffObjPart {
+	int partno;
+	GffObj* gfo;
+	GffObjPart(GffObj* o=NULL,int pno=0):partno(pno),gfo(o) { }
+	bool operator<(GffObjPart& op) { return (partno<op.partno); }
+};
+
 //one GFF mRNA object -- e.g. a mRNA with its exons and/or CDS segments
 class GffObj:public GSeg {
   //utility segment-merging function for addExon()
@@ -468,14 +478,10 @@ public:
   int16_t exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
-  GPVec<GffObj> children; //e.g. for gene features
-      //for trans-spliced transcripts, this must have exactly two elements: preceding GffObj* (NULL if first exon is in this)
-     //                                                                     next GffObj* (NULL if last exon is in this)
-
-  GffObj* parent; //tree hierarchy enforced
+  GPVec<GffObj> children; //children features, e.g. for genes
+  GffObj* parent; //e.g. gene feature for transcripts; a tree hierarchy is enforced!
   int udata; //user data, flags etc.
   void* uptr; //user pointer (to a parent object, cluster, locus etc.)
-  //GffObj* ulink; //link to another GffObj (user controlled field)
   // mRNA specific fields:
   uint CDstart; //CDS start coord
   uint CDend;   //CDS end coord
@@ -521,8 +527,8 @@ public:
         else flags &= ~gfo_flag_IS_TRANSCRIPT;
   }
 
-  bool isTransSpliced() { return ((flags & gfo_flag_TRANS_SPLICED)!=0); }
-  void isTransSpliced(bool v) {
+  bool isDiscontinuous() { return ((flags & gfo_flag_TRANS_SPLICED)!=0); }
+  void isDiscontinuous(bool v) {
       if (v) flags |= gfo_flag_TRANS_SPLICED;
         else flags &= ~gfo_flag_TRANS_SPLICED;
   }
@@ -568,11 +574,10 @@ public:
   void removeExon(GffExon* p);
   char  strand; //'.', '-' or '+'
   double gscore;
-  double uscore; //custom, user-computed score, if needed
   int covlen; //total coverage of  reference genomic sequence (sum of maxcf segment lengths)
   //Trans-splicing links:
-  GffObj* tspl_prev;
-  GffObj* tspl_next;
+  //keep track of discontinuous features linked to this GffObj
+  GList<GffObjPart>* discList;
   /*--------- optional data:
   int qlen; //query length, start, end - if available
   int qstart;
@@ -606,8 +611,7 @@ public:
        if (anid!=NULL) gffID=Gstrdup(anid);
        gffnames_ref(names);
        /* qlen=0; qstart=0;  qend=0; qcov=0; */
-       tspl_prev=NULL;
-       tspl_next=NULL;
+       discList=NULL;
        partial=true;
        isCDS=false;
        CDstart=0; // hasCDS <=> CDstart>0
@@ -620,7 +624,6 @@ public:
        xstatus=0;
        strand='.';
        gscore=0;
-       uscore=0;
        attrs=NULL;
        covlen=0;
        gene_name=NULL;

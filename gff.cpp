@@ -842,7 +842,6 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline):GSeg(0,0), exons(true,true,fal
 	partial=false;
 	isCDS=false;
 	uptr=NULL;
-	//ulink=NULL;
 	parent=NULL;
 	udata=0;
 	flags=0;
@@ -862,12 +861,10 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline):GSeg(0,0), exons(true,true,fal
 		GError("Error: cannot use this GffObj constructor with NULL GffReader/BEDLine!\n");
 	gffnames_ref(names);
 	gscore=0;
-	uscore=0;
 	covlen=0;
 	//qcov=0; qlen=0;
 	//qstart=0; qend=0;
-    tspl_prev=NULL;
-    tspl_next=NULL;
+    discList=NULL;
 	ftype_id=gff_fid_transcript;
 	exon_ftype_id=gff_fid_exon;
 	start=bedline->fstart;
@@ -912,11 +909,9 @@ GffObj::GffObj(GffReader *gfrd, GffLine* gffline, bool keepAttr, bool noExonAttr
   if (gfrd == NULL || gffline == NULL)
     GError("Cannot use this GffObj constructor with NULL GffReader/GffLine!\n");
   gffnames_ref(names);
-  tspl_prev=NULL;
-  tspl_next=NULL;
+  discList=NULL;
   //qlen=0;qstart=0;qend=0;
   gscore=0;
-  uscore=0;
   covlen=0;
 
   ftype_id=gffline->ftype_id;
@@ -1092,10 +1087,10 @@ GffObj* GffReader::gfoAdd(GffObj* gfo) {
 GffObj* GffReader::gfoAdd(GPVec<GffObj>& glst, GffObj* gfo) {
  //FIXME: ordering of discontinuous parts is now simply the input order
  int i=glst.Add(gfo);
- if (glst.Count()>2) gfo->isTransSpliced(true);
+ if (glst.Count()>2) gfo->isDiscontinuous(true);
  else if (glst.Count()==2) {
-	 glst.First()->isTransSpliced(true);
-	 glst.Last()->isTransSpliced(true);
+	 glst.First()->isDiscontinuous(true);
+	 glst.Last()->isDiscontinuous(true);
  }
  if (i>0) {
    GffObj* po=glst[i-1];
