@@ -1,5 +1,4 @@
 #include "GapAssem.h"
-#include "GStr.h"
 
 const unsigned char GA_flag_IS_REF=0;
 const unsigned char GA_flag_HAS_PARENT=1;
@@ -1330,20 +1329,6 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 	 Notes:
 	 seq_lend>seq_rend if the sequence is reverse complemented
 
-	 alndata is a string which the relative-incremental offsets of any deletions or gaps
-	 in the component sequence, relative to the first aligned nucleotide, e.g. :
-
-	 5g4d2gg30d12g
-
-	 ..means there is a gap at position (end5clip + 5) in the sequence,
-	 a deletion at position (end5clip+5+4=end5clip+9), then 2 more gaps at consecutive positions
-	 end5clip+11 and end5clip+12, a deletion at position end5clip+42 and finally a gap
-	 at position end5clip+54
-	 Long gaps can be specified by using g<gaplen>- ('g' char followed by the length of the gap and the '-' char)
-	 Even the example above can be written like this:
-	 5g4d2g2-30d12g
-	 The same construct can be used for long deletions, if deemed necessary (e.g. d5-)
-
 	 */
 //--build the actual MSA and a consensus sequence, if not done yet:
 // this will also remove the consensus gaps as appropriate (unless disabled)
@@ -1356,7 +1341,7 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 	float redundancy = 0; // = sum(asm_rend-asm_lend+1)/contig_len
 	for (int i = 0; i < Count(); i++) {
 		GASeq* seq = Get(i);
-		GStr alndata;
+		//GStr alndata;
 		//if (seq->hasFlag(7)) continue; //badalign flag set
 		int gapped_len = seq->seqlen + seq->numgaps;
 		//fprintf(f, "RD %s %d 0 0\n", seq->id, gapped_len);
@@ -1374,25 +1359,26 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 			clpr = seq->clp5;
 		}
 		int aligned_len = 0;
-		int indel_ofs = 0; //distance to last indel position
+		//int indel_ofs = 0; //distance to last indel position
 		for (int j = seq->clp5; j < seq->seqlen - seq->clp3; j++) {
 			int indel = seq->ofs[j];
-			char indel_type = 0;
+			//char indel_type = 0;
 			asmr += indel + 1;
 			if (indel < 0) { //deletion
-				indel_type = 'd';
+				//indel_type = 'd';
 				indel = -indel;
 			} else { //  indel>=0
 				//actually aligned nucleotide here
-				if (indel > 0)
-					indel_type = 'g';
-				else
-					// indel==0, no indel at all
-					indel_ofs++;
+				//if (indel > 0)
+				//	indel_type = 'g';
+				//else
+				//	// indel==0, no indel at all
+				//	indel_ofs++;
 				if (toupper(seq->seq[j]) == toupper(consensus[asmr - 1]))
 					pid++;
 				aligned_len++;
 			}
+			/*
 			if (indel_type) {
 				if (indel > 2)
 					alndata.appendfmt("%d%c%d-", indel_ofs, indel_type, indel);
@@ -1401,6 +1387,7 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 						alndata += indel_type;
 				indel_ofs = 0;
 			}
+			*/
 		}
 		pid = (pid * 100.0) / (float) aligned_len;
 		redundancy += aligned_len;
@@ -1419,8 +1406,9 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 		if (seq->revcompl)
 			Gswap(seqr, seql);
 		//         id ln of al ar sl sr pi an
-		fprintf(f, "%s %d %d %d %d %d %d %4.2f %s\n", seq->id, seq->len, seqoffset,
-		    asml, asmr, seql, seqr, pid, alndata.chars());
+		fprintf(f, "%s %d %d %d %d %d %d %4.2f\n", seq->id, seq->len, seqoffset,
+		    asml, asmr, seql, seqr, pid); //alndata.chars());
 	}
 	redundancy /= (float) consensus.Count();
 }
+

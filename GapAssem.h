@@ -22,9 +22,6 @@ struct SeqDelOp {
   bool operator==(SeqDelOp& d){
      return (this==&d);
      }
-  bool operator>(SeqDelOp& d){
-     return (this>&d);
-     }
   bool operator<(SeqDelOp& d){
      return (this<&d);
      }
