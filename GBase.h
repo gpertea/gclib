@@ -1,6 +1,6 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.10.2"
+#define GCLIB_VERSION "0.10.3"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
