@@ -1411,4 +1411,3 @@ void GSeqAlign::writeInfo(FILE* f, const char* name, bool refWeighDown) {
 	}
 	redundancy /= (float) consensus.Count();
 }
-
