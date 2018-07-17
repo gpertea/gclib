@@ -1,7 +1,6 @@
 #ifndef GFASEQGET_H
 #define GFASEQGET_H
 #include "GFastaIndex.h"
-#include "GStr.h"
 
 #define MAX_FASUBSEQ 0x20000000
 //max 512MB sequence data held in memory at a time
@@ -53,20 +52,21 @@ class GFaSeqGet {
   const char* loadsubseq(uint cstart, int& clen);
   void finit(const char* fn, off_t fofs, bool validate);
  public:
-  GStr seqname; //current sequence name
+  //GStr seqname; //current sequence name
+  char* seqname;
   GFaSeqGet(): fname(NULL), fh(NULL), fseqstart(0), seq_len(0),
-		  line_len(0), line_blen(0), lastsub(NULL), seqname("",42) {
+		  line_len(0), line_blen(0), lastsub(NULL), seqname(NULL) {
   }
 
   GFaSeqGet(const char* fn, off_t fofs, bool validate=false):fname(NULL), fh(NULL),
 		    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-			lastsub(NULL), seqname("",42) {
+			lastsub(NULL), seqname(NULL) {
      finit(fn,fofs,validate);
   }
 
   GFaSeqGet(const char* fn, bool validate=false):fname(NULL), fh(NULL),
 		    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-			lastsub(NULL), seqname("",42) {
+			lastsub(NULL), seqname(NULL) {
      finit(fn,0,validate);
   }
 
@@ -80,6 +80,7 @@ class GFaSeqGet {
        GFREE(fname);
        fclose(fh);
     }
+    GFREE(seqname);
     delete lastsub;
   }
 
@@ -160,28 +161,32 @@ class GFastaDb {
      if (!fileExists(fpath))
        GError("Error: file/directory %s does not exist!\n",fpath);
      fastaPath=Gstrdup(fpath);
-     GStr gseqpath(fpath);
+     //GStr gseqpath(fpath);
      if (fileExists(fastaPath)>1) { //exists and it's not a directory
-            GStr fainame(fastaPath);
-            if (fainame.rindex(".fai")==fainame.length()-4) {
+            char* fainame=Gstrdup(fastaPath,4);
+            int fainamelen=strlen(fainame);
+            //int fainame_len=strlen(fainame);
+            if (trimSuffix(fastaPath, ".fai")) {
                //.fai index file given directly
-               fastaPath[fainame.length()-4]=0;
                if (!fileExists(fastaPath))
                   GError("Error: cannot find fasta file for index %s !\n", fastaPath);
             }
-             else fainame.append(".fai");
+            else { //append .fai as needed
+            	 strcpy(fainame+fainamelen, ".fai");
+            	 fainamelen+=4;
+            }
             //GMessage("creating GFastaIndex with fastaPath=%s, fainame=%s\n", fastaPath, fainame.chars());
-            faIdx=new GFastaIndex(fastaPath,fainame.chars());
-            GStr fainamecwd(fainame);
-            int ip=-1;
-            //if ((ip=fainamecwd.rindex(CHPATHSEP))>=0)
-            if ((ip=fainamecwd.rindex('/'))>=0)
-               fainamecwd.cut(0,ip+1);
+            faIdx=new GFastaIndex(fastaPath, fainame);
+            char* fainamecwd=fainame; //will hold just the file name without the path
+            char* plast=strrchr(fainamecwd, '/'); //CHPATHSEP
+            if (plast!=NULL) {
+              fainamecwd=plast+1; //point to the file name only
+            }
             if (!faIdx->hasIndex()) { //could not load index file .fai
-               //try current directory (danger, might not be the correct index for that file!)
-               if (fainame!=fainamecwd) {
-                 if (fileExists(fainamecwd.chars())>1) {
-                    faIdx->loadIndex(fainamecwd.chars());
+               //try current directory (Warning: might not be the correct index for that file!)
+               if (plast==NULL) {
+                 if (fileExists(fainamecwd)>1) {
+                    faIdx->loadIndex(fainamecwd);
                   }
                }
             } //tried to load index
@@ -192,24 +197,26 @@ class GFastaDb {
                  if (faIdx->getCount()==0) GError("Error: no fasta records found!\n");
                  if (writeIndexFile) {
                      //GMessage("Fasta index rebuilt.\n");
-                	 GStr idxfname(fainame);
-                     FILE* fcreate=fopen(fainame.chars(), "w");
+                     FILE* fcreate=fopen(fainame, "w");
+                     char* idxfname=fainame;
                      if (fcreate==NULL) {
-                        GMessage("Warning: cannot create fasta index file %s! (permissions?)\n", fainame.chars());
+                        GMessage("Warning: cannot create fasta index file %s! (permissions?)\n", fainame);
                         if (fainame!=fainamecwd) {
+                        	//try cwd
                         	idxfname=fainamecwd;
-                        	GMessage("   Attempting to create it in the current directory..\n");
-                        	if ((fcreate=fopen(fainamecwd.chars(), "w"))==NULL)
-                        		GError("Error: cannot create fasta index file %s!\n", fainamecwd.chars());
+                        	GMessage("   Attempting to create the index in the current directory..\n");
+                        	if ((fcreate=fopen(fainamecwd, "w"))==NULL)
+                        		GError("Error: cannot create fasta index file %s!\n", fainamecwd);
                         }
                      }
                      if (fcreate!=NULL) {
                     	 if (faIdx->storeIndex(fcreate)<faIdx->getCount())
-                              GMessage("Warning: error writing the index file %s!\n", idxfname.chars());
-                    	 else GMessage("FASTA index file %s created.\n", idxfname.chars());
+                              GMessage("Warning: error writing the index file %s!\n", idxfname);
+                    	 else GMessage("FASTA index file %s created.\n", idxfname);
                      }
                  } //file storage of index requested
             } //creating FASTA index
+    GFREE(fainame);
     } //multi-fasta file
   }
 
@@ -218,24 +225,35 @@ class GFastaDb {
 	 faseq->loadall();
 	 //last_fetchid=gseq_id;
 	 GFREE(last_seqname);
-	 last_seqname=Gstrdup(faseq->seqname.chars());
+	 last_seqname=Gstrdup(faseq->seqname);
 	 return faseq;
   }
 
   char* getFastaFile(const char* gseqname) {
 	if (fastaPath==NULL) return NULL;
-	GStr s(fastaPath);
-	s.trimR('/');
-	s.append('/');
-	s.append(gseqname);
-	GStr sbase(s);
-	if (!fileExists(s.chars())) s.append(".fa");
-	if (!fileExists(s.chars())) s.append("sta");
-	if (fileExists(s.chars())) return Gstrdup(s.chars());
+	int gnl=strlen(gseqname);
+	char* s=Gstrdup(fastaPath, gnl+8);
+	int slen=strlen(s);
+	if (s[slen-1]!='/') {//CHPATHSEP ?
+	  s[slen]='/';
+	  slen++;
+	  s[slen]='\0';
+	}
+	//s.append(gseqname);
+    strcpy(s+slen, gseqname);
+    slen+=gnl;
+	if (!fileExists(s)) {
+		//s.append(".fa")
+		strcpy(s+slen, ".fa");
+		slen+=3;
+	}
+	if (!fileExists(s)) { strcpy(s+slen, "sta"); slen+=3; }
+	if (fileExists(s)) return Gstrdup(s);
 	 else {
-	   GMessage("Warning: cannot find genomic sequence file %s{.fa,.fasta}\n",sbase.chars());
+	   GMessage("Warning: cannot find genomic sequence file %s/%s{.fa,.fasta}\n",fastaPath, s);
 	   return NULL;
 	 }
+	GFREE(s);
   }
 
  GFaSeqGet* fetch(const char* gseqname) {

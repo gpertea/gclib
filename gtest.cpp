@@ -72,6 +72,10 @@ int main(int argc, char * const argv[]) {
  args.printCmdLine(stderr);
  args.printError(USAGE, true);
  //if (args.getOpt('h') || args.getOpt("help"))
+ GVec<int> transcripts(true);
+ transcripts.cAdd(0);
+ fprintf(stderr,"after add transcript counts=%d\n",transcripts.Count());
+ exit(0);
  
  if (args.getOpt(OPT_HELP))
      {

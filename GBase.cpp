@@ -114,10 +114,10 @@ void GFree(pointer* ptr){
   *ptr=NULL;
   }
 
-char* Gstrdup(const char* str) {
+char* Gstrdup(const char* str, int xtracap) {
   if (str==NULL) return NULL;
   char *copy=NULL;
-  GMALLOC(copy, strlen(str)+1);
+  GMALLOC(copy, strlen(str)+1+xtracap);
   strcpy(copy,str);
   return copy;
   }
@@ -591,7 +591,45 @@ bool endsWith(const char* s, const char* suffix) {
  if (i<j) return false;
  while (j>=0 && s[i]==suffix[j]) { i--; j--; }
  return (j==-1);
- }
+}
+
+bool endsiWith(const char* s, const char* suffix) {
+ if (suffix==NULL || s==NULL) return false;
+ if (suffix[0]==0) return true; //special case: empty suffix
+ int j=strlen(suffix)-1;
+ int i=strlen(s)-1;
+ if (i<j) return false;
+ while (j>=0 && tolower(s[i])==tolower(suffix[j])) { i--; j--; }
+ return (j==-1);
+}
+
+bool trimSuffix(char* s, const char* suffix) {
+	if (suffix==NULL || s==NULL) return false;
+	if (suffix[0]==0) return true; //special case: empty suffix
+	int j=strlen(suffix)-1;
+	int i=strlen(s)-1;
+	if (i<j) return false;
+	while (j>=0 && s[i]==suffix[j]) { i--; j--; }
+	if (j==-1) { //suffix found
+		s[i+1]='\0'; //cut here
+		return true;
+	}
+	return false;
+}
+
+bool trimiSuffix(char* s, const char* suffix) {
+	if (suffix==NULL || s==NULL) return false;
+	if (suffix[0]==0) return true; //special case: empty suffix
+	int j=strlen(suffix)-1;
+	int i=strlen(s)-1;
+	if (i<j) return false;
+	while (j>=0 && tolower(s[i])==tolower(suffix[j])) { i--; j--; }
+	if (j==-1) { //suffix found
+		s[i+1]='\0'; //cut here
+		return true;
+	}
+	return false;
+}
 
 
 char* reverseChars(char* str, int slen) {

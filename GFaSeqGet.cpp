@@ -39,7 +39,7 @@ void GFaSeqGet::finit(const char* fn, off_t fofs, bool validate) {
 
 GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, int l_blen):fname(NULL),
 		fh(NULL), fseqstart(0), seq_len(0), line_len(0),
-		line_blen(0), lastsub(NULL), seqname("",42) {
+		line_blen(0), lastsub(NULL), seqname(NULL) {
 //for GFastaIndex use mostly -- the important difference is that
 //the file offset is to the sequence, not to the defline
   fh=fopen(faname,"rb");
@@ -59,7 +59,7 @@ GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, 
 
 GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs, bool validate):fname(NULL), fh(NULL),
 	    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-		lastsub(NULL), seqname("",42) {
+		lastsub(NULL), seqname(NULL) {
   if (f==NULL) GError("Error (GFaSeqGet) : null file handle!\n");
   fh=f;
   initialParse(fofs, validate);
@@ -70,7 +70,9 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
  static const char gfa_ERRPARSE[]="Error (GFaSeqGet): invalid FASTA file format.\n";
  if (fofs!=0) { fseeko(fh,fofs,SEEK_SET); } //e.g. for offsets provided by fasta indexing
  //read the first two lines to determine fasta parameters
- seqname.clear(42);
+ if (seqname) GFREE(seqname);
+ GDynArray<char> fseqname(64);
+ fseqname.DetachPtr(); //will not free the allocated memory
  fseqstart=fofs;
  int c=getc(fh);
  fseqstart++;
@@ -82,11 +84,13 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
    fseqstart++;
    if (getName) {
 	   if (c<=32) getName=false;
-	   else seqname.append((char)c);
+	   else //seqname.append((char)c);
+		   fseqname.Add((char)c);
    }
    if (c=='\n' || c=='\r') { break; } //end of defline
  }
-
+ fseqname.Add('\0'); //terminate the string
+ seqname=fseqname(); //takeover the string pointer
  if (c==EOF) GError(gfa_ERRPARSE);
  line_len=0;
  int lendlen=0;
@@ -301,12 +305,6 @@ const char* GFaSeqGet::loadsubseq(uint cstart, int& clen) {
   while (toread>=line_len) {
     char* rseqp=&(seqp[sublen]);
     actualrlen=fread((void*)rseqp, 1, line_len, fh);
-    /*
-    char dbuf[256];dbuf[255]=0;
-    strncpy(dbuf,rseqp, actualrlen);
-    dbuf[actualrlen]=0;
-    GMessage("<<<read line: %s\n",dbuf);
-    */
     if (actualrlen<line_len) {
       while (rseqp[actualrlen-1]=='\n' || rseqp[actualrlen-1]=='\r') actualrlen--;
       sublen+=actualrlen;
@@ -329,7 +327,6 @@ const char* GFaSeqGet::loadsubseq(uint cstart, int& clen) {
     }
   //lastsub->sqlen+=sublen;
   clen=sublen;
-
   return (const char*)seqp;
   }
 

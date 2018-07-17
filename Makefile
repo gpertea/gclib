@@ -1,24 +1,33 @@
-THISCODEDIR := .
-SEARCHDIRS := -I${THISCODEDIR}
+INCDIRS := -I. -I${GDIR} -I${BAM}
 
-SYSTYPE :=     $(shell uname)
+CXX   := $(if $(CXX),$(CXX),g++)
+
+LINKER  := $(if $(LINKER),$(LINKER),g++)
+
+LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
+
+LIBS    := 
+
 
 # A simple hack to check if we are on Windows or not (i.e. are we using mingw32-make?)
 ifeq ($(findstring mingw32, $(MAKE)), mingw32)
 WINDOWS=1
 endif
 
-
 # Compiler settings
 TLIBS = 
-LDFLAGS = 
 # Non-windows systems need pthread
 ifndef WINDOWS
 TLIBS += -lpthread
 endif
 
+
+
+DMACH := $(shell ${CXX} -dumpmachine)
+
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
+DMACH := windows
 ifeq ($(findstring 4.5.,$(shell g++ -dumpversion)), 4.5.)
 LDFLAGS += -static-libstdc++ -static-libgcc
 endif
@@ -40,8 +49,18 @@ endif
 
 CC      := g++
 
-BASEFLAGS  := -Wall -Wextra ${SEARCHDIRS} $(MARCH) \
+BASEFLAGS  := -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
+
+GCCVER5 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 5)
+ifeq "$(GCCVER5)" "1"
+ BASEFLAGS += -Wno-implicit-fallthrough
+endif
+
+GCCVER8 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 8)
+ifeq "$(GCCVER8)" "1"
+  BASEFLAGS += -Wno-class-memaccess
+endif
 
 #add the link-time optimization flag if gcc version > 4.5
 GCC_VERSION:=$(subst ., ,$(shell gcc -dumpversion))
@@ -53,34 +72,38 @@ GCC_SUB:=x
 GCC45OPTS :=
 GCC45OPTMAIN :=
 
-ifeq ($(findstring nodebug,$(MAKECMDGOALS)),)
-  CFLAGS := -g -DDEBUG $(BASEFLAGS)
-  LDFLAGS += -g
-else
-  CFLAGS := -O2 -DNDEBUG $(BASEFLAGS)
+ifneq (,$(filter %release %nodebug, $(MAKECMDGOALS)))
+  # -- release build
+  CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O3)
+  CXXFLAGS += -DNDEBUG $(BASEFLAGS)
   ifeq ($(shell expr $(GCC_MAJOR).$(GCC_MINOR) '>=' 4.5),1)
-    CFLAGS += -flto
+    CXXFLAGS += -flto
     GCC45OPTS := -flto
     GCC45OPTMAIN := -fwhole-program
   endif
+else
+  # -- debug build
+  CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
+  ifneq (, $(findstring darwin, $(DMACH)))
+      CXXFLAGS += -gdwarf-3
+  endif
+  CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG $(BASEFLAGS)
 endif
 
 %.o : %.cpp
-	${CC} ${CFLAGS} -c $< -o $@
+	${CXX} ${CXXFLAGS} -c $< -o $@
 
-# C/C++ linker
-
-LINKER  := g++
-LIBS := 
 OBJS := GBase.o GStr.o GArgs.o
 
 .PHONY : all
-all:    gtest threads
+all:    gtest
+nodebug: all
+release: all
+debug: all
+#threads
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
-debug:  gtest threads
-nodebug:  gtest threads
 gtest.o : GBase.h GArgs.h GVec.hh GList.hh GBitVec.h
 GArgs.o : GArgs.h
 gtest: $(OBJS) gtest.o
@@ -95,5 +118,3 @@ threads.o : GThreads.h GThreads.cpp
 clean:: 
 	@${RM} $(OBJS) gtest.o GThreads.o threads.o threads$(EXE) gtest$(EXE)
 	@${RM} core.*
-
-

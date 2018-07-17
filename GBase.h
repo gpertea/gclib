@@ -210,9 +210,11 @@ void GMessage(const char* format,...);// Log message to stderr
 // Assert failed routine:- usually not called directly but through GASSERT
 void GAssert(const char* expression, const char* filename, unsigned int lineno);
 
-// ****************** string manipulation *************************
-char *Gstrdup(const char* str);
-//duplicate a string by allocating a copy for it and returning it
+// ****************** basic string manipulation *************************
+char *Gstrdup(const char* str, int xtracap=0); //string duplication with extra capacity added
+//duplicate a string by allocating a copy for it (+xtracap heap room) and returning the new pointer
+//caller is responsible for deallocating the returned pointer!
+
 char* Gstrdup(const char* sfrom, const char* sto);
 //same as GStrdup, but with an early termination (e.g. on delimiter)
 
@@ -271,7 +273,13 @@ bool startsiWith(const char* s, const char* prefix); //case insensitive
 
 bool endsWith(const char* s, const char* suffix);
 //Note: returns true if suffix is empty string, but false if it's NULL
+bool endsiWith(const char* s, const char* suffix); //case insensitive version
 
+//like endsWith but also remove the suffix if found
+//returns true if the given suffix was found and removed
+bool trimSuffix(char* s, const char* suffix);
+//case insensitive version:
+bool trimiSuffix(char* s, const char* suffix);
 
 // ELF hash function for strings
 int strhash(const char* str);
@@ -488,8 +496,14 @@ template<class OBJ> class GDynArray {
     void Reset() {// fast clear array WITHOUT deallocating it
     	fCount = 0;
     }
-	//pointer getptr() { return (pointer) fArray; }
-	OBJ* operator()() { return fArray; }
+
+    OBJ* operator()() { return fArray; }
+
+    //use below to prevent freeing the fArray pointer
+    //could be handy for adopting stack objects (e.g. cheap dynamic strings)
+    void ForgetPtr() { byptr=true;  }
+    void DetachPtr() { byptr=true;  }
+
 };
 
 
