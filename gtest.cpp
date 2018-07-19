@@ -65,7 +65,7 @@ void testGPVec() {
  GMessage("Added to vecs[2]:%d\n", vecs[2][0]->val());
 }
 
-int main(int argc, char * const argv[]) {
+int main(int argc, char* argv[]) {
  //GArgs args(argc, argv, "hg:c:s:t:o:p:help;genomic-fasta=COV=PID=seq=out=disable-flag;test=");
  GArgs args(argc, argv, opts);
  fprintf(stderr, "Command line was:\n");
