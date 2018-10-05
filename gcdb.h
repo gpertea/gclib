@@ -121,14 +121,14 @@ extern int error_proto;
 // eek, gcc 2.95.3 alpha-decosf version does not
 // recognize this pragma directive
 
-
+//32 bit limits for index file size
 struct cdbInfo {
     uint32 num_keys;
     union {
      uint32 num_records;
      char oldtag[4]; // 'CIDX' for old tag style
      };
-    // data file size -- used to be  uint32, now it could be 64bit
+    // data file size -- used to be uint32, now it could be 64bit
     union {
      int64_t dbsize;
      uint32 oldnum[2]; //num_keys, num_records
@@ -164,7 +164,7 @@ struct CIdxSeqData32 { //4+4+2+1 = 11 bytes
 struct CIdxData {
    off_t fpos; //64bit value on Linux
    uint32 reclen;
-   };
+ };
 /*
 struct CIdxSeqData { //8+4+2+1 = 15 bytes
    off_t fpos; //64bit value on Linux
@@ -201,6 +201,7 @@ struct cdb_hplist {
   struct cdb_hplist *next;
   int num;
   };
+
 
 //the index file should always be smaller than 4GB !
 
@@ -244,17 +245,34 @@ class GCdbWrite {
 uint32 cdb_hashadd(uint32,unsigned char);
 uint32 cdb_hash(const char *,unsigned int);
 
+#define MCDB_SLOT_BITS 8                  /* 2^8 = 256 */
+#define MCDB_SLOTS (1u<<MCDB_SLOT_BITS)   /* must be power-of-2 */
+#define MCDB_SLOT_MASK (MCDB_SLOTS-1)     /* bitmask */
+#define MCDB_HEADER_SZ (MCDB_SLOTS<<4)    /* MCDB_SLOTS * 16  (256*16=4096) */
+#define MCDB_MMAP_SZ (1u<<19)             /* 512KB; must be >  MCDB_HEADER_SZ */
+#define MCDB_BLOCK_SZ (1u<<22)            /*   4MB; must be >= MCDB_MMAP_SZ */
+
 class GCdbRead {
-  uint32 size; // initialized if map is nonzero
+  //struct mcdb_mmap *map;
+  char *map;         // ptr, mmap pointer
+    uintptr_t size; // mmap size, initialized if map is nonzero
+    uint32_t b;   // hash table stride bits: (data < 4GB) ? 3 : 4
+    uint32_t n;   // num records in mcdb
+
   uint32 loop; // number of hash slots searched under this key
-  uint32 khash; // initialized if loop is nonzero
-  uint32 kpos; // initialized if loop is nonzero
-  uint32 hpos; // initialized if loop is nonzero
   uint32 hslots; // initialized if loop is nonzero
-  uint32 dpos; // initialized if cdb_findnext() returns 1
+
+  uintptr_t kpos; // initialized if loop is nonzero
+  uintptr_t hpos; // initialized if loop is nonzero
+  uintptr_t dpos; // initialized if cdb_findnext() returns 1
+
   uint32 dlen; // initialized if cdb_findnext() returns 1
+  uint32 klen; // initialized if cdb_findnext() returns 1
+
+  uint32 khash; // initialized if loop is nonzero
+
   char fname[1024];
-  char *map; // 0 if no map is available
+  //char *map; // 0 if no map is available
   int fd;
  public:
 //methods:
@@ -324,7 +342,7 @@ class GReadBuf {
     refill();
     }
   ~GReadBuf() { GFREE(buf); }
-  
+
   //reads len chars from stream into the outbuf
   //updates bufpos
   //->returns the number of bytes read
@@ -410,7 +428,7 @@ class GReadBuf {
    if (rd>0) { outbuf[rd]='\0'; return outbuf; }
         else return NULL;
    }
-  //looks ahead to check if what follows matches 
+  //looks ahead to check if what follows matches
   int peekCmp(char* cmpstr, int cmplen=-1) {
     if (cmplen==0) return 0;
     if (eob) //GError("GReadBuf::peekcmp error: eob!\n");
@@ -423,11 +441,11 @@ class GReadBuf {
     //use memcmp
     return memcmp((void*)(buf+bufpos), cmpstr, cmplen);
     }
-    
+
 };
 
 //circular line buffer, with read-ahead (peeking) capability
-class GReadBufLine {   
+class GReadBufLine {
   protected:
     struct BufLine {
         off_t fpos;

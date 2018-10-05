@@ -73,7 +73,7 @@ int munmap(void *map,size_t length) {
 
 #endif
 
-
+int endianSetup=0;
 
 int cdbInfoSIZE=offsetof(cdbInfo, tag)+4;
 int IdxDataSIZE=offsetof(CIdxData, reclen)+sizeof(uint32);
@@ -118,21 +118,33 @@ static unsigned int gcdb_strlen(const char *s) {
 
 static int byte_diff(char *s, unsigned int n,char *t) {
   for (;;) {
-    if (!n) return 0; if (*s != *t) break; ++s; ++t; --n;
-    if (!n) return 0; if (*s != *t) break; ++s; ++t; --n;
-    if (!n) return 0; if (*s != *t) break; ++s; ++t; --n;
-    if (!n) return 0; if (*s != *t) break; ++s; ++t; --n;
+    if (!n) return 0;
+    if (*s != *t) break;
+    ++s; ++t; --n;
+    if (!n) return 0;
+    if (*s != *t) break;
+    ++s; ++t; --n;
+    if (!n) return 0;
+    if (*s != *t) break;
+    ++s; ++t; --n;
+    if (!n) return 0;
+    if (*s != *t) break;
+    ++s; ++t; --n;
   }
   return ((int)(unsigned int)(unsigned char) *s)
-       - ((int)(unsigned int)(unsigned char) *t);
+          - ((int)(unsigned int)(unsigned char) *t);
 }
 
 static void gcdb_byte_copy(char *to, unsigned int n, char *from) {
   for (;;) {
-    if (!n) return; *to++ = *from++; --n;
-    if (!n) return; *to++ = *from++; --n;
-    if (!n) return; *to++ = *from++; --n;
-    if (!n) return; *to++ = *from++; --n;
+    if (!n) return;
+    *to++ = *from++; --n;
+    if (!n) return;
+    *to++ = *from++; --n;
+    if (!n) return;
+    *to++ = *from++; --n;
+    if (!n) return;
+    *to++ = *from++; --n;
   }
 }
 
@@ -140,10 +152,14 @@ static void gcdb_byte_copyr(char *to, unsigned int n, char *from) {
   to += n;
   from += n;
   for (;;) {
-    if (!n) return; *--to = *--from; --n;
-    if (!n) return; *--to = *--from; --n;
-    if (!n) return; *--to = *--from; --n;
-    if (!n) return; *--to = *--from; --n;
+    if (!n) return;
+    *--to = *--from; --n;
+    if (!n) return;
+    *--to = *--from; --n;
+    if (!n) return;
+    *--to = *--from; --n;
+    if (!n) return;
+    *--to = *--from; --n;
   }
 }
 
@@ -368,16 +384,16 @@ union UInt16Bytes {
 
 
 unsigned int uint32_sun(void* x86int) {
- UInt32Bytes ub; 
+ UInt32Bytes ub;
  ub.b[3]=((unsigned char*)x86int)[0];
  ub.b[0]=((unsigned char*)x86int)[3];
  ub.b[1]=((unsigned char*)x86int)[2];
- ub.b[2]=((unsigned char*)x86int)[1]; 
+ ub.b[2]=((unsigned char*)x86int)[1];
  return ub.ui;
 }
 
 int16_t int16_sun(void* x86int) {
- UInt16Bytes ub; 
+ UInt16Bytes ub;
  ub.b[1]=((unsigned char*)x86int)[0];
  ub.b[0]=((unsigned char*)x86int)[1];
  return ub.ui;
@@ -529,6 +545,7 @@ int endian_test(void) {
 }
 
 void gcvt_endian_setup() {
+ if (endianSetup!=0) return;
  //check endianness
  if (endian_test()) {
        gcvt_uint  = &uint32_sun;
@@ -539,7 +556,7 @@ void gcvt_endian_setup() {
        gcvt_uint  = &uint32_x86;
        gcvt_offt  = &offt_x86;
        gcvt_int16 = &int16_x86;
-       } 
+       }
  }
 
 //=====================================================
@@ -779,12 +796,10 @@ uint32 cdb_hash(const char *buf,unsigned int len) {
 //---------------------------------------------------------------
 //-------------------------- cdb methods ------------------------
 
-GCdbRead::GCdbRead(int afd) {
+GCdbRead::GCdbRead(int afd):map(NULL),loop(0) {
   struct stat st;
   char *x;
-  map=NULL;
   gcvt_endian_setup();
-
   findstart();
   fd = afd;
   if (fstat(fd,&st) == 0) {
@@ -807,10 +822,9 @@ GCdbRead::GCdbRead(int afd) {
     }
 }
 
-GCdbRead::GCdbRead(char* afname) {
+GCdbRead::GCdbRead(char* afname):map(NULL) {
   struct stat st;
   char *x;
-  map=NULL;
   gcvt_endian_setup();
 
   findstart();
@@ -846,7 +860,7 @@ GCdbRead::GCdbRead(char* afname) {
 GCdbRead::~GCdbRead() {
   if (map!=NULL) {
     munmap(map,size);
-    map = 0;
+    map = NULL;
     }
 }
 
@@ -904,7 +918,8 @@ int GCdbRead::findnext(const char *key,unsigned int len) {
     if (GCdbRead::read(buf,8,(u << 3) & 2047) == -1) return -1;
     uint32_unpack(buf + 4,&hslots);
     if (!hslots) return 0;
-    uint32_unpack(buf,&hpos);
+    uint32_unpack(buf,&pos);
+    hpos=pos;
     khash = u;
     u >>= 8;
     u %= hslots;
