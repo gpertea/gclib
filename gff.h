@@ -469,7 +469,7 @@ class GffObj:public GSeg {
    //--
    char* gffID; // ID name for mRNA (parent) feature
    char* gene_name; //value of gene_name attribute (GTF) if present or Name attribute of the parent gene feature (GFF3)
-   char* geneID; //value of gene_id attribute (GTF) if present or ID attribute of a parent gene feature (GFF3)
+   char* geneID; //value of gene_id attribute (GTF) if present, or the ID attribute of a parent gene feature (GFF3)
    unsigned int flags;
    //-- friends:
    friend class GffReader;
@@ -494,6 +494,7 @@ public:
   uint CDstart; //CDS start coord
   uint CDend;   //CDS end coord
   char CDphase; //initial phase for CDS start
+  static void decodeHexChars(char* dbuf, const char* s, int maxlen=1023);
   bool hasErrors() { return ((flags & gfo_flag_HAS_ERRORS)!=0); }
   void hasErrors(bool v) {
       if (v) flags |= gfo_flag_HAS_ERRORS;

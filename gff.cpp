@@ -2274,7 +2274,7 @@ void GffObj::printSummary(FILE* fout) {
           strand, start, end, gscore, (float)qcov/10.0);
 }
 
-void decodeHexChars(char* dbuf, const char* s, int maxlen=1023) {
+void GffObj::decodeHexChars(char* dbuf, const char* s, int maxlen) {
 	int dlen=0;
 	dbuf[0]=0;
 	if (s==NULL) return;
@@ -2290,7 +2290,8 @@ void decodeHexChars(char* dbuf, const char* s, int maxlen=1023) {
 			      else b-='0';
 			char c=(char)((a<<4)+b);
 			if (c==';') c='.';
-			if (c>' ') {
+			if (c=='\t') c=' ';
+			if (c>=' ') {
 				dbuf[dlen]=c;
 				++p;++p;
 				++dlen;
