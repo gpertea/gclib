@@ -285,10 +285,9 @@ int strsplit(char* str, GDynArray<char*>& fields, const char* delim, int maxfiel
  fields.Reset();
  while (str[i]!=0 && tidx<maxfields) {
     if (afterdelim) {
-        //fields[tidx]=str+i;
-    	fields.Add(str+i);
-        tidx++;
-        }
+       fields.Add(str+i);
+       tidx++;
+    }
     afterdelim=false;
     if (chrInStr(str[i],(char*)delim)) {
         str[i]=0;
@@ -296,9 +295,9 @@ int strsplit(char* str, GDynArray<char*>& fields, const char* delim, int maxfiel
         while (str[i]!=0 && chrInStr(str[i], (char*)delim)) i++;
         afterdelim=true;
         continue;
-        }
-    i++;
     }
+    i++;
+ }
  return tidx;
 }
 
@@ -311,10 +310,9 @@ int strsplit(char* str, GDynArray<char*>& fields, const char delim, int maxfield
   fields.Reset();
   while (str[i]!=0 && tidx<maxfields) {
      if (afterdelim) {
-         //fields[tidx]=str+i;
     	 fields.Add(str+i);
          tidx++;
-         }
+     }
      afterdelim=false;
      if (str[i]==delim) {
          str[i]=0;
@@ -322,9 +320,9 @@ int strsplit(char* str, GDynArray<char*>& fields, const char delim, int maxfield
          while (str[i]!=0 && str[i]==delim) i++;
          afterdelim=true;
          continue;
-         }
-     i++;
      }
+     i++;
+  }
   return tidx;
 }
 
@@ -337,10 +335,9 @@ int strsplit(char* str,  GDynArray<char*>& fields, int maxfields) {
   fields.Reset();
   while (str[i]!=0 && tidx<maxfields) {
      if (afterdelim) {
-         //fields[tidx]=str+i;
-    	 fields.Add(str+i);
-         tidx++;
-         }
+        fields.Add(str+i);
+        tidx++;
+     }
      afterdelim=false;
      if (str[i]==' ' || str[i]=='\t') {
          str[i]=0;
@@ -348,9 +345,9 @@ int strsplit(char* str,  GDynArray<char*>& fields, int maxfields) {
          while (str[i]!=0 && (str[i]=='\t' || str[i]==' ')) i++;
          afterdelim=true;
          continue;
-         }
-     i++;
      }
+     i++;
+  }
   return tidx;
 }
 

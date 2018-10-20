@@ -251,6 +251,108 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
   skip=false;
 }
 
+TABLine::TABLine(GffReader* reader, const char* l): skip(true), dupline(NULL), line(NULL),
+		llen(0), gseqname(NULL), fstart(0), fend(0), strand(0), ID(NULL), attrs(),
+		exons(1), CDstart(0), CDend(0) {
+  if (reader==NULL || l==NULL) return;
+  llen=strlen(l);
+  GMALLOC(line,llen+1);
+  memcpy(line, l, llen+1);
+  GMALLOC(dupline, llen+1);
+  memcpy(dupline, l, llen+1);
+  GDynArray<char*> t;
+  int i=0;
+  int tidx=1;
+  if (line[0]=='#') return;
+  t.Add(line);
+  while (line[i]!=0) {
+   if (line[i]=='\t') {
+    line[i]=0;
+    t.Add(line+i+1);
+    tidx++;
+    }
+   i++;
+   }
+  if (tidx<9) {
+	  GMessage("Warning: not enough columns for expected format:\n%s\n",l);
+	  return;
+  }
+  ID=t[0];
+  gseqname=t[1];
+  strand=*t[2];
+  if (strand!='-' && strand !='.' && strand !='+') {
+	  GMessage("Warning: unrecognized strand at line:\n%s\n",l);
+	  return;
+  }
+  char* p=t[3];
+  if (!parseUInt(p,fstart)) {
+    GMessage("Warning: invalid transcript start coordinate at line:\n%s\n",l);
+    return;
+  }
+  p=t[4];
+  if (!parseUInt(p,fend)) {
+    GMessage("Warning: invalid transcript end coordinate at line:\n%s\n",l);
+    return;
+  }
+  if (fend<fstart) Gswap(fend,fstart); //make sure fstart<=fend, always
+  p=t[5];
+  int exoncount=0;
+  if (!parseInt(p,exoncount) || exoncount<1) {
+    GMessage("Warning: invalid exon count at line:\n%s\n",l);
+    return;
+  }
+  //now parse the exons
+  GDynArray<char*> exs;
+  strsplit(t[6], exs, ',');
+  if (exs.Count()!=(uint)exoncount) {
+	  GMessage("Warning: exon count not matching list of exons at line:\n%s\n",l);
+	  return;
+  }
+  GSeg ex;
+  for (uint i=0;i<exs.Count();++i) {
+	  p=strchr(exs[i], '-');
+	  if (p==NULL) {
+		  GMessage("Warning: invalid exon definition (%s) at line:\n%s\n",exs[i],l);
+		  return;
+	  }
+	  *p='\0'; ++p;
+	  int xstart=0, xend=0;
+	  if (!parseInt(exs[i], xstart) || xstart<1) {
+		  GMessage("Warning: invalid exon start (%s) at line:\n%s\n",exs[i],l);
+		  return;
+	  }
+	  if (!parseInt(p, xend) || xend<1) {
+		  GMessage("Warning: invalid exon end (%s) at line:\n%s\n",p,l);
+		  return;
+	  }
+	  ex.start=(uint)xstart;ex.end=(uint)xend;
+	  exons.Add(ex);
+  }
+  if (*t[7] != '.') {
+	  p=strchr(t[7], ':');
+	  if (p==NULL) {
+		  GMessage("Warning: invalid CDS definition (%s) at line:\n%s\n",t[7],l);
+		  return;
+	  }
+	  *p='\0';++p;
+	  int cstart=0, cend=0;
+	  if (!parseInt(t[7], cstart) || cstart<1) {
+		  GMessage("Warning: invalid CDS start (%s) at line:\n%s\n",exs[i],l);
+		  return;
+	  }
+	  if (!parseInt(p, cend) || cend<1) {
+		  GMessage("Warning: invalid CDS end (%s) at line:\n%s\n",p,l);
+		  return;
+	  }
+  }
+  //now collect attributes if any
+  for (uint i=8;i<t.Count();++i) {
+	  attrs.Add(t[i]);
+  }
+  skip=false;
+}
+
+
 GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len(0),
 		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
 		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), qstart(0), qend(0), qlen(0),
@@ -949,6 +1051,83 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline):GSeg(0,0), exons(true,true,fal
 	}
 }
 
+GffObj::GffObj(GffReader *gfrd, TABLine* tabline, bool keepAttr):GSeg(0,0),
+		 exons(true,true,false) {
+	xstart=0;
+	xend=0;
+	xstatus=0;
+	partial=false;
+	isCDS=false;
+	uptr=NULL;
+	ulink=NULL;
+	parent=NULL;
+	udata=0;
+	flags=0;
+	CDstart=0;
+	CDend=0;
+	CDphase=0;
+	geneID=NULL;
+	gene_name=NULL;
+	attrs=NULL;
+	gffID=NULL;
+	track_id=-1;
+	gseq_id=-1;
+	//ftype_id=-1;
+	exon_ftype_id=-1;
+	strand='.';
+	if (gfrd == NULL || tabline == NULL)
+		GError("Error: cannot use this GffObj constructor with NULL GffReader or TABLine!\n");
+	gffnames_ref(names);
+	//qlen=0;qstart=0;qend=0;
+	gscore=0;
+	uscore=0;
+	covlen=0;
+	qcov=0;
+	ftype_id=gff_fid_transcript;
+	exon_ftype_id=gff_fid_exon;
+	start=tabline->fstart;
+	end=tabline->fend;
+	gseq_id=names->gseqs.addName(tabline->gseqname);
+	track_id=names->tracks.addName("TAB");
+	strand=tabline->strand;
+	qlen=0;
+	qstart=0;
+	qend=0;
+	//setup flags from gffline
+	isCDS=false;
+	isGene(false);
+	isTranscript(true);
+	gffID=Gstrdup(tabline->ID);
+	for (int i=0;i<tabline->exons.Count();++i) {
+		this->addExon(tabline->exons[i].start,tabline->exons[i].end);
+	}
+	//parse attributes
+	if (keepAttr && tabline->attrs.Count()>0) {
+		attrs=new GffAttrs();
+		for (uint i=0;i<tabline->attrs.Count();++i) {
+			char* attr=tabline->attrs[i];
+			char* v=strchr(attr, '=');
+			if (v==NULL) addAttr(attr, "1");
+			else {
+				char* p=v-1;
+				while (*p==' ' && p>attr) --p;
+				if (p==attr) continue;
+				++p;
+				if (p<v) *p='\0';
+				*v='\0';
+				p=v+1;
+				while (*p==' ') ++p;
+				if (*p=='\0') {
+					addAttr(attr, "1");
+					continue;
+				}
+				--p;*p='\0';
+				addAttr(attr, p);
+			}
+		}
+	}
+}
+
 GffObj::GffObj(GffReader *gfrd, GffLine* gffline, bool keepAttr, bool noExonAttr):
      GSeg(0,0), exons(true,true,false), children(1,false) {
   xstart=0;
@@ -1089,6 +1268,27 @@ BEDLine* GffReader::nextBEDLine() {
  }
  return bedline;
 }
+
+TABLine* GffReader::nextTABLine() {
+ if (tabline!=NULL) return tabline; //caller should free gffline after processing
+ while (tabline==NULL) {
+	int llen=0;
+	buflen=GFF_LINELEN-1;
+	char* l=fgetline(linebuf, buflen, fh, &fpos, &llen);
+	if (l==NULL) return NULL;
+	//int ns=0; //first nonspace position
+	//while (l[ns]!=0 && isspace(l[ns])) ns++;
+	if (l[0]=='#' || llen<7) continue;
+	tabline=new TABLine(this, l);
+	if (tabline->skip) {
+	  delete tabline;
+	  tabline=NULL;
+	  continue;
+	}
+ }
+ return tabline;
+}
+
 
 GffLine* GffReader::nextGffLine() {
  if (gffline!=NULL) return gffline; //caller should free gffline after processing
@@ -1245,6 +1445,13 @@ GffObj* GffReader::newGffRec(BEDLine* bedline, GPVec<GffObj>* glst) {
   return r;
 }
 
+GffObj* GffReader::newGffRec(TABLine* tabline, GPVec<GffObj>* glst) {
+  GffObj* newgfo=new GffObj(this, tabline);
+  GffObj* r=NULL;
+  gflst.Add(newgfo);
+  r=(glst) ? gfoAdd(*glst, newgfo) : gfoAdd(newgfo);
+  return r;
+}
 
 
 GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline,
@@ -1347,6 +1554,14 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
 		 delete bedline;
 		 bedline=NULL;
 	 } //else return NULL;
+ } else if (is_TAB) { //TODO
+	 if (nextTABLine()) {
+		 gfo=new GffObj(this, tabline);
+		 tseg.start=gfo->start;
+		 tseg.end=gfo->end;
+		 delete tabline;
+		 tabline=NULL;
+	 }
  } else { //GFF parsing
     while (nextGffLine()!=NULL) {
     	char* tid=gffline->ID;
@@ -1438,6 +1653,38 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 			}
 			delete bedline;
 			bedline=NULL;
+		}
+	} else if (is_TAB) {
+		while (nextTABLine()) {
+			GPVec<GffObj>* prevgflst=NULL;
+			GffObj* prevseen=gfoFind(bedline->ID, prevgflst, tabline->gseqname, tabline->strand,
+					tabline->fstart);
+			if (prevseen) {
+			//duplicate ID -- but this could also be a discontinuous feature according to GFF3 specs
+			  //e.g. a trans-spliced transcript - but segments should not overlap
+				if (prevseen->overlap(tabline->fstart, tabline->fend)) {
+					//overlapping feature with same ID is going too far
+					GMessage("Error: overlapping duplicate TAB feature (ID=%s)\n", tabline->ID);
+					//validation_errors = true;
+					if (gff_warns) { //validation intent: just skip the feature, allow the user to see other errors
+						delete tabline;
+						tabline=NULL;
+						continue;
+					}
+					else exit(1);
+				}
+				//create a separate entry (true discontinuous feature?)
+				prevseen=newGffRec(tabline, prevgflst);
+				if (gff_warns) {
+					GMessage("Warning: duplicate TAB feature ID %s (%d-%d) (discontinuous feature?)\n",
+							tabline->ID, tabline->fstart, tabline->fend);
+				}
+			}
+			else {
+				newGffRec(tabline, prevgflst);
+			}
+			delete tabline;
+			tabline=NULL;
 		}
 	}
 	else {
