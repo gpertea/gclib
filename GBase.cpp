@@ -1,5 +1,4 @@
 #include "GBase.h"
-#include <stdarg.h>
 #include <ctype.h>
 #include <errno.h>
 
@@ -793,7 +792,7 @@ bool parseDouble(char* &p, double& v) {
  return parseNumber(p,v);
 }
 
-bool parseInt(char* &p, int& i) {
+bool parseInt(char* &p, int& i) { //pointer p is advanced after the number
  while (*p==' ' || *p=='\t') p++;
  char* start=p;
  if (*p=='-') p++;
@@ -811,7 +810,44 @@ bool parseInt(char* &p, int& i) {
  return true;
 }
 
-bool parseUInt(char* &p, uint& i) {
+bool strToInt(char* p, int& i) {
+	 while (*p==' ' || *p=='\t') p++;
+	 char* start=p;
+	 if (*p=='-') p++;
+	       else if (*p=='+') { p++;start++; }
+	 while ((*p>='1' && *p<='9') || *p=='0') p++;
+	 //now p is on a non-digit;
+	 if (*start=='-' && p==start+1) return false;
+	 char saved=*p;
+	 *p='\0';
+	 char* endptr=p;
+	 long l=strtol(start,&endptr,10);
+	 i=(int)l;
+	 *p=saved;
+	 if (endptr!=p || i!=l) return false;
+	 return true;
+}
+
+bool strToUInt(char* p, uint& i) {
+	 while (*p==' ' || *p=='\t') p++;
+	 char* start=p;
+	 if (*p=='-') return false;
+	       else if (*p=='+') { p++;start++; }
+	 while ((*p>='1' && *p<='9') || *p=='0') p++;
+	 //now p is on a non-digit;
+	 if (*start=='-' && p==start+1) return false;
+	 char saved=*p;
+	 *p='\0';
+	 char* endptr=p;
+	 unsigned long l=strtoul(start,&endptr,10);
+	 i=(uint) l;
+	 *p=saved;
+	 if (endptr!=p || i!=l) return false;
+	 return true;
+}
+
+
+bool parseUInt(char* &p, uint& i) { //pointer p is advanced after the number
  while (*p==' ' || *p=='\t') p++;
  char* start=p;
  if (*p=='-') return false;
