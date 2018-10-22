@@ -1875,9 +1875,9 @@ void GffObj::printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len) {
 //print a BED-12 line + GFF3 attributes in 13th field
  int cd_start=CDstart>0? CDstart-1 : start-1;
  int cd_end=CDend>0 ? CDend : end;
-
- fprintf(fout, "%s\t%d\t%d\t%s\t%d\t%c\t%d\t%d\t%d,0,0", getGSeqName(), start-1, end, getID(),
-		 100, strand, cd_start, cd_end, CDphase);
+ char cdphase=CDphase>0 ? CDphase : '0';
+ fprintf(fout, "%s\t%d\t%d\t%s\t%d\t%c\t%d\t%d\t%c,0,0", getGSeqName(), start-1, end, getID(),
+		 100, strand, cd_start, cd_end, cdphase);
  if (exons.Count()>0) {
 	 int i;
 	 fprintf(fout, "\t%d\t", exons.Count());
@@ -2593,7 +2593,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	   }
    }
    if (CDstart>0 && !showCDS) fprintf(fout,";CDS=%d:%d",CDstart,CDend);
-   if (CDphase>0 && !showCDS) fprintf(fout,";CDphase=%d", CDphase);
+   if (CDphase>0 && !showCDS) fprintf(fout,";CDSphase=%c", CDphase);
    if (geneID!=NULL)
       fprintf(fout, ";geneID=%s",geneID);
    if (gene_name!=NULL)
