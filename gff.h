@@ -899,7 +899,7 @@ public:
    void getCDSegs(GArray<GffCDSeg>& cds);
 
    void updateExonPhase(); //for CDS-only features, updates GExon::phase
-
+   void printGTab(FILE* fout, char** extraAttrs=NULL);
    void printGxfLine(FILE* fout, const char* tlabel, const char* gseqname,
           bool iscds, uint segstart, uint segend, int exidx,
 		  char phase, bool gff3, bool cvtChars, char* dbuf, int dbuf_len);
