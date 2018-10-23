@@ -263,8 +263,11 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
 		 }
 		if (strToUInt(cdstr, cds_start) && cds_start>=fstart-1) {
 			++cds_start;
-			if (!strToUInt(p, cds_end) || cds_end>=fend) {
-				cds_start=0;cds_end=0; //invalid CDS coordinates
+			if (!strToUInt(p, cds_end) || cds_end>fend) {
+				GMessage("Warning: invalid CDS (%d-%d) discarded for line:\n%s\n",
+						    cds_start, cds_end, dupline);
+				cds_start=0;
+				cds_end=0; //invalid CDS coordinates
 			}
 		}
 		char* cdstr_phase=NULL;
@@ -486,13 +489,20 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
          			 if (p!=NULL) {
          				*p='\0'; ++p;
          			 }
-         			if (strToUInt(cdstr, cds_start) && cds_start>=fstart) {
-         				if (!strToUInt(p, cds_end) || cds_end>=fend) {
-         					cds_start=0;cds_end=0; //invalid CDS coordinates
+         			bool validCDS=(p!=NULL);
+         			if (validCDS && strToUInt(cdstr, cds_start) && cds_start>=fstart) {
+         				if (!strToUInt(p, cds_end) || cds_end>fend) {
+         					validCDS=false;
          				}
          			}
+         			if (!validCDS || (int)cds_start<=0 || (int)cds_end<=0) {
+    				    GMessage("Warning: invalid CDS (%d-%d) discarded for line:\n%s\n",
+    						    cds_start, cds_end, dupline);
+    				    cds_start=0;
+    				    cds_end=0;
+         			}
          			char* cds_phase=NULL;
-         			if (cds_start>0 && (cds_phase=extractAttr("CDSphase="))!=NULL) {
+         			if (validCDS && (cds_phase=extractAttr("CDSphase="))!=NULL) {
          				phase=cds_phase[0];
          				GFREE(cds_phase);
          			}
@@ -967,21 +977,21 @@ void GffObj::removeExon(int idx) {
 }
 
 void GffObj::removeExon(GffExon* p) {
-  for (int idx=0;idx<exons.Count();idx++) {
-     if (exons[idx]==p) {
-        int segstart=exons[idx]->start;
-        int segend=exons[idx]->end;
-        exons.Delete(idx);
-        covlen -= (int)(segend-segstart)+1;
+	for (int idx=0;idx<exons.Count();idx++) {
+		if (exons[idx]==p) {
+			int segstart=exons[idx]->start;
+			int segend=exons[idx]->end;
+			exons.Delete(idx);
+			covlen -= (int)(segend-segstart)+1;
 
-	if (exons.Count() > 0) {
-	  start=exons.First()->start;
-	  end=exons.Last()->end;
-	  if (isCDS) { CDstart=start; CDend=end; }
+			if (exons.Count() > 0) {
+				start=exons.First()->start;
+				end=exons.Last()->end;
+				if (isCDS) { CDstart=start; CDend=end; }
+			}
+			return;
+		}
 	}
-        return;
-        }
-     }
 }
 
 GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0), exons(true,true,false) {
@@ -1036,7 +1046,7 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0), exon
 	if (bedline->cds_start>0) {
 		CDstart=bedline->cds_start;
 		CDend=bedline->cds_end;
-		if (bedline->cds_phase)
+		if (CDstart>0 && bedline->cds_phase)
 			CDphase=bedline->cds_phase;
 	}
 	if (keepAttr && bedline->info!=NULL) this->parseAttrs(attrs, bedline->info);
