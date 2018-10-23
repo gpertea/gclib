@@ -263,7 +263,7 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
 		 }
 		if (strToUInt(cdstr, cds_start) && cds_start>=fstart-1) {
 			++cds_start;
-			if (!strToUInt(p, cds_end) || cds_end>fend) {
+			if (!strToUInt(p, cds_end) || cds_end>=fend) {
 				cds_start=0;cds_end=0; //invalid CDS coordinates
 			}
 		}
@@ -486,8 +486,8 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
          			 if (p!=NULL) {
          				*p='\0'; ++p;
          			 }
-         			if (strToUInt(cdstr, cds_start) && cds_start>fstart) {
-         				if (!strToUInt(p, cds_end) || cds_end>fend) {
+         			if (strToUInt(cdstr, cds_start) && cds_start>=fstart) {
+         				if (!strToUInt(p, cds_end) || cds_end>=fend) {
          					cds_start=0;cds_end=0; //invalid CDS coordinates
          				}
          			}
@@ -2223,9 +2223,10 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GList<GSeg>* seglst)
 char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_start, uint* cds_end,
           GList<GSeg>* seglst) {
   if (CDSonly && CDstart==0) return NULL;
-  if (faseq==NULL) { GMessage("Warning: getSpliced(NULL,.. ) called!\n");
-              return NULL;
-              }
+  if (faseq==NULL) {
+	  GMessage("Warning: getSpliced(NULL,.. ) called!\n");
+      return NULL;
+  }
   //restore normal coordinates:
   unxcoord();
   if (exons.Count()==0) return NULL;
@@ -2233,7 +2234,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
   const char* gsubseq=faseq->subseq(start, fspan);
   if (gsubseq==NULL) {
         GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);
-        }
+  }
   if (fspan<(int)(end-start+1)) { //special case: stop coordinate was extended past the gseq length, must adjust
      int endadj=end-start+1-fspan;
      uint prevend=end;
@@ -2260,6 +2261,9 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
      seqend=CDend;
      if (strand=='-') seqend-=cdsadj;
            else seqstart+=cdsadj;
+     if (seqend-seqstart<3)
+    	 GMessage("Warning: CDS %d-%d too short for %s, check your data.\n",
+    			 seqstart, seqend, gffID);
      }
    else {
      seqstart=exons.First()->start;
