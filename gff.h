@@ -14,14 +14,6 @@
 #include <boost/crc.hpp>  // for boost::crc_32_type
 #endif
 
-/*
-const byte exMskMajSpliceL = 0x01;
-const byte exMskMajSpliceR = 0x02;
-const byte exMskMinSpliceL = 0x04;
-const byte exMskMinSpliceR = 0x08;
-const byte exMskTag = 0x80;
-*/
-
 //reserved Gffnames::feats entries -- basic feature types
 extern int gff_fid_mRNA; // "mRNA" feature name
 extern int gff_fid_transcript; // *RNA, *transcript feature name
@@ -64,11 +56,20 @@ enum GffExonType {
 const char* strExonType(char xtype);
 
 class GffReader;
+class GffObj;
+
+//---transcript overlapping - utility functions:
+int classcode_rank(char c); //returns priority value for class codes
+
+char getOvlCode(GffObj& m, GffObj& r, int& ovlen); //returns: class code
+
+bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen); //single-exon fuzzy transcript match
+//---
 
 //reading a whole transcript from a BED-12 line
 class BEDLine {
  public:
-	bool skip;
+    bool skip;
     char* dupline; //duplicate of original line
     char* line; //this will have tabs replaced by \0
     int llen;
