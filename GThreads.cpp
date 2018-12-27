@@ -31,8 +31,6 @@ freely, subject to the following restrictions:
 #endif
 #include <string.h>
 
-//namespace tthread {
-
 //------------------------------------------------------------------------------
 // condition_variable
 //------------------------------------------------------------------------------
@@ -375,7 +373,7 @@ void GThread::detach()
 
 void GThread::wait_all() {
   while (GThread::num_running()>0)
-	this_thread::sleep_for(chrono::milliseconds(4));
+	this_thread::sleep_for(gclib::chrono::milliseconds(4));
 }
 
 

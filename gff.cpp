@@ -299,6 +299,14 @@ BEDLine::BEDLine(GffReader* reader, const char* l): skip(true), dupline(NULL), l
 		GFREE(cdstr);
 	  }
   }
+  if (cds_start==0 && cds_end==0 && tidx>7) {
+	//check if columns 7,8 can be reasonably assumed to be CDS start-end coordinates
+	if (strToUInt(t[6], cds_start) && strToUInt(t[7], cds_end) && cds_end>cds_start) {
+       if (cds_start>=fstart-1 && cds_end<=fend)
+    	    cds_start++;
+       else { cds_start=0; cds_end=0; }
+	}
+  }
   skip=false;
 }
 

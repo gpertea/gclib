@@ -1,7 +1,7 @@
 /*
 GThread - multi-platform thread support
   this is heavily based on the source code of TinyThread++ 1.0 package by Marcus Geelnard
-  (with only minor modifications and namespace changes)
+  (with only minor modifications)
 
   Original Copyright notice below
 */
@@ -169,10 +169,6 @@ freely, subject to the following restrictions:
 
 
 /// Main name space for TinyThread++.
-/// This namespace is more or less equivalent to the \c std namespace for the
-/// C++11 thread classes. For instance, the tthread::mutex class corresponds to
-/// the std::mutex class.
-//namespace tthread {
 
 void gthreads_errExit(int err, const char* msg=NULL);
 
@@ -813,6 +809,8 @@ public:
 #endif
 };
 
+namespace gclib {
+
 /// Minimal implementation of the \c ratio class. This class provides enough
 /// functionality to implement some basic \c chrono classes.
 template <int64_t N, int64_t D = 1> class ratio {
@@ -851,6 +849,7 @@ namespace chrono {
   typedef duration<int64_t, ratio<60> > minutes;                ///< Duration with the unit minutes.
   typedef duration<int64_t, ratio<3600> > hours;                ///< Duration with the unit hours.
 }
+} //gclib namespace
 
 /// The namespace \c this_thread provides methods for dealing with the
 /// calling thread.
@@ -879,7 +878,7 @@ namespace this_thread {
   /// @endcode
   /// @note Supported duration types are: nanoseconds, microseconds,
   /// milliseconds, seconds, minutes and hours.
-  template <class _Rep, class _Period> void sleep_for(const chrono::duration<_Rep, _Period>& aTime)
+  template <class _Rep, class _Period> void sleep_for(const gclib::chrono::duration<_Rep, _Period>& aTime)
   {
 #if defined(_GTHREADS_WIN32_)
     Sleep(int(double(aTime.count()) * (1000.0 * _Period::_as_double()) + 0.5));

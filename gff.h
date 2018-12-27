@@ -77,7 +77,7 @@ class BEDLine {
     uint fstart;
     uint fend;
     char strand;
-    char* ID; //transcript ID from BED-12+ (13th if exists, otherwise 4th)
+    char* ID; //transcript ID from BED-12 (4th column)
     char* info; //13th column - these could be GFF3 attributes
     uint cds_start;
     uint cds_end;
