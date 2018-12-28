@@ -2207,7 +2207,7 @@ void GffObj::mRNA_CDS_coords(uint& cds_mstart, uint& cds_mend) {
   //return spliced;
 }
 
-char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GList<GSeg>* seglst)
+char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst)
 {
     if (faseq==NULL) { GMessage("Warning: getUnspliced(NULL,.. ) called!\n");
         return NULL;
@@ -2226,29 +2226,27 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GList<GSeg>* seglst)
     int seqend=exons.Last()->end;
 
     int unsplicedlen = 0;
-
+    if (seglst)
+    	seglst->Clear(strand);
     unsplicedlen += seqend - seqstart + 1;
 
     GMALLOC(unspliced, unsplicedlen+1); //allocate more here
     //uint seqstart, seqend;
-
     int s = 0; //resulting nucleotide counter
     if (strand=='-')
     {
         if (seglst!=NULL)
-            seglst->Add(new GSeg(s+1,s+1+seqend-seqstart));
-        for (int i=seqend;i>=seqstart;i--)
-        {
+            seglst->add(s+1,s+1+seqend-seqstart, seqstart, seqend);
+        for (int i=seqend;i>=seqstart;i--)   {
             unspliced[s] = ntComplement(gsubseq[i-start]);
             s++;
         }//for each nt
     } // - strand
-    else
-    { // + strand
+    else {
+      // + strand
         if (seglst!=NULL)
-            seglst->Add(new GSeg(s+1,s+1+seqend-seqstart));
-        for (int i=seqstart;i<=seqend;i++)
-        {
+            seglst->add(s+1,s+1+seqend-seqstart, seqstart, seqend);
+        for (int i=seqstart;i<=seqend;i++) {
             unspliced[s]=gsubseq[i-start];
             s++;
         }//for each nt
@@ -2260,10 +2258,12 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GList<GSeg>* seglst)
 }
 
 char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_start, uint* cds_end,
-          GList<GSeg>* seglst) {
+          GMapSegments* seglst, bool cds_open) {
+	//cds_open only makes sense when CDSonly is true by overriding CDS 3'end such that the end of
+	//the sequence beyond the 3' CDS end is also returned (the 3' UTR is appended to the CDS)
   if (CDSonly && CDstart==0) return NULL;
   if (faseq==NULL) {
-	  GMessage("Warning: getSpliced(NULL,.. ) called!\n");
+	  GMessage("Warning: getSpliced() called with uninitialized GFaSeqGet object!\n"); //should never happen
       return NULL;
   }
   //restore normal coordinates:
@@ -2284,90 +2284,96 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
          if (exons.Last()->start>exons.Last()->end) {
             GError("GffObj::getSpliced() error: improper genomic coordinate %d on %s for %s\n",
                   prevend,getGSeqName(), getID());
-            }
-         covlen-=endadj;
          }
+         covlen-=endadj;
      }
+  }
   char* spliced=NULL;
   GMALLOC(spliced, covlen+1); //allocate more here
-  uint seqstart, seqend;
+  uint g_start=0, g_end=0;
   int cdsadj=0;
   if (CDphase=='1' || CDphase=='2') {
       cdsadj=CDphase-'0';
-      }
+  }
+  uint CDS_start=CDstart;
+  uint CDS_stop=CDend;
+  if (cdsadj>0) {
+     if (strand=='-') CDS_stop-=cdsadj;
+     else CDS_start+=cdsadj;
+  }
   if (CDSonly) {
-     seqstart=CDstart;
-     seqend=CDend;
-     if (strand=='-') seqend-=cdsadj;
-           else seqstart+=cdsadj;
-     if (seqend-seqstart<3)
+    g_start=CDS_start;
+    g_end=CDS_stop;
+    if (g_end-g_start<3)
     	 GMessage("Warning: CDS %d-%d too short for %s, check your data.\n",
-    			 seqstart, seqend, gffID);
-     }
-   else {
-     seqstart=exons.First()->start;
-     seqend=exons.Last()->end;
-     }
+    			 g_start, g_end, gffID);
+  } else { //all exon content, not just CDS
+    g_start=exons.First()->start;
+    g_end=exons.Last()->end;
+    cds_open=false; //override mistaken user request
+  }
+  if (seglst!=NULL) seglst->Clear(strand);
   int s=0; //resulting nucleotide counter
   if (strand=='-') {
+    if (cds_open) {// appending 3'UTR
+    	g_start=exons.First()->start;
+    	CDS_start=g_start;
+    }
     for (int x=exons.Count()-1;x>=0;x--) {
        uint sgstart=exons[x]->start;
        uint sgend=exons[x]->end;
-       if (seqend<sgstart || seqstart>sgend) continue;
-       if (seqstart>=sgstart && seqstart<=sgend)
-             sgstart=seqstart; //seqstart within this segment
-       if (seqend>=sgstart && seqend<=sgend)
-             sgend=seqend; //seqend within this segment
+       if (g_end<sgstart || g_start>sgend) continue;
+       if (g_start>=sgstart && g_start<=sgend)
+          sgstart=g_start; //3' end within this segment
+       if (g_end>=sgstart && g_end<=sgend)
+          sgend=g_end; //5' end within this segment
        if (seglst!=NULL)
-           seglst->Add(new GSeg(s+1,s+1+sgend-sgstart));
+          seglst->add(s+1,s+1+sgend-sgstart,sgend,sgstart);
        for (uint i=sgend;i>=sgstart;i--) {
-            spliced[s] = ntComplement(gsubseq[i-start]);
-            s++;
-            }//for each nt
-
-       if (!CDSonly && cds_start!=NULL && CDstart>0) {
-          if (CDstart>=sgstart && CDstart<=sgend) {
-             //CDstart in this segment
-             //and we are getting the whole transcript
-             *cds_end=s-(CDstart-sgstart);
-             }
-          if (CDend>=sgstart && CDend<=sgend) {
-             //CDstart in this segment
-             //and we are getting the whole transcript
-             *cds_start=s-(CDend-cdsadj-sgstart);
-             }
-         }//update local CDS coordinates
+         spliced[s] = ntComplement(gsubseq[i-start]);
+         s++;
+       }//for each nt
+       //--update local CDS start-end coordinates
+       if (cds_start!=NULL && CDS_stop>=sgstart && CDS_stop<=sgend) {
+         //CDS start in this segment
+         *cds_start=s-(CDS_stop-sgstart);
+       }
+       if (cds_end!=NULL && CDS_start>=sgstart && CDS_start<=sgend) {
+         //CDS stop in this segment
+         *cds_end=s-(CDS_start-sgstart);
+       }
       } //for each exon
     } // - strand
    else { // + strand
+    if (cds_open) { // appending 3'UTR
+      	g_end=exons.Last()->end;
+      	CDS_stop=g_end;
+    }
     for (int x=0;x<exons.Count();x++) {
       uint sgstart=exons[x]->start;
       uint sgend=exons[x]->end;
-      if (seqend<sgstart || seqstart>sgend) continue;
-      if (seqstart>=sgstart && seqstart<=sgend)
-            sgstart=seqstart; //seqstart within this segment
-      if (seqend>=sgstart && seqend<=sgend)
-            sgend=seqend; //seqend within this segment
+      if (g_end<sgstart || g_start>sgend) continue;
+      if (g_start>=sgstart && g_start<=sgend)
+            sgstart=g_start; //seqstart within this segment
+      if (g_end>=sgstart && g_end<=sgend)
+            sgend=g_end; //seqend within this segment
       if (seglst!=NULL)
-          seglst->Add(new GSeg(s+1,s+1+sgend-sgstart));
+          seglst->add(s+1,s+1+sgend-sgstart, sgstart, sgend);
       for (uint i=sgstart;i<=sgend;i++) {
           spliced[s]=gsubseq[i-start];
           s++;
-          }//for each nt
-      if (!CDSonly && cds_start!=NULL && CDstart>0) {
-         if (CDstart>=sgstart && CDstart<=sgend) {
-            //CDstart in this segment
-            //and we are getting the whole transcript
-            *cds_start=s-(sgend-CDstart-cdsadj);
-            }
-         if (CDend>=sgstart && CDend<=sgend) {
-            //CDstart in this segment
-            //and we are getting the whole transcript
-            *cds_end=s-(sgend-CDend);
-            }
-        }//update local CDS coordinates
-      } //for each exon
-    } // + strand
+      }//for each nt
+      //--update local CDS start-end coordinates
+      if (cds_start!=NULL && CDS_start>=sgstart && CDS_start<=sgend) {
+        //CDS start in this segment
+        *cds_start=s-(sgend-CDS_start);
+      }
+      if (cds_end!=NULL && CDS_stop>=sgstart && CDS_stop<=sgend) {
+        //CDS stop in this segment
+        *cds_end=s-(sgend-CDS_stop);
+      }
+    } //for each exon
+  } // + strand
   spliced[s]=0;
   if (rlen!=NULL) *rlen=s;
   return spliced;
@@ -2382,7 +2388,7 @@ char* GffObj::getSplicedTr(GFaSeqGet* faseq, bool CDSonly, int* rlen) {
   const char* gsubseq=faseq->subseq(start, fspan);
   if (gsubseq==NULL) {
     GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);
-    }
+  }
 
   char* translation=NULL;
   GMALLOC(translation, (int)(covlen/3)+1);
