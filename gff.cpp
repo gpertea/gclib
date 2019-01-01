@@ -2317,7 +2317,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
   if (strand=='-') {
     if (cds_open) {// appending 3'UTR
     	g_start=exons.First()->start;
-    	CDS_start=g_start;
+    	//CDS_start=g_start;
     }
     for (int x=exons.Count()-1;x>=0;x--) {
        uint sgstart=exons[x]->start;
@@ -2347,7 +2347,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
    else { // + strand
     if (cds_open) { // appending 3'UTR
       	g_end=exons.Last()->end;
-      	CDS_stop=g_end;
+      	//CDS_stop=g_end;
     }
     for (int x=0;x<exons.Count();x++) {
       uint sgstart=exons[x]->start;
