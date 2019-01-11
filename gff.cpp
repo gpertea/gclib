@@ -17,9 +17,12 @@ const uint gfo_flag_CHILDREN_PROMOTED= 0x00000002;
 const uint gfo_flag_IS_GENE          = 0x00000004;
 const uint gfo_flag_IS_TRANSCRIPT    = 0x00000008;
 const uint gfo_flag_HAS_GFF_ID       = 0x00000010; //found transcript feature line (GFF3 or GTF)
-const uint gfo_flag_BY_EXON          = 0x00000020; //created by subfeature (exon) directly
-const uint gfo_flag_DISCARDED        = 0x00000100;
-const uint gfo_flag_LST_KEEP         = 0x00000200;
+const uint gfo_flag_BY_EXON          = 0x00000020; //created by subfeature (exon/CDS) directly
+const uint gfo_flag_CDS_ONLY         = 0x00000040; //transcript defined by CDS features only (GffObj::isCDS())
+const uint gfo_flag_CDS_PARTIAL      = 0x00000080; //transcript CDS is incomplete
+const uint gfo_flag_CDS_SHIFT        = 0x00000100; //transcript having CDS with ribosomal shift (i.e. after merging exons)
+const uint gfo_flag_DISCARDED        = 0x00001000;
+const uint gfo_flag_LST_KEEP         = 0x00002000;
 const uint gfo_flag_LEVEL_MSK        = 0x00FF0000;
 const byte gfo_flagShift_LEVEL           = 16;
 
@@ -799,7 +802,7 @@ int GffObj::addExon(GffReader* reader, GffLine* gl, bool keepAttr, bool noExonAt
 int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int qe, bool iscds, char exontype) {
   if (segstart>segend) { Gswap(segstart, segend); }
   if (exons.Count()==0) {
-      if (iscds) isCDS=true; //for now, assume CDS only if first "exon" given is a CDS
+      if (iscds) isCDSOnly(true); //for now, assume CDS only if first "exon" given is a CDS
       if (exon_ftype_id<0) {
          exon_ftype_id = (isTranscript() || isGene()) ? gff_fid_exon : ftype_id;
       }
@@ -822,7 +825,7 @@ int GffObj::addExon(uint segstart, uint segend, double sc, char fr, int qs, int 
            }
    }
    else { // not a CDS/start/stop
-    isCDS=false; //not a CDS-only feature
+    isCDSOnly(false); //not a CDS-only feature
    }
   //if (exontype==exgffStart || exontype==exgffStop) exontype=exgffCDS;
   if (qs || qe) {
@@ -975,26 +978,9 @@ void GffObj::expandExon(int oi, uint segstart, uint segend, char exontype, doubl
   //recalculate covlen
   covlen=0;
   for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
-  /*
-  if (uptr!=NULL) { //collect stats about the underlying genomic sequence
-    GSeqStat* gsd=(GSeqStat*)uptr;
-    if (start<gsd->mincoord) gsd->mincoord=start;
-    if (end>gsd->maxcoord) gsd->maxcoord=end;
-    if (this->len()>gsd->maxfeat_len) {
-        gsd->maxfeat_len=this->len();
-        gsd->maxfeat=this;
-        }
-    }
-  */
 }
 
 void GffObj::removeExon(int idx) {
-  /*
-   if (idx==0 && segs[0].start==gstart)
-                  gstart=segs[1].start;
-   if (idx==segcount && segs[segcount].end==gend)
-                  gend=segs[segcount-1].end;
-  */
   if (idx<0 || idx>=exons.Count()) return;
   int segstart=exons[idx]->start;
   int segend=exons[idx]->end;
@@ -1002,7 +988,7 @@ void GffObj::removeExon(int idx) {
   covlen -= (int)(segend-segstart)+1;
   start=exons.First()->start;
   end=exons.Last()->end;
-  if (isCDS) { CDstart=start; CDend=end; }
+  if (isCDSOnly()) { CDstart=start; CDend=end; }
 }
 
 void GffObj::removeExon(GffExon* p) {
@@ -1016,19 +1002,15 @@ void GffObj::removeExon(GffExon* p) {
 			if (exons.Count() > 0) {
 				start=exons.First()->start;
 				end=exons.Last()->end;
-				if (isCDS) { CDstart=start; CDend=end; }
+				if (isCDSOnly()) { CDstart=start; CDend=end; }
 			}
 			return;
 		}
 	}
 }
 
-GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0), exons(true,true,false) {
-	xstart=0;
-	xend=0;
-	xstatus=0;
-	partial=false;
-	isCDS=false;
+GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0),
+		exons(true,true,false), cds(NULL) {
 	uptr=NULL;
 	ulink=NULL;
 	parent=NULL;
@@ -1065,7 +1047,6 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0), exon
 	qstart=0;
 	qend=0;
 	//setup flags from gffline
-	isCDS=false;
 	isGene(false);
 	isTranscript(true);
 	gffID=Gstrdup(bedline->ID);
@@ -1083,11 +1064,6 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0), exon
 
 GffObj::GffObj(GffReader *gfrd, GffLine* gffline, bool keepAttr, bool noExonAttr):
      GSeg(0,0), exons(true,true,false), children(1,false) {
-  xstart=0;
-  xend=0;
-  xstatus=0;
-  partial=false;
-  isCDS=false;
   uptr=NULL;
   ulink=NULL;
   parent=NULL;
@@ -1123,7 +1099,7 @@ GffObj::GffObj(GffReader *gfrd, GffLine* gffline, bool keepAttr, bool noExonAttr
   qstart=gffline->qstart;
   qend=gffline->qend;
   //setup flags from gffline
-  isCDS=gffline->is_cds; //for now
+  isCDSOnly(gffline->is_cds); //for now
   isGene(gffline->is_gene);
   isTranscript(gffline->is_transcript || gffline->exontype!=0);
   //fromGff3(gffline->is_gff3);
@@ -2143,15 +2119,10 @@ void GffObj::mRNA_CDS_coords(uint& cds_mstart, uint& cds_mend) {
   cds_mend=0;
   if (CDstart==0 || CDend==0) return; //no CDS info
   //restore normal coordinates, just in case
-  unxcoord();
   int cdsadj=0;
   if (CDphase=='1' || CDphase=='2') {
       cdsadj=CDphase-'0';
-      }
-  /*
-   uint seqstart=CDstart;
-   uint seqend=CDend;
-  */
+   }
   uint seqstart=exons.First()->start;
   uint seqend=exons.Last()->end;
   int s=0; //resulting nucleotide counter
@@ -2213,7 +2184,6 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst)
         return NULL;
     }
     //restore normal coordinates:
-    unxcoord();
     if (exons.Count()==0) return NULL;
     int fspan=end-start+1;
     const char* gsubseq=faseq->subseq(start, fspan);
@@ -2266,8 +2236,6 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
 	  GMessage("Warning: getSpliced() called with uninitialized GFaSeqGet object!\n"); //should never happen
       return NULL;
   }
-  //restore normal coordinates:
-  unxcoord();
   if (exons.Count()==0) return NULL;
   int fspan=end-start+1;
   const char* gsubseq=faseq->subseq(start, fspan);
@@ -2381,8 +2349,6 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
 
 char* GffObj::getSplicedTr(GFaSeqGet* faseq, bool CDSonly, int* rlen) {
   if (CDSonly && CDstart==0) return NULL;
-  //restore normal coordinates:
-  unxcoord();
   if (exons.Count()==0) return NULL;
   int fspan=end-start+1;
   const char* gsubseq=faseq->subseq(start, fspan);
@@ -2601,7 +2567,6 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
     tlabel=track_id>=0 ? names->tracks.Get(track_id)->name :
          (char*)"gffobj" ;
     }
- unxcoord();
  if (gffp==pgffBED) {
 	 printBED(fout, cvtChars, dbuf, DBUF_LEN);
 	 return;
@@ -2666,10 +2631,10 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
    fprintf(fout,"\n");
  }// gff3 transcript line
  if (gffp==pgffTLF) return;
- bool is_cds_only = (gffp==pgffBoth) ? false : isCDS;
+ bool is_cds_only = (gffp==pgffBoth) ? false : isCDSOnly();
  if (showExon) {
    //print exons
-    if (isCDS && exons.Count()>0 &&
+    if (isCDSOnly() && exons.Count()>0 &&
         ((strand=='-' && exons.Last()->phase<'0') || (strand=='+' && exons.Last()->phase<'0')))
          updateExonPhase();
     for (int i=0;i<exons.Count();i++) {
@@ -2678,7 +2643,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
       }
  }//printing exons
  if (showCDS && !is_cds_only && CDstart>0) {
-	  if (isCDS) {
+	  if (isCDSOnly()) {
 	    for (int i=0;i<exons.Count();i++) {
 	      printGxfLine(fout, tlabel, gseqname, true,
 	    		  exons[i]->start, exons[i]->end, i, exons[i]->phase, gff3, cvtChars,
@@ -2697,7 +2662,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 }
 
 void GffObj::updateExonPhase() {
-  if (!isCDS) return;
+  if (!isCDSOnly()) return;
   int cdsacc=0;
   if (CDphase=='1' || CDphase=='2') {
       cdsacc+= 3-(CDphase-'0');
