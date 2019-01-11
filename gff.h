@@ -29,6 +29,9 @@ extern const uint gfo_flag_IS_GENE;
 extern const uint gfo_flag_HAS_GFF_ID; //has a ID (GFF3) or transcript_id (GTF)
 extern const uint gfo_flag_BY_EXON;  //created by subfeature (exon) directly
                       //(GTF2 and some chado gff3 dumps with exons given before their mRNA)
+extern const uint gfo_flag_CDS_ONLY; //transcript defined by CDS features only (GffObj::isCDS())
+extern const uint gfo_flag_CDS_PARTIAL; //transcript with incomplete CDS
+extern const uint gfo_flag_CDS_SHIFT; //transcript has a CDS with ribosomal shift, so GffObj::cds has all CDS segments
 extern const uint gfo_flag_IS_TRANSCRIPT; //recognized as '*RNA' or '*transcript'
 extern const uint gfo_flag_DISCARDED; //should not be printed under the "transcriptsOnly" directive
 extern const uint gfo_flag_LST_KEEP; //GffObj from GffReader::gflst is to be kept (not deallocated)
@@ -44,7 +47,7 @@ extern bool gff_show_warnings;
 
 enum GffExonType {
   exgffIntron=-1, // useless "intron" feature
-	exgffNone=0,  //not a recognizable exonic segment
+  exgffNone=0,  //not a recognizable exonic segment
   exgffStart, //from "start_codon" feature (within CDS)
   exgffStop, //from "stop_codon" feature (may be outside CDS)
   exgffCDS,  //from "CDS" feature
@@ -500,55 +503,61 @@ class GffAttrs:public GList<GffAttr> {
 };
 
 
-class GffExon : public GSeg {
- public:
-  void* uptr; //for later extensions
-  GffAttrs* attrs; //other attributes kept for this exon
-  double score; // gff score column
-  char phase; //GFF phase column - for CDS segments only
-             // '.' = undefined (UTR), '0','1','2' for CDS exons
-  char exontype; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
-  int qstart; // for mRNA/protein exon mappings: coordinates on query
-  int qend;
-  GffExon(int s=0, int e=0, double sc=0, char fr=0, int qs=0, int qe=0, char et=0) {
-    uptr=NULL;
-    attrs=NULL;
-    if (s<e) {
-      start=s;
-      end=e;
-      }
-   else {
-     start=e;
-     end=s;
-    }
-   if (qs<qe) {
-     qstart=qs;
-     qend=qe;
-     } else {
-     qstart=qe;
-     qend=qs;
-     }
-   score=sc;
-   phase=fr;
-   exontype=et;
-   } //constructor
+class GffSegment  : public GSeg {
+   public:
+	  GffAttrs* attrs; //other attributes kept for this exon
+	  float score; // gff score column
 
- char* getAttr(GffNames* names, const char* atrname) {
-   if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
-   return attrs->getAttr(names, atrname);
-   }
+	  char* getAttr(GffNames* names, const char* atrname) {
+	    if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
+	    return attrs->getAttr(names, atrname);
+	  }
 
- char* getAttr(int aid) {
-   if (attrs==NULL) return NULL;
-   return attrs->getAttr(aid);
-   }
+	  char* getAttr(int aid) {
+	    if (attrs==NULL) return NULL;
+	    return attrs->getAttr(aid);
+	  }
 
- ~GffExon() { //destructor
-   if (attrs!=NULL) delete attrs;
-   }
+	  GffSegment(int s=0, int e=0, float sc=0):score(sc), attrs(NULL) {
+		if (s<e) { start=s; end=e; }
+		    else { start=e; end=s; }
+	  }
+	  ~GffSegment() { //destructor
+	     if (attrs!=NULL) delete attrs;
+	  }
+
 };
 
+class GffCDS : public GffSegment {
+public:
+	 char phase; //GFF phase column - for CDS segments only
+	             // '.' = undefined (UTR), '0','1','2' for CDS exons
+	 GffCDS(int s=0, int e=0, char ph='.', float sc=0):GffSegment(s,e,sc),
+			 phase(ph) { }
+};
 
+class GffExon : public GffSegment {
+ public:
+  char exontype; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+  void* uptr; //for associating extended user data to this exon
+  int qstart; // for mRNA/protein mappings: coordinates on query
+  int qend;
+  GffExon(int s=0, int e=0, float sc=0, char fr=0, int qs=0, int qe=0, char et=0):GffSegment(s, e, sc) {
+    uptr=NULL;
+    if (qs<qe) { qstart=qs; qend=qe; }
+    else { qstart=qe; qend=qs; }
+    score=sc;
+    exontype=et;
+  } //constructor
+
+  GffExon(GffCDS& cdseg):uptr(NULL),qstart(0),qend(0), exontype(exgffCDS) {
+	 start=cdseg.start;
+	 end=cdseg.end;
+     score=cdseg.score;
+  }
+};
+
+//only for mapping to spliced coding sequence:
 class GffCDSeg:public GSeg {
  public:
   char phase;
@@ -561,14 +570,6 @@ class GffObj:public GSeg {
   void expandExon(int xovl, uint segstart, uint segend,
        char exontype, double sc, char fr, int qs, int qe);
  protected:
-   //coordinate transformation data:
-   uint xstart; //absolute genomic coordinates of reference region
-   uint xend;
-   char xstatus; //coordinate transform status:
-            //0 : (start,end) coordinates are absolute
-            //'+' : (start,end) coords are relative to xstart..xend region
-            //'-' : (start,end) are relative to the reverse complement of xstart..xend region
-   //--
    char* gffID; // ID name for mRNA (parent) feature
    char* gene_name; //value of gene_name attribute (GTF) if present or Name attribute of the parent gene feature (GFF3)
    char* geneID; //value of gene_id attribute (GTF) if present, or the ID attribute of a parent gene feature (GFF3)
@@ -578,51 +579,56 @@ class GffObj:public GSeg {
    friend class GffExon;
 public:
   static GffNames* names; // dictionary storage that holds the various attribute names etc.
-  //TODO: this makes the parser thread unsafe, use conditional compiling for names access!
   int track_id; // index of track name in names->tracks
   int gseq_id; // index of genomic sequence name in names->gseqs
   int ftype_id; // index of this record's feature name in names->feats, or the special gff_fid_mRNA value
   int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
+  GList<GffCDS>* cds; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
+                      //exons boundaries
   GPVec<GffObj> children;
   GffObj* parent;
   int udata; //user data, flags etc.
   void* uptr; //user pointer (to a parent object, cluster, locus etc.)
   GffObj* ulink; //link to another GffObj (user controlled field)
-  // mRNA specific fields:
-  bool isCDS; //just a CDS, no UTRs
-  bool partial; //partial CDS
-  uint CDstart; //CDS start coord
-  uint CDend;   //CDS end coord
+  //---mRNA specific fields:
+  //bool isCDS; //just a CDS, no UTRs
+  uint CDstart; //CDS lowest coordinate
+  uint CDend;   //CDS highest coordinate
   char CDphase; //initial phase for CDS start ('.','0'..'2')
                 //CDphase is at CDend if strand=='-'
   static void decodeHexChars(char* dbuf, const char* s, int maxlen=1023);
   bool hasErrors() { return ((flags & gfo_flag_HAS_ERRORS)!=0); }
   void hasErrors(bool v) {
-      if (v) flags |= gfo_flag_HAS_ERRORS;
-        else flags &= ~gfo_flag_HAS_ERRORS;
-      }
+    if (v) flags |= gfo_flag_HAS_ERRORS;
+      else flags &= ~gfo_flag_HAS_ERRORS;
+  }
   bool hasGffID() { return ((flags & gfo_flag_HAS_GFF_ID)!=0); }
   void hasGffID(bool v) {
       if (v) flags |= gfo_flag_HAS_GFF_ID;
         else flags &= ~gfo_flag_HAS_GFF_ID;
-      }
+  }
   bool createdByExon() { return ((flags & gfo_flag_BY_EXON)!=0); }
   void createdByExon(bool v) {
-      if (v) flags |= gfo_flag_BY_EXON;
-        else flags &= ~gfo_flag_BY_EXON;
-      }
+    if (v) flags |= gfo_flag_BY_EXON;
+      else flags &= ~gfo_flag_BY_EXON;
+  }
+  bool isCDSOnly() { return ((flags & gfo_flag_CDS_ONLY)!=0); }
+  void isCDSOnly(bool v) {
+    if (v) flags |= gfo_flag_CDS_ONLY;
+      else flags &= ~gfo_flag_CDS_ONLY;
+  }
   bool isGene() { return ((flags & gfo_flag_IS_GENE)!=0); }
   void isGene(bool v) {
-      if (v) flags |= gfo_flag_IS_GENE;
-        else flags &= ~gfo_flag_IS_GENE;
-      }
+    if (v) flags |= gfo_flag_IS_GENE;
+      else flags &= ~gfo_flag_IS_GENE;
+  }
   bool isDiscarded() { return ((flags & gfo_flag_DISCARDED)!=0); }
   void isDiscarded(bool v) {
-      if (v) flags |= gfo_flag_DISCARDED;
-        else flags &= ~gfo_flag_DISCARDED;
-      }
+     if (v) flags |= gfo_flag_DISCARDED;
+       else flags &= ~gfo_flag_DISCARDED;
+  }
 
   bool isUsed() { return ((flags & gfo_flag_LST_KEEP)!=0); }
   void isUsed(bool v) {
@@ -690,7 +696,7 @@ public:
       if (sharedattrs) exons[0]->attrs=NULL;
       }
     }
-  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), children(1,false) {
+  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), cds(NULL), children(1,false) {
                                    //exons: sorted, free, non-unique
        gffID=NULL;
        uptr=NULL;
@@ -706,16 +712,11 @@ public:
        qstart=0;
        qend=0;
        qcov=0;
-       partial=true;
-       isCDS=false;
        CDstart=0; // hasCDS <=> CDstart>0
        CDend=0;
        CDphase=0;
        gseq_id=-1;
        track_id=-1;
-       xstart=0;
-       xend=0;
-       xstatus=0;
        strand='.';
        gscore=0;
        uscore=0;
@@ -728,6 +729,7 @@ public:
        GFREE(gffID);
        GFREE(gene_name);
        GFREE(geneID);
+       GFREE(cds);
        clearAttrs();
        gffnames_unref(names);
        }
@@ -876,80 +878,7 @@ public:
     bool exonOverlap(GffObj* m) {
       return exonOverlap(*m);
       }
-   //---------- coordinate transformation
-   void xcoord(uint grstart, uint grend, char xstrand='+') {
-     //relative coordinate transform, and reverse-complement transform if xstrand is '-'
-     //does nothing if xstatus is the same already
-     if (xstatus) {
-          if (xstatus==xstrand && grstart==xstart && grend==xend) return;
-          unxcoord();//restore original coordinates
-          }
-     xstatus=xstrand;
-     xstart=grstart;
-     xend=grend;
-     if (CDstart>0) xcoordseg(CDstart, CDend);
-     for (int i=0;i<exons.Count();i++) {
-         xcoordseg(exons[i]->start, exons[i]->end);
-         }
-     if (xstatus=='-') {
-       exons.Reverse();
-       int flen=end-start;
-       start=xend-end+1;
-       end=start+flen;
-       }
-      else {
-       start=start-xstart+1;
-       end=end-xstart+1;
-       }
-     }
 
-   //transform an arbitrary segment based on current xstatus/xstart-xend
-   void xcoordseg(uint& segstart, uint &segend) {
-     if (xstatus==0) return;
-     if (xstatus=='-') {
-       int flen=segend-segstart;
-       segstart=xend-segend+1;
-       segend=segstart+flen;
-       return;
-       }
-     else {
-       segstart=segstart-xstart+1;
-       segend=segend-xstart+1;
-       }
-     }
-
-   void unxcoord() { //revert back to absolute genomic/gff coordinates if xstatus==true
-     if (xstatus==0) return; //nothing to do, no transformation appplied
-     if (CDstart>0) unxcoordseg(CDstart, CDend);
-     //restore all GffExon intervals too
-     for (int i=0;i<exons.Count();i++) {
-         unxcoordseg(exons[i]->start, exons[i]->end);
-         }
-     if (xstatus=='-') {
-        exons.Reverse();
-        int flen=end-start;
-        start=xend-end+1;
-        end=start+flen;
-        }
-      else {
-        start=start+xstart-1;
-        end=end+xstart-1;
-        }
-     xstatus=0;
-     }
-   void unxcoordseg(uint& astart, uint &aend) {
-     //restore an arbitrary interval -- does NOT change the transform state!
-     if (xstatus==0) return;
-     if (xstatus=='-') {
-        int flen=aend-astart;
-        astart=xend-aend+1;
-        aend=astart+flen;
-        }
-      else {
-        astart=astart+xstart-1;
-        aend=aend+xstart-1;
-        }
-     }
    //---------------------
    bool operator==(GffObj& d){
        return (gseq_id==d.gseq_id && start==d.start && end==d.end && strcmp(gffID, d.gffID)==0);
