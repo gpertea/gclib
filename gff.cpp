@@ -10,10 +10,21 @@ const uint GFF_MAX_INTRON= 6000000; //Ensembl shows a >5MB mouse intron
 bool gff_show_warnings = false; //global setting, set by GffReader->showWarnings()
 int gff_fid_mRNA=0; //mRNA (has CDS)
 int gff_fid_transcript=1; // generic "transcript" feature
-int gff_fid_exon=2; // generic "exon"-like feature (exon,CDS,UTR,start/stop codon)
+int gff_fid_exon=2; // "exon" feature
 
-//const uint gfo_flag_LEVEL_MSK        = 0x00FF0000;
-//const byte gfo_flagShift_LEVEL           = 16;
+const uint gfo_flag_HAS_ERRORS       = 0x00000001;
+const uint gfo_flag_CHILDREN_PROMOTED= 0x00000002;
+const uint gfo_flag_IS_GENE          = 0x00000004;
+const uint gfo_flag_IS_TRANSCRIPT    = 0x00000008;
+const uint gfo_flag_HAS_GFF_ID       = 0x00000010; //found transcript feature line (GFF3 or GTF)
+const uint gfo_flag_BY_EXON          = 0x00000020; //created by subfeature (exon/CDS) directly
+const uint gfo_flag_CDS_ONLY         = 0x00000040; //transcript defined by CDS features only (GffObj::isCDS())
+const uint gfo_flag_CDS_PARTIAL      = 0x00000080; //transcript CDS is incomplete
+const uint gfo_flag_CDS_SHIFT        = 0x00000100; //transcript having CDS with ribosomal shift (i.e. after merging exons)
+const uint gfo_flag_DISCARDED        = 0x00001000;
+const uint gfo_flag_LST_KEEP         = 0x00002000;
+const uint gfo_flag_LEVEL_MSK        = 0x00FF0000;
+const byte gfo_flagShift_LEVEL           = 16;
 
 void gffnames_ref(GffNames* &n) {
   if (n==NULL) n=new GffNames();
@@ -1106,7 +1117,7 @@ void GffObj::removeExon(GffExon* p) {
 	}
 }
 
-GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
+GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0),
 		exons(true,true,false), cds(NULL) {
 	uptr=NULL;
 	ulink=NULL;
@@ -1190,10 +1201,10 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   qend=gffline.qend;
   */
   //setup flags from gffline
-  isCDSOnly(gffline.is_cds); //for now
-  isGene(gffline.is_gene);
-  isTranscript(gffline.is_transcript || gffline.exontype!=exgffNone);
-  //fromGff3(gffline.is_gff3);
+  isCDSOnly(gffline->is_cds); //for now
+  isGene(gffline->is_gene);
+  isTranscript(gffline->is_transcript || gffline->exontype!=0);
+  //fromGff3(gffline->is_gff3);
 
   if (gffline.parents!=NULL && !gffline.is_transcript) {
     //GTF style -- create a GffObj directly by subfeature
