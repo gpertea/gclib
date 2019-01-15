@@ -192,7 +192,7 @@ class GffLine {
     double score;
     char strand;
     union {
-    	uint8_t flags;
+    	unsigned int flags;
     	struct {
     		bool is_exonlike:2;
     	};
@@ -668,7 +668,7 @@ public:
   int addExon(uint segstart, uint segend, double sc=0, char fr='.',
              int qs=0, int qe=0, bool iscds=false, char exontype=0);
 
-  int addExon(GffReader* reader, GffLine* gl, bool keepAttrs=false, bool noExonAttr=true);
+  int addExon(GffReader* reader, GffLine* gl);
 
   void removeExon(int idx);
   void removeExon(GffExon* p);
@@ -684,8 +684,8 @@ public:
   int qcov; //query coverage - percent
   GffAttrs* attrs; //other gff3 attributes found for the main mRNA feature
    //constructor by gff line parsing:
-  GffObj(GffReader* gfrd, BEDLine* bedline, bool keepAttr=false);
-  GffObj(GffReader* gfrd, GffLine* gffline, bool keepAttrs=false, bool noExonAttr=true);
+  GffObj(GffReader* gfrd, BEDLine* bedline);
+  GffObj(GffReader* gfrd, GffLine* gffline);
    //if gfline->Parent!=NULL then this will also add the first sub-feature
    // otherwise, only the main feature is created
   void copyAttrs(GffObj* from);
@@ -734,8 +734,7 @@ public:
        gffnames_unref(names);
        }
    //--------------
-   GffObj* finalize(GffReader* gfr, bool mergeCloseExons=false,
-               bool keepAttrs=false, bool noExonAttr=true);
+   GffObj* finalize(GffReader* gfr);
                //complete parsing: must be called in order to merge adjacent/close proximity subfeatures
    void parseAttrs(GffAttrs*& atrlist, char* info, bool isExon=false);
    const char* getSubfName() { //returns the generic feature type of the entries in exons array
@@ -1008,8 +1007,7 @@ class GfList: public GList<GffObj> {
        this->setSorted((GCompareProc*)gfo_cmpByLoc);
        }
      }
-   void finalize(GffReader* gfr, bool mergeCloseExons,
-                bool keepAttrs=false, bool noExonAttr=true);
+   void finalize(GffReader* gfr);
 
    void freeAll() {
      for (int i=0;i<fCount;i++) {
@@ -1066,12 +1064,14 @@ class CNonExon { //utility class used in subfeature promotion
 class GffReader {
   friend class GffObj;
   friend class GffLine;
+  friend class GfList;
   char* linebuf;
   off_t fpos;
   int buflen;
  protected:
   union {
-    uint8_t gff_type;
+    unsigned int flags;
+    unsigned int gff_type: 6;
     struct {
        bool is_gff3: 1;  //GFF3 syntax was detected
        bool is_gtf:1; //GTF syntax was detected
@@ -1079,6 +1079,13 @@ class GffReader {
        bool gtf_gene:1; //has "gene" features (3-level GTF ..Ensembl?)
        bool is_BED:1; //input is BED-12 format, possibly with attributes in 13th field
        bool is_TLF:1; //input is GFF3-like Transcript Line Format with exons= attribute
+       //--other flags
+       bool transcriptsOnly:1;
+       bool keepAttr:1;
+       bool noExonAttr:1;
+       bool mergeCloseExons:1;
+       bool gene2exon:1;
+       bool sortByLoc:1;
     };
   };
   bool gff_warns; //warn about duplicate IDs, etc. even when they are on different chromosomes
@@ -1087,8 +1094,8 @@ class GffReader {
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
   GffLine* gffline;
   BEDLine* bedline;
-  bool transcriptsOnly; //keep only transcripts w/ their exon/CDS features
-  bool gene2exon;  // for childless genes: add an exon as the entire gene span
+  //bool transcriptsOnly; //keep only transcripts w/ their exon/CDS features
+  //bool gene2exon;  // for childless genes: add an exon as the entire gene span
   GHash<int> discarded_ids; //for transcriptsOnly mode, keep track
                             // of discarded parent IDs
   GHash< GPVec<GffObj> > phash; //transcript_id => GPVec<GffObj>(false)
@@ -1104,8 +1111,8 @@ class GffReader {
 	                                         char strand=0, uint start=0, uint end=0);
   CNonExon* subfPoolCheck(GffLine* gffline, GHash<CNonExon>& pex, char*& subp_name);
   void subfPoolAdd(GHash<CNonExon>& pex, GffObj* newgfo);
-  GffObj* promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonExon>& pex,
-                                  bool keepAttr, bool noExonAttr);
+  GffObj* promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonExon>& pex);
+
 #ifdef CUFFLINKS
      boost::crc_32_type  _crc_result;
 #endif
@@ -1113,44 +1120,55 @@ class GffReader {
   GPVec<GSeqStat> gseqtable; //table with all genomic sequences, but only current GXF gseq ID indices will have non-NULL
   //GffNames* names; //just a pointer to the global static Gff names repository
   GfList gflst; //accumulate GffObjs being read
-  GffObj* newGffRec(GffLine* gffline, bool keepAttr, bool noExonAttr,
-                               GffObj* parent=NULL, GffExon* pexon=NULL, GPVec<GffObj>* glst=NULL, bool replace_parent=false);
-  GffObj* newGffRec(BEDLine* bedline, bool keepAttr, GPVec<GffObj>* glst=NULL);
+  GffObj* newGffRec(GffLine* gffline, GffObj* parent=NULL, GffExon* pexon=NULL,
+		       GPVec<GffObj>* glst=NULL, bool replace_parent=false);
+  GffObj* newGffRec(BEDLine* bedline, GPVec<GffObj>* glst=NULL);
   //GffObj* replaceGffRec(GffLine* gffline, bool keepAttr, bool noExonAttr, int replaceidx);
-  GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline,
-                                         bool keepAttr);
+  GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline);
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
-  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL,
-		  bool keepAttrs=false, bool noExonAttr=true);
+  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
-		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
-		  bedline(NULL), transcriptsOnly(t_only), gene2exon(false), discarded_ids(true), phash(true), gseqtable(1,true),
+		  buflen(0), flags(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
+		  bedline(NULL), discarded_ids(true), phash(true), gseqtable(1,true),
 		  gflst(sortbyloc), gseqStats(1, false) {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
+      transcriptsOnly=t_only;
+      sortByLoc=sortbyloc;
+      noExonAttr=true;
       //lastReadNext=NULL;
-      }
+  }
   void init(FILE *f, bool t_only=false, bool sortbyloc=false, bool g2exon=false) {
       fname=NULL;
       fh=f;
       if (fh!=NULL) rewind(fh);
       fpos=0;
-      gff_type=0;
+      flags=0;
       transcriptsOnly=t_only;
       gflst.sortedByLoc(sortbyloc);
       gene2exon=g2exon;
-      }
+  }
   void set_gene2exon(bool v) { gene2exon=v;}
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
   void isTLF(bool v=true) { is_TLF=v; } //should be set before any parsing!
-  GffReader(const char* fn, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
-	  		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(NULL), fname(NULL),
-			  gffline(NULL), bedline(NULL), transcriptsOnly(t_only), gene2exon(false), discarded_ids(true),
-			  phash(true), gseqtable(1,true), gflst(sort), gseqStats(1,false) {
+  void keepingAttrs(bool keep_attrs=true, bool discardExonAttrs=true) {
+	  keepAttr=keep_attrs;
+	  noExonAttr=discardExonAttrs;
+  }
+  void mergingCloseExons(bool merge_close_exons=true) {
+	  mergeCloseExons=merge_close_exons;
+  }
+  GffReader(const char* fn, bool t_only=false, bool sort_by_loc=false):linebuf(NULL), fpos(0),
+	  		  buflen(0), flags(0), gff_warns(gff_show_warnings), fh(NULL), fname(NULL),
+			  gffline(NULL), bedline(NULL), discarded_ids(true),
+			  phash(true), gseqtable(1,true), gflst(sort_by_loc), gseqStats(1,false) {
       gff_warns=gff_show_warnings;
       gffnames_ref(GffObj::names);
+      noExonAttr=true;
+      transcriptsOnly=t_only;
+      sortByLoc=sort_by_loc;
       fname=Gstrdup(fn);
       fh=fopen(fname, "rb");
       GMALLOC(linebuf, GFF_LINELEN);
@@ -1174,15 +1192,15 @@ class GffReader {
       }
 
   void showWarnings(bool v=true) {
-      gff_warns=v;
-      gff_show_warnings=v;
-      }
+     gff_warns=v;
+     gff_show_warnings=v;
+  }
 
   GffLine* nextGffLine();
   BEDLine* nextBEDLine();
 
   // load all subfeatures, re-group them:
-  void readAll(bool keepAttr=false, bool mergeCloseExons=false, bool noExonAttr=true);
+  void readAll();
 
   //only for well-formed files: BED or GxF where exons are strictly grouped by their transcript_id/Parent
   GffObj* readNext(bool keepAttrs=false, bool noExonAttrs=true); //user must free the returned GffObj* !
