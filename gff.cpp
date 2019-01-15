@@ -1552,13 +1552,15 @@ GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonEx
   return gfoh; //returns the holder of newly promoted feature
 }
 
-GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free the returned GffObj*
+//In the rare cases where the GFF/GTF stream is properly formatted
+// i.e. when all sub-features are grouped with (and preceded by) their parent!
+GffObj* GffReader::readNext() { //user must free the returned GffObj*
  GffObj* gfo=NULL;
  //GSeg tseg(0,0); //transcript boundaries
  char* lastID=NULL;
  if (is_BED) {
 	 if (nextBEDLine()) {
-		 gfo=new GffObj(*this, *bedline);
+		 gfo=new GffObj(this, bedline);
 		 //tseg.start=gfo->start;
 		 //tseg.end=gfo->end;
 		 delete bedline;
@@ -1591,7 +1593,7 @@ GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free
     	} else { //new transcript
     		if (gfo==NULL) {
     			//start gathering this transcript's data now
-    			gfo=new GffObj(*this, *gffline);
+    			gfo=new GffObj(this, gffline);
     			//GFREE(lastID);
     			lastID=Gstrdup(tid);
     			/*if (gffline->is_transcript) {
@@ -1614,7 +1616,7 @@ GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free
  GFREE(lastID);
  //gfo populated with all its sub-features (or eof reached)
  if (gfo!=NULL) {
-	gfo->finalize(this);
+	gfo->finalize(this, );
 	/*
 	if (gfo->exons.Count()==0 && (gfo->isTranscript() ||
 				(gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
