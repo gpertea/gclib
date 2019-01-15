@@ -678,12 +678,12 @@ public:
   bool isValidTranscript() {
     //return (ftype_id==gff_fid_mRNA && exons.Count()>0);
     return (isTranscript() && exons.Count()>0);
-  }
-  int addExon(GffReader& reader, GffLine& gl);
-  int addExon(GList<GffExon>& segs, GffLine& gl);
-  //for use only AFTER finalize()
-  int addExon(uint segstart, uint segend, float sc=0, char ph='.',
-              bool iscds=false, int8_t exontype=0);
+    }
+
+  int addExon(uint segstart, uint segend, double sc=0, char fr='.',
+             int qs=0, int qe=0, bool iscds=false, char exontype=0);
+
+  int addExon(GffReader* reader, GffLine* gl);
 
 protected:
   //utility segment-merging function for addExon()
@@ -698,10 +698,10 @@ public:
   int covlen; //total coverage of reference genomic sequence (sum of maxcf segment lengths)
   GffAttrs* attrs; //other gff3 attributes found for the main mRNA feature
    //constructor by gff line parsing:
-  GffObj(GffReader& gfrd, BEDLine& bedline);
-  GffObj(GffReader& gfrd, GffLine& gffline);
-   //if gfline->Parent!=NULL then this will also add the first sub-feature
-   // otherwise, only the main feature is created
+  GffObj(GffReader* gfrd, BEDLine* bedline);
+  GffObj(GffReader* gfrd, GffLine* gffline);
+  //if gfline->Parent!=NULL then this will also add the first sub-feature
+  // otherwise, only the main feature is created
   void copyAttrs(GffObj* from);
   void clearAttrs() {
     if (attrs!=NULL) {
@@ -1147,8 +1147,11 @@ class GffReader {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
+      transcriptsOnly=t_only;
+      sortByLoc=sortbyloc;
+      noExonAttr=true;
       //lastReadNext=NULL;
-      }
+  }
   void init(FILE *f, bool t_only=false, bool sortbyloc=false, bool g2exon=false) {
       fname=NULL;
       fh=f;
