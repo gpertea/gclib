@@ -737,15 +737,14 @@ void GffObj::setCDS(uint cd_start, uint cd_end, char phase) {
      }
 }
 
-int GffObj::addExon(GffReader& reader, GffLine& gl) {
-  // -- this should only be called before ::finalize()!
-  //should make sure to get the right subftype_id!
-  if (!isTranscript() && gl.exontype>exgffNone) {
-     //subfeature recognized as exon-like, so this should be considered a transcript!
-     isTranscript(true);
-     exon_ftype_id=gff_fid_exon;
-  }
-  //if (exons.Count()==1) exons[0]->exontype=exgffExon; //?
+int GffObj::addExon(GffReader* reader, GffLine* gl) {
+  //this will make sure we have the right subftype_id!
+  //int subf_id=-1;
+  if (!isTranscript() && gl->exontype>0) {
+          isTranscript(true);
+          exon_ftype_id=gff_fid_exon;
+          if (exons.Count()==1) exons[0]->exontype=exgffExon;
+          }
   if (isTranscript()) {
      if (exon_ftype_id<0) {//exon_ftype_id=gff_fid_exon;
           if (gl.exontype>exgffNone) exon_ftype_id=gff_fid_exon;
@@ -790,25 +789,19 @@ int GffObj::addExon(GffReader& reader, GffLine& gl) {
             }
          } //incoming subfeature is of different type
        } //new subfeature type
-  } //non-mRNA parent
-  int eidx=-1;
-  GList<GffExon>* segs=NULL; //either cds or &exons
-  if (gl.is_cds) {
-     if (cds==NULL) cds=new GList<GffExon>(true, true, false);
-     segs=cds;
-  } else {
-     segs=&exons;
-  }
-  eidx=addExon(*segs, gl);
-  if (eidx<0) return eidx; //this should never happen!
-  if (reader.keepAttr) {
-     if (reader.noExonAttr) {
-           parseAttrs(attrs, gl.info);
-     }
-     else { //need all exon-level attributes
-         parseAttrs((*segs)[eidx]->attrs, gl.info);
-     }
-  }
+    } //non-mRNA parent
+  int eidx=addExon(gl->fstart, gl->fend, gl->score, gl->phase,
+         gl->qstart,gl->qend, gl->is_cds, gl->exontype);
+  if (eidx<0) return eidx; //this should never happen
+  if (reader->keepAttr) {
+     if (reader->noExonAttr) {
+         if (attrs==NULL) //place the parsed attributes directly at transcript level
+           parseAttrs(attrs, gl->info);
+         }
+       else { //need all exon-level attributes
+         parseAttrs(exons[eidx]->attrs, gl->info, true);
+         }
+      }
   return eidx;
 }
 
@@ -1117,7 +1110,7 @@ void GffObj::removeExon(GffExon* p) {
 	}
 }
 
-GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0),
+GffObj::GffObj(GffReader *gfrd, BEDLine* bedline):GSeg(0,0),
 		exons(true,true,false), cds(NULL) {
 	uptr=NULL;
 	ulink=NULL;
@@ -1161,10 +1154,10 @@ GffObj::GffObj(GffReader *gfrd, BEDLine* bedline, bool keepAttr):GSeg(0,0),
 		if (CDstart>0 && bedline.cds_phase)
 			CDphase=bedline.cds_phase;
 	}
-	if (gfrd.keepAttr && bedline.info!=NULL) this->parseAttrs(attrs, bedline.info);
+	if (gfrd->keepAttr && bedline->info!=NULL) this->parseAttrs(attrs, bedline->info);
 }
 
-GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
+GffObj::GffObj(GffReader *gfrd, GffLine* gffline):
      GSeg(0,0), exons(true,true,false), children(1,false) {
   uptr=NULL;
   ulink=NULL;
@@ -1222,7 +1215,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
         this->createdByExon(true);
         //this is likely the first exon/segment of the feature
         addExon(gfrd, gffline);
-        }
+    }
       else { //a parented feature with an ID: orphan or premature GFF3 subfeature line
         if (gfrd.is_gff3 && gffline.exontype!=exgffNone) {
              //premature exon given before its parent transcript
@@ -1231,13 +1224,13 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
              this->createdByExon(true);
              //this is the first exon/segment of the transcript
              addExon(gfrd, gffline);
-             }
+        }
         else { //unrecognized non-exon feature ? use the ID instead
              this->hasGffID(true);
-             gffID=Gstrdup(gffline.ID);
-             if (gfrd.keepAttr) this->parseAttrs(attrs, gffline.info);
-             }
+             gffID=Gstrdup(gffline->ID);
+             if (gfrd->keepAttr) this->parseAttrs(attrs, gffline->info);
         }
+    }
   } //non-transcript parented subfeature given directly
   else {
     //non-parented feature OR a recognizable transcript
@@ -1264,8 +1257,8 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
     		}
       }
     } //is transcript
-    if (gfrd.keepAttr) this->parseAttrs(attrs, gffline.info);
-    if (gfrd.is_gff3 && gffline.parents==NULL && gffline.exontype!=exgffNone) {
+    if (gfrd->keepAttr) this->parseAttrs(attrs, gffline->info);
+    if (gfrd->is_gff3 && gffline->parents==NULL && gffline->exontype!=0) {
        //special case with bacterial genes just given as a CDS/exon, without parent!
        this->createdByExon(true);
        if (ftype_id<0) ftype_id=gff_fid_mRNA;
@@ -1434,7 +1427,7 @@ GffObj* GffReader::updateParent(GffObj* newgfo, GffObj* parent) {
 }
 
 GffObj* GffReader::newGffRec(GffLine* gffline, GffObj* parent, GffExon* pexon, GPVec<GffObj>* glst, bool replace_parent) {
-  GffObj* newgfo=new GffObj(*this, *gffline);
+  GffObj* newgfo=new GffObj(this, gffline);
   GffObj* r=NULL;
   gflst.Add(newgfo);
   //tag non-transcripts to be discarded later
@@ -1458,7 +1451,7 @@ GffObj* GffReader::newGffRec(GffLine* gffline, GffObj* parent, GffExon* pexon, G
 }
 
 GffObj* GffReader::newGffRec(BEDLine* bedline, GPVec<GffObj>* glst) {
-  GffObj* newgfo=new GffObj(*this, *bedline);
+  GffObj* newgfo=new GffObj(this, bedline);
   GffObj* r=NULL;
   gflst.Add(newgfo);
   r=(glst) ? gfoAdd(*glst, newgfo) : gfoAdd(newgfo);
@@ -1486,7 +1479,6 @@ GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline) {
 
 
 bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex) {
-	//this should only be called before prevgfo->finalize()!
 	bool r=true;
 	if (gffline->strand!=prevgfo->strand) {
 		if (prevgfo->strand=='.') {
@@ -1508,7 +1500,7 @@ bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon
 		r=false;
 		if (!gff_warns) exit(1);
 	}
-	int eidx=prevgfo->addExon(*this, *gffline);
+	int eidx=prevgfo->addExon(this, gffline);
 	if (pex!=NULL && eidx>=0) {
 		//if (eidx==0 && gffline->exontype>0) prevgfo->isTranscript(true);
 		if (gffline->ID!=NULL && gffline->exontype==exgffNone)
@@ -1616,7 +1608,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
  GFREE(lastID);
  //gfo populated with all its sub-features (or eof reached)
  if (gfo!=NULL) {
-	gfo->finalize(this, );
+	gfo->finalize(this);
 	/*
 	if (gfo->exons.Count()==0 && (gfo->isTranscript() ||
 				(gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
