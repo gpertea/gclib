@@ -1147,11 +1147,8 @@ class GffReader {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
-      transcriptsOnly=t_only;
-      sortByLoc=sortbyloc;
-      noExonAttr=true;
       //lastReadNext=NULL;
-  }
+      }
   void init(FILE *f, bool t_only=false, bool sortbyloc=false, bool g2exon=false) {
       fname=NULL;
       fh=f;

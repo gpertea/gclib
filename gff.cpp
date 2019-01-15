@@ -1561,7 +1561,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
  char* lastID=NULL;
  if (is_BED) {
 	 if (nextBEDLine()) {
-		 gfo=new GffObj(*this, *bedline);
+		 gfo=new GffObj(this, bedline);
 		 //tseg.start=gfo->start;
 		 //tseg.end=gfo->end;
 		 delete bedline;
@@ -1594,7 +1594,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
     	} else { //new transcript
     		if (gfo==NULL) {
     			//start gathering this transcript's data now
-    			gfo=new GffObj(*this, *gffline);
+    			gfo=new GffObj(this, gffline);
     			//GFREE(lastID);
     			lastID=Gstrdup(tid);
     			/*if (gffline->is_transcript) {
@@ -1617,7 +1617,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
  GFREE(lastID);
  //gfo populated with all its sub-features (or eof reached)
  if (gfo!=NULL) {
-	gfo->finalize(this);
+	gfo->finalize(this, );
 	/*
 	if (gfo->exons.Count()==0 && (gfo->isTranscript() ||
 				(gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
