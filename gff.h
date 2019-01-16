@@ -23,21 +23,8 @@ extern const uint GFF_MAX_LOCUS;
 extern const uint GFF_MAX_EXON;
 extern const uint GFF_MAX_INTRON;
 
-extern const uint gfo_flag_CHILDREN_PROMOTED;
-extern const uint gfo_flag_HAS_ERRORS;
-extern const uint gfo_flag_IS_GENE;
-extern const uint gfo_flag_HAS_GFF_ID; //has a ID (GFF3) or transcript_id (GTF)
-extern const uint gfo_flag_BY_EXON;  //created by subfeature (exon) directly
-                      //(GTF2 and some chado gff3 dumps with exons given before their mRNA)
-extern const uint gfo_flag_CDS_ONLY; //transcript defined by CDS features only (GffObj::isCDS())
-extern const uint gfo_flag_CDS_PARTIAL; //transcript with incomplete CDS
-extern const uint gfo_flag_CDS_SHIFT; //transcript has a CDS with ribosomal shift, so GffObj::cds has all CDS segments
-extern const uint gfo_flag_IS_TRANSCRIPT; //recognized as '*RNA' or '*transcript'
-extern const uint gfo_flag_DISCARDED; //should not be printed under the "transcriptsOnly" directive
-extern const uint gfo_flag_LST_KEEP; //GffObj from GffReader::gflst is to be kept (not deallocated)
-                                     //when GffReader is destroyed
-extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
-extern const byte gfo_flagShift_LEVEL;
+//extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
+//extern const byte gfo_flagShift_LEVEL;
 
 extern bool gff_show_warnings;
 
@@ -47,9 +34,9 @@ extern bool gff_show_warnings;
 
 enum GffExonType {
   exgffIntron=-1, // useless "intron" feature
-  exgffNone=0,  //not a recognizable exonic segment
-  exgffStart, //from "start_codon" feature (within CDS)
-  exgffStop, //from "stop_codon" feature (may be outside CDS)
+  exgffNone=0,  //not recognizable or unitialized exonic segment
+  exgffStartCodon, //from "start_codon" feature (within CDS)
+  exgffStopCodon, //from "stop_codon" feature (may be outside CDS, but should)
   exgffCDS,  //from "CDS" feature
   exgffUTR,  //from "UTR" feature
   exgffCDSUTR, //from a merge of UTR and CDS feature
@@ -508,7 +495,7 @@ class GffAttrs:public GList<GffAttr> {
 
 class GffSegment  : public GSeg {
    public:
-	  GffAttrs* attrs; //other attributes kept for this exon
+	  GffAttrs* attrs; //other attributes kept for this exon/CDS
 	  float score; // gff score column
 
 	  char* getAttr(GffNames* names, const char* atrname) {
@@ -521,7 +508,7 @@ class GffSegment  : public GSeg {
 	    return attrs->getAttr(aid);
 	  }
 
-	  GffSegment(int s=0, int e=0, float sc=0):score(sc), attrs(NULL) {
+	  GffSegment(int s=0, int e=0, float sc=0):attrs(NULL), score(sc) {
 		if (s<e) { start=s; end=e; }
 		    else { start=e; end=s; }
 	  }
@@ -530,33 +517,15 @@ class GffSegment  : public GSeg {
 	  }
 };
 
-class GffCDS : public GffSegment {
-public:
-	 char phase; //GFF phase column - for CDS segments only
-	             // '.' = undefined (UTR), '0','1','2' for CDS exons
-	 GffCDS(int s=0, int e=0, char ph='.', float sc=0):GffSegment(s,e,sc),
-			 phase(ph) { }
-};
-
 class GffExon : public GffSegment {
  public:
   char exontype; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+  char phase; //GFF phase column - for CDS segments only!
+	             // '.' = undefined (UTR), '0','1','2' for CDS exons
   void* uptr; //for associating extended user data to this exon
-  int qstart; // for mRNA/protein mappings: coordinates on query
-  int qend;
-  GffExon(int s=0, int e=0, float sc=0, char fr=0, int qs=0, int qe=0, char et=0):GffSegment(s, e, sc) {
-    uptr=NULL;
-    if (qs<qe) { qstart=qs; qend=qe; }
-    else { qstart=qe; qend=qs; }
-    score=sc;
-    exontype=et;
+  GffExon(uint s=0, uint e=0, char et=0, float sc=0, char ph='.'):GffSegment(s, e, sc),
+		  exontype(et), phase(ph), uptr(NULL) {
   } //constructor
-
-  GffExon(GffCDS& cdseg):uptr(NULL),qstart(0),qend(0), exontype(exgffCDS) {
-	 start=cdseg.start;
-	 end=cdseg.end;
-     score=cdseg.score;
-  }
 };
 
 //only for mapping to spliced coding sequence:
@@ -601,7 +570,7 @@ public:
   int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
-  GList<GffCDS>* cds; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
+  GList<GffExon>* cds; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
                       //exons boundaries
   GPVec<GffObj> children;
   GffObj* parent;
@@ -615,81 +584,42 @@ public:
   char CDphase; //initial phase for CDS start ('.','0'..'2')
                 //CDphase is at CDend if strand=='-'
   static void decodeHexChars(char* dbuf, const char* s, int maxlen=1023);
-  bool hasErrors() { return ((flags & gfo_flag_HAS_ERRORS)!=0); }
-  void hasErrors(bool v) {
-    if (v) flags |= gfo_flag_HAS_ERRORS;
-      else flags &= ~gfo_flag_HAS_ERRORS;
-  }
-  bool hasGffID() { return ((flags & gfo_flag_HAS_GFF_ID)!=0); }
-  void hasGffID(bool v) {
-      if (v) flags |= gfo_flag_HAS_GFF_ID;
-        else flags &= ~gfo_flag_HAS_GFF_ID;
-  }
-  bool createdByExon() { return ((flags & gfo_flag_BY_EXON)!=0); }
-  void createdByExon(bool v) {
-    if (v) flags |= gfo_flag_BY_EXON;
-      else flags &= ~gfo_flag_BY_EXON;
-  }
-  bool isCDSOnly() { return ((flags & gfo_flag_CDS_ONLY)!=0); }
-  void isCDSOnly(bool v) {
-    if (v) flags |= gfo_flag_CDS_ONLY;
-      else flags &= ~gfo_flag_CDS_ONLY;
-  }
-  bool isGene() { return ((flags & gfo_flag_IS_GENE)!=0); }
-  void isGene(bool v) {
-    if (v) flags |= gfo_flag_IS_GENE;
-      else flags &= ~gfo_flag_IS_GENE;
-  }
-  bool isDiscarded() { return ((flags & gfo_flag_DISCARDED)!=0); }
-  void isDiscarded(bool v) {
-     if (v) flags |= gfo_flag_DISCARDED;
-       else flags &= ~gfo_flag_DISCARDED;
-  }
-
-  bool isUsed() { return ((flags & gfo_flag_LST_KEEP)!=0); }
-  void isUsed(bool v) {
-      if (v) flags |= gfo_flag_LST_KEEP;
-        else flags &= ~gfo_flag_LST_KEEP;
-      }
-  bool isTranscript() { return ((flags & gfo_flag_IS_TRANSCRIPT)!=0); }
-  void isTranscript(bool v) {
-      if (v) flags |= gfo_flag_IS_TRANSCRIPT;
-        else flags &= ~gfo_flag_IS_TRANSCRIPT;
-      }
-  bool promotedChildren() { return ((flags & gfo_flag_CHILDREN_PROMOTED)!=0); }
-  void promotedChildren(bool v) {
-    if (v) flags |= gfo_flag_CHILDREN_PROMOTED;
-      else flags &= ~gfo_flag_CHILDREN_PROMOTED;
-     }
-  void setLevel(byte v) {
-    if (v==0) flags &= ~gfo_flag_LEVEL_MSK;
-         else flags &= ~(((uint)v) << gfo_flagShift_LEVEL);
-    }
-  byte incLevel() {
-    uint v=((flags & gfo_flag_LEVEL_MSK) >> gfo_flagShift_LEVEL);
-    v++;
-    flags &= ~(v << gfo_flagShift_LEVEL);
-    return v;
-    }
-  byte getLevel() {
-    return ((byte)((flags & gfo_flag_LEVEL_MSK) >> gfo_flagShift_LEVEL));
-    }
+  bool hasErrors() { return flag_HAS_ERRORS; }
+  void hasErrors(bool v) { flag_HAS_ERRORS=v; }
+  bool hasGffID() { return flag_HAS_GFF_ID; }
+  void hasGffID(bool v) {flag_HAS_GFF_ID=v; }
+  bool createdByExon() { return flag_BY_EXON; }
+  void createdByExon(bool v) {flag_BY_EXON=v; }
+  bool isCDSOnly() { return flag_CDS_ONLY; }
+  void isCDSOnly(bool v) {  flag_CDS_ONLY=v; }
+  bool isGene() { return flag_IS_GENE; }
+  void isGene(bool v) {flag_IS_GENE=v; }
+  bool isDiscarded() { return flag_DISCARDED; }
+  void isDiscarded(bool v) { flag_DISCARDED=v; }
+  bool isUsed() { return flag_LST_KEEP; }
+  void isUsed(bool v) {flag_LST_KEEP=v; }
+  bool isTranscript() { return flag_IS_TRANSCRIPT; }
+  void isTranscript(bool v) {flag_IS_TRANSCRIPT=v; }
+  bool promotedChildren() { return flag_CHILDREN_PROMOTED; }
+  void promotedChildren(bool v) { flag_CHILDREN_PROMOTED=v; }
+  void setLevel(byte v) { gff_level=v; }
+  byte getLevel() { return gff_level; }
+  byte incLevel() { gff_level++; return gff_level; }
 
   bool isValidTranscript() {
     //return (ftype_id==gff_fid_mRNA && exons.Count()>0);
     return (isTranscript() && exons.Count()>0);
-    }
-
-
-  int addExon(uint segstart, uint segend, double sc=0, char fr='.',
-             int qs=0, int qe=0, bool iscds=false, char exontype=0);
-
-  int addExon(GffReader* reader, GffLine* gl);
+  }
+  int addExon(GffReader& reader, GffLine& gl);
+  int addExon(GList<GffExon>& segs, GffLine& gl);
+  //for use only AFTER finalize()
+  int addExon(uint segstart, uint segend, float sc=0, char ph='.',
+              bool iscds=false, char exontype=0);
 
 protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
-       int8_t exontype, float sc);
+       char exontype, float sc);
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
@@ -699,8 +629,8 @@ public:
   int covlen; //total coverage of reference genomic sequence (sum of maxcf segment lengths)
   GffAttrs* attrs; //other gff3 attributes found for the main mRNA feature
    //constructor by gff line parsing:
-  GffObj(GffReader* gfrd, BEDLine* bedline);
-  GffObj(GffReader* gfrd, GffLine* gffline);
+  GffObj(GffReader& gfrd, BEDLine& bedline);
+  GffObj(GffReader& gfrd, GffLine& gffline);
    //if gfline->Parent!=NULL then this will also add the first sub-feature
    // otherwise, only the main feature is created
   void copyAttrs(GffObj* from);
@@ -723,10 +653,6 @@ public:
        exon_ftype_id=-1;
        if (anid!=NULL) gffID=Gstrdup(anid);
        gffnames_ref(names);
-       qlen=0;
-       qstart=0;
-       qend=0;
-       qcov=0;
        CDstart=0; // hasCDS <=> CDstart>0
        CDend=0;
        CDphase=0;
@@ -846,12 +772,14 @@ public:
     int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0) {
       //return the exons' index for the overlapping OR ADJACENT exon
       //ovlen, if given, will return the overlap length
-      //if (s>e) Gswap(s,e);
+      if (s>e) Gswap(s,e);
+      s--;e++; //to also catch adjacent exons
       for (int i=start_idx;i<segs.Count();i++) {
-            if (segs[i]->start>e+1) break;
-            if (s-1>segs[i]->end) continue;
-            //-- overlap/adjacent if we are here:
+            if (segs[i]->start>e) break;
+            if (s>segs[i]->end) continue;
+            //-- overlap if we are here:
             if (ovlen!=NULL) {
+              s++;e--;
               int ovlend= (segs[i]->end>e) ? e : segs[i]->end;
               *ovlen= ovlend - ((s>segs[i]->start)? s : segs[i]->start)+1;
             }
