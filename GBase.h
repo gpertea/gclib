@@ -614,6 +614,7 @@ void writeFasta(FILE *fw, const char* seqid, const char* descr,
 //updates the char* pointer to be after the last digit parsed
 bool parseNumber(char* &p, double& v);
 bool parseDouble(char* &p, double& v); //just an alias for parseNumber
+bool parseFloat(char* &p, float& v);
 
 bool strToInt(char* p, int& i);
 bool strToUInt(char* p, uint& i);
