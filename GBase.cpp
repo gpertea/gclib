@@ -787,9 +787,15 @@ bool parseNumber(char* &p, double& v) {
  return true;
 }
 
-
 bool parseDouble(char* &p, double& v) {
  return parseNumber(p,v);
+}
+
+bool parseFloat(char* &p, float& v) {
+ double dv;
+ bool parsed=parseNumber(p,dv);
+ if (parsed) v=(float)dv;
+ return parsed;
 }
 
 bool parseInt(char* &p, int& i) { //pointer p is advanced after the number
