@@ -195,7 +195,7 @@ class GffLine {
     	    bool skipLine:1;
     	};
     };
-    char exontype; // gffExonType
+    int8_t exontype; // gffExonType
     char phase;  // '.' , '0', '1' or '2', can be also given as CDSphase attribute in TLF
     uint cds_start; //if TLF: CDS attribute
     uint cds_end;
@@ -508,11 +508,11 @@ class GffSegment  : public GSeg {
 
 class GffExon : public GffSegment {
  public:
-  char exontype; // 1="exon" 2="cds" 3="utr" 4="stop_codon"
+  int8_t exontype;
   char phase; //GFF phase column - for CDS segments only!
 	             // '.' = undefined (UTR), '0','1','2' for CDS exons
   void* uptr; //for associating extended user data to this exon
-  GffExon(uint s=0, uint e=0, char et=0, float sc=0, char ph='.'):GffSegment(s, e, sc),
+  GffExon(uint s=0, uint e=0, int8_t et=0, float sc=0, char ph='.'):GffSegment(s, e, sc),
 		  exontype(et), phase(ph), uptr(NULL) {
   } //constructor
 };
@@ -603,12 +603,12 @@ public:
   int addExon(GList<GffExon>& segs, GffLine& gl);
   //for use only AFTER finalize()
   int addExon(uint segstart, uint segend, float sc=0, char ph='.',
-              bool iscds=false, char exontype=0);
+              bool iscds=false, int8_t exontype=0);
 
 protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
-       char exontype, float sc);
+       int8_t exontype, float sc);
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
@@ -761,22 +761,20 @@ public:
     int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0) {
       //return the exons' index for the overlapping OR ADJACENT exon
       //ovlen, if given, will return the overlap length
-      if (s>e) Gswap(s,e);
-      s--;e++; //to also catch adjacent exons
+      //if (s>e) Gswap(s,e);
       for (int i=start_idx;i<segs.Count();i++) {
-            if (segs[i]->start>e) break;
-            if (s>segs[i]->end) continue;
-            //-- overlap if we are here:
+            if (segs[i]->start>e+1) break;
+            if (s-1>segs[i]->end) continue;
+            //-- overlap/adjacent if we are here:
             if (ovlen!=NULL) {
-              s++;e--;
               int ovlend= (segs[i]->end>e) ? e : segs[i]->end;
               *ovlen= ovlend - ((s>segs[i]->start)? s : segs[i]->start)+1;
-              }
+            }
             return i;
-            } //for each exon
+      } //for each exon
       *ovlen=0;
       return -1;
-      }
+    }
 
     int exonOverlapLen(GffObj& m) {
       if (start>m.end || m.start>end) return 0;
