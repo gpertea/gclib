@@ -803,22 +803,28 @@ int GffObj::addExon(GffReader& reader, GffLine& gl) {
 }
 
 int GffObj::addExon(GList<GffExon>& segs, GffLine& gl) {
-	  int ovlen=0;
-	  if (gl.exontype>exgffNone) { //check for overlaps between exon-type segments
-		  int oi=-1;
-	      while ((oi=exonOverlapIdx(segs, gl.fstart, gl.fend, &ovlen, oi+1))>=0) {
-	    	//ovlen==0 for adjacent segment
+	int ovlen=0;
+	if (gl.exontype>exgffNone) { //check for overlaps between exon/CDS-type segments
+		int oi=-1;
+	    while ((oi=exonOverlapIdx(segs, gl.fstart, gl.fend, &ovlen, oi+1))>=0) {
+	        //note: ovlen==0 for adjacent segments
 		    if (segs[oi]->exontype>exgffNone &&
-		    	if (exons[oi]->start<=gl.fstart && exons[oi]->end>=gl.fend) {
-		    		//existing feature contains this segment, so we do NOT add it
+		      segs[oi]->start<=gl.fstart && segs[oi]->end>=gl.fend) {
+		    		//existing feature contains this segment, so we do NOT need to add it
 		    		return oi;
-		    	}
-		    	else {
-		    		expandSegment(segs, oi, gl.fstart, gl.fend, exgffExon, gl.score);
-		    		return oi;
-		    	}
 		    }
-		  }
+		    if (!(segs[oi]->exontype==exgffCDS && gl.exontype==exgffCDS)) {
+		    	//NEVER merge two CDS adjacent/overlapping features!
+		    	int8_t segtype=exgffExon;
+		    	if (segs[oi]->exontype==exgffCDS || gl.exontype==exgffCDS)
+		    		segtype=exgffCDS;
+		    	expandSegment(segs, oi, gl.fstart, gl.fend, segtype, gl.score);
+		    	return oi;
+		    }
+	    }
+	} //exon overlap/adjacent check
+	return -1;
+}
 	      /*
 	      if (oi>=0) { //overlap existing segment (exon)
 
@@ -881,11 +887,11 @@ int GffObj::addExon(GList<GffExon>& segs, GffLine& gl) {
 	        covlen-=ovlen;
 			}//overlap or adjacent to existing segment
 			*/
-	   } //exon type, check for overlap with existing exons
+
 
 }
 
-int GffObj::addExon(uint segstart, uint segend, float sc, char ph, bool iscds, char exontype) {
+int GffObj::addExon(uint segstart, uint segend, float sc, char ph, bool iscds, int8_t exontype) {
   if (segstart>segend) { Gswap(segstart, segend); }
   //if this is used during parsing
   if (exons.Count()==0) {
@@ -1031,7 +1037,7 @@ int GffObj::addExon(uint segstart, uint segend, float sc, char ph, bool iscds, c
    return eidx;
 }
 
-void GffObj::expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend, char exontype, float sc) {
+void GffObj::expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend, int8_t exontype, float sc) {
   //oi is the index of the *first* overlapping segment found that must be enlarged
   covlen-=exons[oi]->len();
   if (segstart<exons[oi]->start)
