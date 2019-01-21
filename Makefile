@@ -93,28 +93,22 @@ endif
 %.o : %.cpp
 	${CXX} ${CXXFLAGS} -c $< -o $@
 
-OBJS := GBase.o GStr.o GArgs.o
 
 .PHONY : all
-all:    gtest
+all:    mdtest
 nodebug: all
 release: all
 debug: all
-#threads
+
+OBJS := GBase.o GStr.o GArgs.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
-gtest.o : GBase.h GArgs.h GVec.hh GList.hh GBitVec.h
-GArgs.o : GArgs.h
-gtest: $(OBJS) gtest.o
+mdtest: $(OBJS) mdtest.o
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
-threads: GThreads.o threads.o
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${TLIBS} ${LIBS}
-GThreads.o: GThreads.h GThreads.cpp
-threads.o : GThreads.h GThreads.cpp
 # target for removing all object files
 
 .PHONY : clean
 clean:: 
-	@${RM} $(OBJS) gtest.o GThreads.o threads.o threads$(EXE) gtest$(EXE)
+	@${RM} $(OBJS) *.o mdtest$(EXE)
 	@${RM} core.*
