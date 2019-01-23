@@ -21,10 +21,9 @@ int main(int argc, char* argv[]) {
 	char *p=mdstring;
 
 	while (*p!='\0') {
-		unsigned int num_matches=0;
-		if (*p>='0' && *p<='9') {
-			parseUInt(p,num_matches);
-			if (num_matches>0)
+		int num_matches=0;
+		if (parseInt(p,num_matches)) {
+			if (num_matches!=0)
 				GMessage("%d matching bases\n", num_matches);
 			continue;
 		}
@@ -44,7 +43,10 @@ int main(int argc, char* argv[]) {
 		}
 		if (*p>='A' && *p<='Z') {
 			GMessage("base mismatch [%c]\n",*p);
+			p++;
+			continue;
 		}
+		GMessage("Warning: skipping unrecognized char [%c]\n", *p);
 		p++;
 	}
 
