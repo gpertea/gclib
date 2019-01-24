@@ -801,18 +801,23 @@ bool parseFloat(char* &p, float& v) {
 bool parseInt(char* &p, int& i) { //pointer p is advanced after the number
  while (*p==' ' || *p=='\t') p++;
  char* start=p;
+ char* p0=p;
  if (*p=='-') p++;
-       else if (*p=='+') { p++;start++; }
- while ((*p>='1' && *p<='9') || *p=='0') p++;
- //now p is on a non-digit;
- if (*start=='-' && p==start+1) return false;
- char saved=*p;
- *p='\0';
- char* endptr=p;
+      else if (*p=='+') { p++;start++; }
+ char* atdigits=p;
+ while (*p>='0' && *p<='9') p++;
+ //now p should be past the digits
+ if (atdigits==p) {//no digits found!
+	 p=p0;
+	 return false;
+ }
+ char* endptr=NULL;
  long l=strtol(start,&endptr,10);
  i=(int)l;
- *p=saved;
- if (endptr!=p || i!=l) return false;
+ if (endptr!=p || endptr==start || i!=l) {
+	 p=p0;
+	 return false;
+ }
  return true;
 }
 
@@ -820,54 +825,56 @@ bool strToInt(char* p, int& i) {
 	 while (*p==' ' || *p=='\t') p++;
 	 char* start=p;
 	 if (*p=='-') p++;
-	       else if (*p=='+') { p++;start++; }
-	 while ((*p>='1' && *p<='9') || *p=='0') p++;
-	 //now p is on a non-digit;
-	 if (*start=='-' && p==start+1) return false;
-	 char saved=*p;
-	 *p='\0';
-	 char* endptr=p;
+	      else if (*p=='+') { p++;start++; }
+	 char* atdigits=p;
+	 while (*p>='0' && *p<='9') p++;
+	 //now p should be past the digits
+	 if (atdigits==p) //no digits found!
+		 return false;
+	 char* endptr=NULL;
 	 long l=strtol(start,&endptr,10);
 	 i=(int)l;
-	 *p=saved;
-	 if (endptr!=p || i!=l) return false;
+	 if (endptr!=p || endptr==start || i!=l)
+		 return false;
 	 return true;
 }
 
 bool strToUInt(char* p, uint& i) {
-	 while (*p==' ' || *p=='\t') p++;
-	 char* start=p;
-	 if (*p=='-') return false;
-	       else if (*p=='+') { p++;start++; }
-	 while ((*p>='1' && *p<='9') || *p=='0') p++;
-	 //now p is on a non-digit;
-	 if (*start=='-' && p==start+1) return false;
-	 char saved=*p;
-	 *p='\0';
-	 char* endptr=p;
-	 unsigned long l=strtoul(start,&endptr,10);
-	 i=(uint) l;
-	 *p=saved;
-	 if (endptr!=p || i!=l) return false;
-	 return true;
+	while (*p==' ' || *p=='\t') p++;
+	char* start=p;
+	if (*p=='-') return false;
+	else if (*p=='+') { p++;start++; }
+	while (*p>='0' && *p<='9') p++;
+	//now p is on a non-digit;
+	if (start==p) return false;
+	char* endptr=NULL;
+	unsigned long l=strtoul(start,&endptr,10);
+	i=(uint) l;
+	if (endptr!=p || endptr==start || i!=l)
+		return false;
+	return true;
 }
 
 
 bool parseUInt(char* &p, uint& i) { //pointer p is advanced after the number
  while (*p==' ' || *p=='\t') p++;
+ char* p0=p;
  char* start=p;
  if (*p=='-') return false;
        else if (*p=='+') { p++;start++; }
- while ((*p>='1' && *p<='9') || *p=='0') p++;
+ while (*p>='0' && *p<='9') p++;
  //now p is on a non-digit;
- if (*start=='-' && p==start+1) return false;
- char saved=*p;
- *p='\0';
- char* endptr=p;
+ if (start==p) {
+	 p=p0;
+	 return false;
+ }
+ char* endptr=NULL;
  unsigned long l=strtoul(start,&endptr,10);
  i=(uint) l;
- *p=saved;
- if (endptr!=p || i!=l) return false;
+ if (endptr!=p || endptr==start || i!=l) {
+	 p=p0;
+	 return false;
+ }
  return true;
 }
 
