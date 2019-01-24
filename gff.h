@@ -159,9 +159,11 @@ class BEDLine {
 };
 
 class GffLine {
+ protected:
     char* _parents; //stores a copy of the Parent attribute value,
        //with commas replaced by \0
     int _parents_len;
+    bool parseSegmentList(GVec<GSeg>& segs, char* str);
  public:
     char* dupline; //duplicate of original line
     char* line; //this will have tabs replaced by \0
@@ -197,9 +199,10 @@ class GffLine {
     };
     int8_t exontype; // gffExonType
     char phase;  // '.' , '0', '1' or '2', can be also given as CDSphase attribute in TLF
-    uint cds_start; //if TLF: CDS attribute
+    uint cds_start; //if TLF: CDS=start:end attribute
     uint cds_end;
     GVec<GSeg> exons; //if TLF: exons= attribute
+    GVec<GSeg> cdss; //if TLF: CDS=segment_list attribute
     // -- allocated strings:
     char* gene_name; //value of gene_name attribute (GTF) if present or Name attribute of a gene feature (GFF3)
     char* gene_id; //value of gene_id attribute (GTF) if present or ID attribute of a gene feature (GFF3)
@@ -224,7 +227,7 @@ class GffLine {
     		ftype(NULL), ftype_id(l.ftype_id), info(NULL), fstart(l.fstart), fend(l.fend),
 			//qstart(l.fstart), qend(l.fend), qlen(l.qlen),
 			score(l.score), strand(l.strand), flags(l.flags), exontype(l.exontype),
-			phase(l.phase), cds_start(l.cds_start), cds_end(l.cds_end), exons(l.exons),
+			phase(l.phase), cds_start(l.cds_start), cds_end(l.cds_end), exons(l.exons), cdss(l.cdss),
 			gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(l.num_parents), ID(NULL) {
     	//if (l==NULL || l->line==NULL)
     	//	GError("Error: invalid GffLine(l)\n");
@@ -258,8 +261,8 @@ class GffLine {
     GffLine(): _parents(NULL), _parents_len(0),
     		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
     		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), //qstart(0), qend(0), qlen(0),
-    		score(0), strand(0), flags(0), exontype(0), phase(0), cds_start(0), cds_end(0), exons(),
-    		gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(0), ID(NULL) {
+    		score(0), strand(0), flags(0), exontype(0), phase(0), cds_start(0), cds_end(0),
+			exons(), cdss(), gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(0), ID(NULL) {
     }
     ~GffLine() {
     	GFREE(dupline);
@@ -533,18 +536,20 @@ class GffObj:public GSeg {
    union {
       unsigned int flags;
       struct {
-    	  bool flag_HAS_ERRORS:1;
+    	  bool flag_HAS_ERRORS       :1;
     	  bool flag_CHILDREN_PROMOTED:1;
     	  bool flag_IS_GENE          :1;
     	  bool flag_IS_TRANSCRIPT    :1;
-    	  bool flag_HAS_GFF_ID       :1; //found transcript feature line (GFF3 or GTF)
+    	  bool flag_HAS_GFF_ID       :1; //found transcript/RNA feature line (GFF3 or GTF)
     	  bool flag_BY_EXON          :1; //created by subfeature (exon/CDS) directly
     	  bool flag_CDS_ONLY         :1; //transcript defined by CDS features only (GffObj::isCDS())
-    	  bool flag_CDS_PARTIAL      :1; //transcript CDS is incomplete
-    	  bool flag_CDS_SHIFT        :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
+    	  bool flag_CDS_NOSTART      :1; //partial CDS (no start codon)
+    	  bool flag_CDS_NOSTOP       :1; //partial CDS (no stop codon)
+    	  bool flag_CDS_X            :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
+    	                             //CDS segments stored in ::cdss are not intron-compatible with exon segments
     	  bool flag_DISCARDED        :1;
     	  bool flag_LST_KEEP         :1;
-    	  bool flag_FINALIZED        :1; //if finalize() was ever called for this GffObj
+    	  bool flag_FINALIZED        :1; //if finalize() was already called for this GffObj
     	  unsigned int gff_level     :4; //hierarchical level (0..15)
       };
    };
@@ -559,7 +564,7 @@ public:
   int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
-  GList<GffExon>* cds; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
+  GList<GffExon>* cdss; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
                       //exons boundaries
   GPVec<GffObj> children;
   GffObj* parent;
@@ -599,10 +604,10 @@ public:
     //return (ftype_id==gff_fid_mRNA && exons.Count()>0);
     return (isTranscript() && exons.Count()>0);
   }
-  int addExon(GffReader& reader, GffLine& gl);
+  int readExon(GffReader& reader, GffLine& gl);
   int addExon(GList<GffExon>& segs, GffLine& gl);
   //for use only AFTER finalize()
-  int addExon(uint segstart, uint segend, float sc=0, char ph='.',
+  int addExonSegment(uint segstart, uint segend, float sc=0, char ph='.',
               bool iscds=false, int8_t exontype=0);
 
 protected:
@@ -630,7 +635,7 @@ public:
       if (sharedattrs) exons[0]->attrs=NULL;
       }
     }
-  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), cds(NULL), children(1,false) {
+  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), cdss(NULL), children(1,false) {
                                    //exons: sorted, free, non-unique
        gffID=NULL;
        uptr=NULL;
@@ -659,7 +664,7 @@ public:
        GFREE(gffID);
        GFREE(gene_name);
        GFREE(geneID);
-       GFREE(cds);
+       GFREE(cdss);
        clearAttrs();
        gffnames_unref(names);
        }
@@ -672,7 +677,7 @@ public:
      //if (sid==gff_fid_exon && isCDS) sid=gff_fid_CDS;
      return names->feats.getName(exon_ftype_id);
      }
-   void setCDS(uint cd_start, uint cd_end, char phase=0);
+   //void setCDS(uint cd_start, uint cd_end, char phase=0);
 
    bool monoFeature() {
      return (exons.Count()==0 ||
@@ -735,7 +740,7 @@ public:
 
    const char* getTrackName() {
      return names->tracks.getName(track_id);
-     }
+   }
    bool exonOverlap(uint s, uint e) {//check if ANY exon overlaps given segment
       //ignores strand!
       if (s>e) Gswap(s,e);
@@ -743,22 +748,22 @@ public:
          if (exons[i]->overlap(s,e)) return true;
          }
       return false;
-      }
-    bool exonOverlap(GffObj& m) {//check if ANY exon overlaps given segment
-      //if (gseq_id!=m.gseq_id) return false;
-      // ignores strand and gseq_id, must check in advance
-      for (int i=0;i<exons.Count();i++) {
+   }
+   bool exonOverlap(GffObj& m) {//check if ANY exon overlaps given segment
+     //if (gseq_id!=m.gseq_id) return false;
+     // ignores strand and gseq_id, must check in advance
+     for (int i=0;i<exons.Count();i++) {
          for (int j=0;j<m.exons.Count();j++) {
             if (exons[i]->start>m.exons[j]->end) continue;
             if (m.exons[j]->start>exons[i]->end) break;
             //-- overlap if we are here:
             return true;
-            }
          }
-      return false;
-      }
+     }
+     return false;
+   }
 
-    int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0) {
+   int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0) {
       //return the exons' index for the overlapping OR ADJACENT exon
       //ovlen, if given, will return the overlap length
       //if (s>e) Gswap(s,e);
