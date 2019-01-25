@@ -718,7 +718,7 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  skipLine=0;
 }
 
-/*
+//FIXME - this should only be used AFTER finalize() was called, if cdss=NULL of course
 void GffObj::setCDS(uint cd_start, uint cd_end, char phase) {
   if (cd_start>=this->start) {
         this->CDstart=cd_start;
@@ -737,7 +737,7 @@ void GffObj::setCDS(uint cd_start, uint cd_end, char phase) {
             else exons[0]->exontype=exgffExon;
      }
 }
-*/
+
 int GffObj::readExon(GffReader& reader, GffLine& gl) {
   // -- this should only be called before ::finalize()!
   //should make sure to get the right subftype_id!

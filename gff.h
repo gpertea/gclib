@@ -677,7 +677,7 @@ public:
      //if (sid==gff_fid_exon && isCDS) sid=gff_fid_CDS;
      return names->feats.getName(exon_ftype_id);
      }
-   //void setCDS(uint cd_start, uint cd_end, char phase=0);
+   void setCDS(uint cd_start, uint cd_end, char phase=0);
 
    bool monoFeature() {
      return (exons.Count()==0 ||
