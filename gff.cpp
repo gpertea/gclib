@@ -802,6 +802,7 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
   if (gl.is_cds) {
      if (cdss==NULL) cdss=new GList<GffExon>(true, true, false);
      segs=cdss;
+     addExon(exons, gl);//always add/merge CDS features into exons
   } else {
      segs=&exons;
   }
@@ -822,9 +823,10 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
   return eidx;
 }
 
-int GffObj::addExon(GList<GffExon>& segs, GffLine& gl) {
+int GffObj::addExon(GList<GffExon>& segs, GffLine& gl, int8_t exntype) {
 	int ovlen=0;
-	if (gl.exontype>exgffNone) { //check for overlaps between exon/CDS-type segments
+	if (exntype==exgffNone) exntype=gl.exontype;
+	if (exntype!=exgffNone) { //check for overlaps between exon/CDS-type segments
 		int oi=-1;
 	    while ((oi=exonOverlapIdx(segs, gl.fstart, gl.fend, &ovlen, oi+1))>=0) {
 	        //note: ovlen==0 for adjacent segments
@@ -833,11 +835,13 @@ int GffObj::addExon(GList<GffExon>& segs, GffLine& gl) {
 		    		//existing feature contains this segment, so we do NOT need to add it
 		    		return oi;
 		    }
-		    if (!(segs[oi]->exontype==exgffCDS && gl.exontype==exgffCDS)) {
-		    	//NEVER merge two CDS adjacent/overlapping features!
+		    if (ovlen==0 || exntype!=exgffCDS || segs[oi]->exontype!=exgffCDS) {
+		    	//NEVER merge two CDS overlapping features!
+		    	//but always merge adjacent features
 		    	int8_t segtype=exgffExon;
-		    	if (segs[oi]->exontype==exgffCDS || gl.exontype==exgffCDS)
+		    	if (segs[oi]->exontype==exgffCDS || exntype==exgffCDS)
 		    		segtype=exgffCDS;
+		    	//if expanded upward, may overlap the segment(s) above
 		    	expandSegment(segs, oi, gl.fstart, gl.fend, segtype, gl.score);
 		    	return oi;
 		    }
@@ -1045,45 +1049,46 @@ int GffObj::addExonSegment(uint segstart, uint segend, float sc, char ph, bool i
    return eidx;
 }
 
-void GffObj::expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend, int8_t exontype, float sc) {
+void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint segend, int8_t exontype, float sc) {
   //oi is the index of the *first* overlapping segment found that must be enlarged
-  covlen-=exons[oi]->len();
-  if (segstart<exons[oi]->start)
-    exons[oi]->start=segstart;
+  covlen-=segs[oi]->len();
+  if (segstart<segs[oi]->start)
+	  segs[oi]->start=segstart;
   //if (qs && qs<exons[oi]->qstart) exons[oi]->qstart=qs;
-  if (segend>exons[oi]->end)
-    exons[oi]->end=segend;
+  if (segend>segs[oi]->end)
+	  segs[oi]->end=segend;
   //if (qe && qe>exons[oi]->qend) exons[oi]->qend=qe;
   //warning: score cannot be properly adjusted! e.g. if it's a p-value it's just going to get worse
-  if (sc!=0) exons[oi]->score=sc;
+  if (sc!=0) segs[oi]->score=sc;
   //covlen+=exons[oi]->len();
   //if (exons[oi]->exontype< exontype) -- always true
-  exons[oi]->exontype = exontype;
+  segs[oi]->exontype = exontype;
   //if (exontype==exgffCDS) exons[oi]->phase=fr;
   //we must check if any more exons are also overlapping this
   int ni=oi+1; //next exon index after oi
-  while (ni<exons.Count() && exons[ni]->start<=segend+1) { // next segment overlaps OR adjacent to newly enlarged segment
-     //if (exons[ni]->exontype<exontype && exons[ni]->end<=segend) {
-	  if (exons[ni]->exontype>0) {
-         if (exons[ni]->start<exons[oi]->start) exons[oi]->start=exons[ni]->start;
-         if (exons[ni]->end>exons[oi]->end) exons[oi]->end=exons[ni]->end;
-         //if (exons[ni]->qstart<exons[oi]->qstart) exons[oi]->qstart=exons[ni]->qstart;
-         //if (exons[ni]->qend>exons[oi]->qend) exons[oi]->qend=exons[ni]->qend;
-         exons.Delete(ni);
+  while (ni<segs.Count() && segs[ni]->start<=segend+1) { // next segment overlaps OR adjacent to newly enlarged segment
+	  if (segs[ni]->exontype>0 &&
+		(segs[ni]->start==segend+1 || segs[ni]->exontype!=exgffCDS || exontype!=exgffCDS)) {
+         if (segs[ni]->start<segs[oi]->start) {
+        	 segs[oi]->start=segs[ni]->start;
+        	 if (strand=='+') segs[oi]->phase=segs[ni]->phase;
+         }
+         if (segs[ni]->end>segs[oi]->end) {
+        	 segs[oi]->end=segs[ni]->end;
+        	 if (strand=='-') segs[oi]->phase=segs[ni]->phase;
+         }
+
+         segs.Delete(ni);
       } else ++ni;
-      /*else {
-         if (gff_show_warnings) GMessage("GFF Warning: overlapping existing exon(%d-%d) while expanding to %d-%d for GFF ID %s\n",
-                exons[ni]->start, exons[ni]->end, segstart, segend, gffID);
-         //hasErrors(true);
-         break;
-      }*/
   } //until no more overlapping/adjacent segments found
   // -- make sure any other related boundaries are updated:
-  start=exons.First()->start;
-  end=exons.Last()->end;
-  //recalculate covlen
-  covlen=0;
-  for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
+  if (isFinalized() && &segs==&exons) {
+	start=segs.First()->start;
+	end=segs.Last()->end;
+	//recalculate covlen
+    covlen=0;
+    for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
+  }
 }
 
 void GffObj::removeExon(int idx) {
@@ -1887,17 +1892,18 @@ void GfList::finalize(GffReader* gfr) { //if set, enforce sort by locus
 
 GffObj* GffObj::finalize(GffReader* gfr) {
 
- if (!isDiscarded() && exons.Count()==0 && (isTranscript() || (isGene() && children.Count()==0 && gfr->gene2exon)) ) {
-		 //add exon feature to an exonless transcript
-		 addExonSegment(this->start, this->end);
-		 //effectively this becomes a transcript (even the childless genes if gene2exon)
-		 isTranscript(true);
+ if (!isDiscarded()) {
+	if (exons.Count()==0 && (isTranscript() || (isGene() && children.Count()==0 && gfr->gene2exon)) ) {
+ 		//add exon feature to an exonless transcript/gene
+		addExonSegment(this->start, this->end);
+		//effectively this becomes a transcript (even the childless genes if gene2exon)
+		isTranscript(true);
+	}
  }
 
  if (gfr->transcriptsOnly && !isTranscript()) {
  	isDiscarded(true); //discard non-transcripts
  }
-
  if (ftype_id==gff_fid_transcript && CDstart>0) {
  	ftype_id=gff_fid_mRNA;
  	//exon_ftype_id=gff_fid_exon;
@@ -1905,25 +1911,21 @@ GffObj* GffObj::finalize(GffReader* gfr) {
  if (exons.Count()>0 && (isTranscript() || exon_ftype_id==gff_fid_exon)) {
  	if (gfr->mergeCloseExons) {
  		//int mindist=mergeCloseExons ? 5:1;
- 		int mindist=5;
  		for (int i=0;i<exons.Count()-1;i++) {
  			int ni=i+1;
  			uint mend=exons[i]->end;
  			while (ni<exons.Count()) {
- 				int dist=(int)(exons[ni]->start-mend);
- 				if (dist>mindist) break; //no merging with next segment
+ 				int dist=(int)(exons[ni]->start-mend-1); //<0 = overlap, 0 = adjacent, >0 = bases apart
+ 				if (dist>4) break; //no merging with next segment
  				if (gfr!=NULL && gfr->gff_warns && dist!=0 && (exons[ni]->exontype!=exgffUTR && exons[i]->exontype!=exgffUTR)) {
- 					GMessage("GFF warning: merging adjacent/overlapping segments of %s on %s (%d-%d, %d-%d)\n",
- 							gffID, getGSeqName(), exons[i]->start, exons[i]->end,exons[ni]->start, exons[ni]->end);
+ 					GMessage("GFF warning: merging adjacent/overlapping segments (distance=%d) of %s on %s (%d-%d, %d-%d)\n",
+ 							dist, gffID, getGSeqName(), exons[i]->start, exons[i]->end,exons[ni]->start, exons[ni]->end);
  				}
  				mend=exons[ni]->end;
- 				covlen-=exons[i]->len();
  				exons[i]->end=mend;
- 				covlen+=exons[i]->len();
- 				covlen-=exons[ni]->len();
  				if (exons[ni]->attrs!=NULL && (exons[i]->attrs==NULL ||
  						exons[i]->attrs->Count()<exons[ni]->attrs->Count())) {
- 					//use the other exon attributes, if more
+ 					//use the other exon attributes, if it has more
  					delete(exons[i]->attrs);
  					exons[i]->attrs=exons[ni]->attrs;
  					exons[ni]->attrs=NULL;
@@ -1932,9 +1934,6 @@ GffObj* GffObj::finalize(GffReader* gfr) {
  			} //check for merge with next exon
  		} //for each exon
  	} //merge close exons
- 	//shrink transcript to the exons' span
- 	this->start=exons.First()->start;
- 	this->end=exons.Last()->end;
  }
  //more post processing of accepted records
  if (!this->isDiscarded()) {
@@ -1966,9 +1965,25 @@ GffObj* GffObj::finalize(GffReader* gfr) {
  	 	}
  	 	if (attrs_discarded) exons[0]->attrs->Pack();
  	 }
- 	 //FIXME: fix dubious, malformed cases of exonless, childless transcripts/genes (?)
- 	 //FIXME: this is BAD for super-genes(loci) that just encompass (but not parent)
- 	 //       multiple smaller genes ! (like MHC loci in NCBI annotation)
+ 	//shrink transcript to the exons' span, update covlen;
+  	this->start=exons.First()->start;
+  	this->end=exons.Last()->end;
+  	covlen=0;
+  	for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
+
+  	//-- check if CDS segments are different from exons and thus worth keeping
+    if (cdss!=NULL && cdss->Count()>0) {
+    	CDstart=cdss->First()->start;
+    	CDend=cdss->Last()->end;
+    	CDphase=(strand=='-')? cdss->Last()->phase : cdss->First()->phase;
+    	bool keep_cds=false;
+        if (cdss->Count()==1) {
+        	//TODO: check that the CDS segment is within a single exon
+        } else {
+        	//TODO: introns must match, CDS start and end should be within exons
+        }
+
+    }
 
  	//collect stats for the reference genomic sequence
  	if (gfr->gseqtable.Count()<=gseq_id) {
@@ -1988,7 +2003,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
  		gsd->maxfeat_len=this->len();
  		gsd->maxfeat=this;
  	}
- }
+ }//not a discarded object
  uptr=NULL;
  udata=0;
  return this;
@@ -2549,8 +2564,8 @@ void GffObj::printSummary(FILE* fout) {
  fprintf(fout, "%s\t%c\t%d\t%d\t%4.2f\n", gffID,
           strand, start, end, gscore);
 }
-//TODO we should also have an escapeChars function for when
-//we want to write a GFF3 strictly compliant to the dang specification
+//TODO we should also have an escapeChars function for some situations
+//when we want to write a GFF3 strictly compliant to the dang specification
 void GffObj::decodeHexChars(char* dbuf, const char* s, int maxlen) {
 	int dlen=0;
 	dbuf[0]=0;
@@ -2999,7 +3014,7 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
 		} //no intron overlap, skipping qry intron
 		intron_ovl=true;
 		//overlapping introns, test junction matching
-		bool smatch=(mstart==rstart); //TODO: what if the introns differ just by 2 bases at one end?
+		bool smatch=(mstart==rstart);
 		bool ematch=(mend==rend);
 		if (smatch || ematch) junct_match=true;
 		if (smatch && ematch) {

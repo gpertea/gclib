@@ -558,6 +558,7 @@ class GffObj:public GSeg {
     	  bool flag_CDS_NOSTOP       :1; //partial CDS (no stop codon)
     	  bool flag_CDS_X            :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
     	                             //CDS segments stored in ::cdss are not intron-compatible with exon segments
+    	  bool flag_TRANS_SPLICED    :1;
     	  bool flag_DISCARDED        :1;
     	  bool flag_LST_KEEP         :1;
     	  bool flag_FINALIZED        :1; //if finalize() was already called for this GffObj
@@ -597,6 +598,9 @@ public:
   void createdByExon(bool v) {flag_BY_EXON=v; }
   bool isCDSOnly() { return flag_CDS_ONLY; }
   void isCDSOnly(bool v) {  flag_CDS_ONLY=v; }
+  bool isFinalized() {  return flag_FINALIZED; }
+  void isFinalized(bool v) {  flag_FINALIZED=v; }
+
   bool isGene() { return flag_IS_GENE; }
   void isGene(bool v) {flag_IS_GENE=v; }
   bool isDiscarded() { return flag_DISCARDED; }
@@ -616,7 +620,7 @@ public:
     return (isTranscript() && exons.Count()>0);
   }
   int readExon(GffReader& reader, GffLine& gl);
-  int addExon(GList<GffExon>& segs, GffLine& gl);
+  int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exntype=exgffNone); //add to cdss or exons
   //for use only AFTER finalize()
   int addExonSegment(uint segstart, uint segend, float sc=0, char ph='.',
               bool iscds=false, int8_t exontype=0);
