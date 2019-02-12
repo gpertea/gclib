@@ -1080,10 +1080,12 @@ class GfList: public GList<GffObj> {
    void freeUnused() {
      for (int i=0;i<fCount;i++) {
        if (fList[i]->isUsed()) continue;
-       //inform the children
+       /*//inform the children?
+       //FIXME: some of these children may have been deallocated (?)
        for (int c=0;c<fList[i]->children.Count();c++) {
           fList[i]->children[c]->parent=NULL;
-          }
+       }
+       */
        delete fList[i];
        fList[i]=NULL;
        }

@@ -339,7 +339,7 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  if (tidx<8) { // ignore non-GFF lines
   // GMessage("Warning: error parsing GFF/GTF line:\n%s\n", l);
   return;
-  }
+ }
  gseqname=t[0];
  track=t[1];
  ftype=t[2];
@@ -372,6 +372,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  strncpy(fnamelc, ftype, 127);
  fnamelc[127]=0;
  strlower(fnamelc); //convert to lower case
+ if (endsWith(fnamelc, "match")) {
+   //TODO: do not discard generic cDNA_match/protein_match features, convert them internally
+   // (when a hit chain has multiple _match features with the same ID, e.g. multiple HSPs with the same subject)
+   return;
+ }
  bool is_t_data=false;
  bool someRNA=false;
  if (strstr(fnamelc, "utr")!=NULL) {
@@ -1765,7 +1770,17 @@ void GfList::finalize(GffReader* gfr, bool mergeCloseExons,
     fList[i]->finalize(gfr, mergeCloseExons, keepAttrs, noExonAttr);
     if (fList[i]->isDiscarded()) {
        discarded.Add(fList[i]);
-       if (fList[i]->children.Count()>0) {
+       //inform parent that thiis child is removed
+       if (fList[i]->parent!=NULL) {
+    	   GPVec<GffObj>& pchildren=fList[i]->parent->children;
+    	   for (int c=0;c<pchildren.Count();c++) {
+    		   if (pchildren[c]==fList[i]) {
+    			   pchildren.Delete(c);
+    			   break;
+    		   }
+    	   }
+       }
+       if (fList[i]->children.Count()>0) { //inform children that the parent was removed
       	 for (int c=0;c<fList[i]->children.Count();c++) {
       		 fList[i]->children[c]->parent=NULL;
       		 if (keepAttrs)
@@ -1781,7 +1796,7 @@ void GfList::finalize(GffReader* gfr, bool mergeCloseExons,
   if (mustSort) { //force (re-)sorting
      this->setSorted(false);
      this->setSorted((GCompareProc*)gfo_cmpByLoc);
-     }
+  }
 }
 
 GffObj* GffObj::finalize(GffReader* gfr, bool mergeCloseExons, bool keepAttrs, bool noExonAttr) {
@@ -2469,20 +2484,26 @@ void GffObj::decodeHexChars(char* dbuf, const char* s, int maxlen) {
 	if (s==NULL) return;
 	for (const char* p=s;(*p)!=0 && dlen<maxlen;++p) {
 		if (p[0]=='%' && isxdigit(p[1]) && isxdigit(p[2])) {
-			int a=p[1];
+			int a=*(++p);
 			if (a>'Z') a^=0x20; //toupper()
 			if (a>'9') a=10+(a-'A');
 			      else a-='0';
-			int b=p[2];
+			int b=*(++p);
 			if (b>'Z') b^=0x20;
 			if (b>'9') b=10+(b-'A');
 			      else b-='0';
 			char c=(char)((a<<4)+b);
-			if (c==';') c='.';
-			if (c<='\t') c=' ';
+			if (c=='%') {
+				dbuf[dlen]='p';
+				++dlen;
+				dbuf[dlen]='r';
+				++dlen;
+				c='c';
+			}
+			else if (c==';') c='.';
+			else if (c<='\t') c=' ';
 			if (c>=' ') {
 				dbuf[dlen]=c;
-				++p;++p;
 				++dlen;
 				continue;
 			}
