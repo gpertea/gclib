@@ -790,13 +790,14 @@ int GffObj::addExon(GffReader* reader, GffLine* gl, bool keepAttr, bool noExonAt
   if (eidx<0) return eidx; //this should never happen
   if (keepAttr) {
      if (noExonAttr) {
-         if (attrs==NULL) //place the parsed attributes directly at transcript level
-           parseAttrs(attrs, gl->info);
-         }
-       else { //need all exon-level attributes
+        //if (attrs==NULL)
+        //place the parsed attributes directly at transcript level
+        parseAttrs(attrs, gl->info, true);
+     }
+     else { //need all exon-level attributes
          parseAttrs(exons[eidx]->attrs, gl->info, true);
-         }
-      }
+     }
+  }
   return eidx;
 }
 
@@ -1414,7 +1415,7 @@ GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline,
 }
 
 
-bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex, bool noExonAttr) {
+bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex, bool keepAttrs, bool noExonAttr) {
 	bool r=true;
 	if (gffline->strand!=prevgfo->strand) {
 		if (prevgfo->strand=='.') {
@@ -1436,7 +1437,7 @@ bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon
 		r=false;
 		if (!gff_warns) exit(1);
 	}
-	int eidx=prevgfo->addExon(this, gffline, !noExonAttr, noExonAttr);
+	int eidx=prevgfo->addExon(this, gffline, keepAttrs, noExonAttr);
 	if (pex!=NULL && eidx>=0) {
 		//if (eidx==0 && gffline->exontype>0) prevgfo->isTranscript(true);
 		if (gffline->ID!=NULL && gffline->exontype==0)
@@ -1482,7 +1483,7 @@ GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonEx
 }
 
 
-GffObj* GffReader::readNext() { //user must free the returned GffObj*
+GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free the returned GffObj*
  GffObj* gfo=NULL;
  GSeg tseg(0,0);
  if (is_BED) {
@@ -1507,7 +1508,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
     	bool sameID=(lastReadNext!=NULL && strcmp(lastReadNext, tid)==0);
     	if (sameID) {
     		if (gfo==NULL) GError("Error: same transcript ID but GffObj inexistent?!(%s)\n", tid);
-    		addExonFeature(gfo, gffline);
+    		addExonFeature(gfo, gffline, NULL, keepAttrs, noExonAttrs);
     	} else {
     		//new transcript
     		if (gfo==NULL) {
@@ -1706,7 +1707,7 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 									  addExon=true;
 								}
 								if (addExon)
-									if (!addExonFeature(parentgfo, gffline, &pex, noExonAttr))
+									if (!addExonFeature(parentgfo, gffline, &pex, keepAttr, noExonAttr))
 									   validation_errors=true;
 
 							}
@@ -1724,7 +1725,7 @@ void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
 								//promote that subfeature to a full GffObj
 								GffObj* gfoh=promoteFeature(subp, subp_name, pex, keepAttr, noExonAttr);
 								//add current gffline as an exon of the newly promoted subfeature
-								if (!addExonFeature(gfoh, gffline, &pex, noExonAttr))
+								if (!addExonFeature(gfoh, gffline, &pex, keepAttr, noExonAttr))
 									validation_errors=true;
 							}
 						}
@@ -1851,8 +1852,8 @@ GffObj* GffObj::finalize(GffReader* gfr, bool mergeCloseExons, bool keepAttrs, b
  }
  //more post processing of accepted records
  if (!this->isDiscarded()) {
- 	 //attribute reduction for GTF records
- 	 if (keepAttrs && !noExonAttr && !hasGffID()
+ 	 //attribute redundancy reduction
+ 	 if (keepAttrs && !noExonAttr //&& !hasGffID()
  	 		&& exons.Count()>0 && exons[0]->attrs!=NULL) {
  	 	bool attrs_discarded=false;
  	 	for (int a=0;a<exons[0]->attrs->Count();a++) {
@@ -1868,7 +1869,7 @@ GffObj* GffObj::finalize(GffReader* gfr, bool mergeCloseExons, bool keepAttrs, b
  	 			}
  	 		}
  	 		if (sameExonAttr) {
- 	 			//delete this attribute from exons level
+ 	 			//delete this attribute from exon level
  	 			attrs_discarded=true;
  	 			this->addAttr(attr_name, attr_val);
  	 			for (int i=1;i<exons.Count();i++) {

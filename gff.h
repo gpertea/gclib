@@ -650,7 +650,7 @@ public:
   int addExon(uint segstart, uint segend, double sc=0, char fr='.',
              int qs=0, int qe=0, bool iscds=false, char exontype=0);
 
-  int addExon(GffReader* reader, GffLine* gl, bool keepAttr=false, bool noExonAttr=true);
+  int addExon(GffReader* reader, GffLine* gl, bool keepAttrs=false, bool noExonAttr=true);
 
   void removeExon(int idx);
   void removeExon(GffExon* p);
@@ -1179,7 +1179,8 @@ class GffReader {
   GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline,
                                          bool keepAttr);
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
-  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL, bool noExonAttr=false);
+  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL,
+		  bool keepAttrs=false, bool noExonAttr=true);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
 		  buflen(0), gff_type(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
@@ -1243,7 +1244,7 @@ class GffReader {
   void readAll(bool keepAttr=false, bool mergeCloseExons=false, bool noExonAttr=true);
 
   //only for well-formed files: BED or GxF where exons are strictly grouped by their transcript_id/Parent
-  GffObj* readNext(); //user must free the returned GffObj* !
+  GffObj* readNext(bool keepAttrs=false, bool noExonAttrs=true); //user must free the returned GffObj* !
 
 #ifdef CUFFLINKS
     boost::crc_32_type current_crc_result() const { return _crc_result; }
