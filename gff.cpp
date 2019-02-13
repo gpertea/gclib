@@ -675,8 +675,8 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 				 gene_name=extractAttr("genesymbol");
 		 }
 	 }
-	 //prepare GTF for parseAttr by adding '=' character after the attribute name
-	 //for all attributes
+	 //*** IMPORTANT: prepare GTF for parseAttr by adding '=' character after the attribute name
+	 //          for ALL attributes
 	 p=info;
 	 bool noed=true; //not edited after the last delim
 	 bool nsp=false; //non-space found after last delim
@@ -791,7 +791,7 @@ int GffObj::addExon(GffReader* reader, GffLine* gl, bool keepAttr, bool noExonAt
   if (keepAttr) {
      if (noExonAttr) {
         //if (attrs==NULL)
-        //place the parsed attributes directly at transcript level
+        //keep exon attributes as transcript attributes
         parseAttrs(attrs, gl->info, true);
      }
      else { //need all exon-level attributes
@@ -1976,44 +1976,40 @@ void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon) {
      GError(ERR_NULL_GFNAMES, "parseAttrs()");
   if (atrlist==NULL)
       atrlist=new GffAttrs();
+  bool exon2transcript=(isExon && atrlist==this->attrs);
   char* endinfo=info+strlen(info);
   char* start=info;
   char* pch=start;
   while (start<endinfo) {
-    //skip spaces
     while (*start==' ' && start<endinfo) start++;
     pch=strchr(start, ';');
     if (pch==NULL) pch=endinfo;
-       else {
-            *pch='\0';
-            pch++;
-            }
+       else {  *pch='\0'; pch++; }
     char* ech=strchr(start,'=');
     if (ech!=NULL) { // attr=value format found
        *ech='\0';
-       //if (noExonAttr && (strcmp(start, "exon_number")==0 || strcmp(start, "exon")==0)) { start=pch; continue; }
-       if (strcmp(start, "exon_number")==0 || strcmp(start, "exon")==0 ||
-              strcmp(start, "exon_id")==0)
-           { start=pch; continue; }
+       if (exon2transcript) { //we do NOT want these exon attributes at transcript level
+          //if (noExonAttr && (strcmp(start, "exon_number")==0 || strcmp(start, "exon")==0)) { start=pch; continue; }
+          if (strcmp(start, "exon_number")==0 || strcmp(start, "exon")==0 ||
+                strcmp(start, "exon_id")==0)  { start=pch; continue; }
+       }
        ech++;
        while (*ech==' ' && ech<endinfo) ech++;//skip extra spaces after the '='
-       //atrlist->Add(new GffAttr(names->attrs.addName(start),ech));
-       //make sure we don't add the same attribute more than once
-       if (isExon && (strcmp(start, "protein_id")==0)) {
-             //Ensembl special case
-             this->addAttr(start, ech);
-             start=pch;
-             continue;
-             }
-       atrlist->add_or_update(names, start, ech);
+       /*
+       if (isExon && startsiWith(start, "protein")) {
+    	  //--protein info should never be left at exon level
+    	  // ( attribute policing much? :p )
+          this->addAttr(start, ech);
+          start=pch;
+          continue;
        }
-      /*
-      else { //not an attr=value format
-        atrlist->Add(new GffAttr(names->attrs.addName(start),"1"));
-        }
-      */
-    start=pch;
+       */
+       if (exon2transcript)
+    	    atrlist->add_if_new(this->names, start, ech); //never override transcript attribute with exon's
+       else atrlist->add_or_update(this->names, start, ech); //overwrite previous attr with the same name
     }
+    start=pch;
+  } //while info characters
   if (atrlist->Count()==0) { delete atrlist; atrlist=NULL; }
 }
 
