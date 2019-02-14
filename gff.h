@@ -624,6 +624,7 @@ public:
   //for use only AFTER finalize()
   int addExonSegment(uint segstart, uint segend, float sc=0, char ph='.',
               bool iscds=false, int8_t exontype=0);
+
 protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
