@@ -44,18 +44,6 @@ template<> struct IsPrimitiveType<unsigned long> { enum { VAL = 1 }; };
 template<> struct IsPrimitiveType<long long> { enum { VAL = 1 }; };
 template<> struct IsPrimitiveType<unsigned long long> { enum { VAL = 1 }; };
 
-/*
-template<> struct IsPrimitiveType<int64_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<uint64_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<int32_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<uint32_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<int16_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<uint16_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<int8_t> { enum { VAL = 1 }; };
-template<> struct IsPrimitiveType<uint8_t> { enum { VAL = 1 }; };
-*/
-
-
 template <class OBJ> int DefLTCompareProc(pointer p1, pointer p2) {
  OBJ& o1 = *((OBJ*) p1);
  OBJ& o2 = *((OBJ*) p2);
@@ -342,7 +330,7 @@ template <class OBJ> void GVec<OBJ>::Reverse() {
      c=fArray[l];fArray[l]=fArray[r];
      fArray[r]=c;
      l++;r--;
-     }
+  }
 }
 
 template <class OBJ> void GVec<OBJ>::Grow(int idx, OBJ& item) {

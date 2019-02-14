@@ -283,7 +283,7 @@ class GffAttr {
      attr_id=an_id;
      attr_val=NULL;
      setValue(av);
-     }
+   }
   ~GffAttr() {
      GFREE(attr_val);
      }
@@ -480,55 +480,91 @@ class GffAttrs:public GList<GffAttr> {
       this->Add(new GffAttr(aid, val));
     }
 
+    int haveId(int attr_id) {
+        for (int i=0;i<Count();i++)
+           if (attr_id==Get(i)->attr_id)
+        	   return i;
+        return -1;
+    }
+
+    int haveId(const char* attrname, GffNames* names) {
+    	int aid=names->attrs.getId(attrname);
+    	if (aid>=0) {
+            for (int i=0;i<Count();i++)
+               if (aid==Get(i)->attr_id)
+            	   return i;
+    	}
+    	return -1;
+    }
+
     char* getAttr(GffNames* names, const char* attrname) {
       int aid=names->attrs.getId(attrname);
       if (aid>=0)
         for (int i=0;i<Count();i++)
           if (aid==Get(i)->attr_id) return Get(i)->attr_val;
       return NULL;
-      }
+    }
+
     char* getAttr(int aid) {
       if (aid>=0)
         for (int i=0;i<Count();i++)
           if (aid==Get(i)->attr_id) return Get(i)->attr_val;
       return NULL;
-      }
+    }
+
+    void copyAttrs(GffAttrs* attrs) {
+ 	 //deep copy attributes from another GffAttrs list
+     // (only the ones which do not exist yet)
+    	if (attrs==NULL) return;
+    	for (int i=0;i<attrs->Count();i++) {
+    		int aid=attrs->Get(i)->attr_id;
+    		if (haveId(aid)<0)
+    			Add(new GffAttr(aid, attrs->Get(i)->attr_val));
+    	}
+    }
 };
 
-
-class GffSegment  : public GSeg {
-   public:
-	  GffAttrs* attrs; //other attributes kept for this exon/CDS
-	  float score; // gff score column
-
-	  char* getAttr(GffNames* names, const char* atrname) {
-	    if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
-	    return attrs->getAttr(names, atrname);
-	  }
-
-	  char* getAttr(int aid) {
-	    if (attrs==NULL) return NULL;
-	    return attrs->getAttr(aid);
-	  }
-
-	  GffSegment(int s=0, int e=0, float sc=0):attrs(NULL), score(sc) {
-		if (s<e) { start=s; end=e; }
-		    else { start=e; end=s; }
-	  }
-	  ~GffSegment() { //destructor
-	     if (attrs!=NULL) delete attrs;
-	  }
-};
-
-class GffExon : public GffSegment {
+class GffExon : public GSeg {
  public:
+  bool sharedAttrs; //do not free attrs on destruct!
+  GffAttrs* attrs; //other attributes kept for this exon/CDS
+  float score; // gff score column
+
   int8_t exontype;
   char phase; //GFF phase column - for CDS segments only!
 	             // '.' = undefined (UTR), '0','1','2' for CDS exons
   void* uptr; //for associating extended user data to this exon
-  GffExon(uint s=0, uint e=0, int8_t et=0, float sc=0, char ph='.'):GffSegment(s, e, sc),
+
+  char* getAttr(GffNames* names, const char* atrname) {
+    if (attrs==NULL || names==NULL || atrname==NULL) return NULL;
+    return attrs->getAttr(names, atrname);
+  }
+
+  char* getAttr(int aid) {
+    if (attrs==NULL) return NULL;
+    return attrs->getAttr(aid);
+  }
+  GffExon(bool share_attributes):GSeg(0,0), sharedAttrs(share_attributes), attrs(NULL), score(0),
+		  exontype(0), phase('.'), uptr(NULL){
+  }
+  GffExon(uint s=0, uint e=0, int8_t et=0, float sc=0, char ph='.'):sharedAttrs(false), attrs(NULL), score(sc),
 		  exontype(et), phase(ph), uptr(NULL) {
+		if (s<e) { start=s; end=e; }
+		    else { start=e; end=s; }
+
   } //constructor
+
+  GffExon(const GffExon& ex):GSeg(ex.start, ex.end) { //copy constructor
+	  (*this)=ex; //use the default copy operator
+      if (ex.attrs!=NULL) {
+    	  attrs=new GffAttrs();
+          attrs->copyAttrs(ex.attrs);
+      }
+  }
+  ~GffExon() { //destructor
+     if (attrs!=NULL && !sharedAttrs) delete attrs;
+  }
+
 };
 
 //only for mapping to spliced coding sequence:
@@ -547,22 +583,24 @@ class GffObj:public GSeg {
    union {
       unsigned int flags;
       struct {
-    	  bool flag_HAS_ERRORS       :1;
-    	  bool flag_CHILDREN_PROMOTED:1;
-    	  bool flag_IS_GENE          :1;
-    	  bool flag_IS_TRANSCRIPT    :1;
-    	  bool flag_HAS_GFF_ID       :1; //found transcript/RNA feature line (GFF3 or GTF)
-    	  bool flag_BY_EXON          :1; //created by subfeature (exon/CDS) directly
-    	  bool flag_CDS_ONLY         :1; //transcript defined by CDS features only (GffObj::isCDS())
-    	  bool flag_CDS_NOSTART      :1; //partial CDS (no start codon)
-    	  bool flag_CDS_NOSTOP       :1; //partial CDS (no stop codon)
-    	  bool flag_CDS_X            :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
-    	                             //CDS segments stored in ::cdss are not intron-compatible with exon segments
-    	  bool flag_TRANS_SPLICED    :1;
-    	  bool flag_DISCARDED        :1;
-    	  bool flag_LST_KEEP         :1;
-    	  bool flag_FINALIZED        :1; //if finalize() was already called for this GffObj
-    	  unsigned int gff_level     :4; //hierarchical level (0..15)
+    	  bool flag_HAS_ERRORS        :1;
+    	  bool flag_CHILDREN_PROMOTED :1;
+    	  bool flag_IS_GENE           :1;
+    	  bool flag_IS_TRANSCRIPT     :1;
+    	  bool flag_HAS_GFF_ID        :1; //found transcript/RNA feature line (GFF3 or GTF)
+    	  bool flag_BY_EXON           :1; //created by subfeature (exon/CDS) directly
+    	  bool flag_CDS_ONLY          :1; //transcript defined by CDS features only (GffObj::isCDS())
+    	  bool flag_CDS_NOSTART       :1; //partial CDS at 5' end (no start codon)
+    	  bool flag_CDS_NOSTOP        :1; //partial CDS at 3' end (no stop codon)
+    	  bool flag_CDS_X             :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
+    	                                  //CDS segments stored in ::cdss are incompatible with the exon segments
+    	  bool flag_TRANS_SPLICED     :1;
+    	  bool flag_DISCONTINUOUS     :1; //discontinuous feature (e.g. cDNA_match) segments linked by same ID
+    	  bool flag_TARGET_ONLY       :1; //Target= feature (e.g. from RepeatMasker output), lacks ID
+    	  bool flag_DISCARDED         :1;
+    	  bool flag_LST_KEEP          :1;
+    	  bool flag_FINALIZED         :1; //if finalize() was already called for this GffObj
+    	  unsigned int gff_level      :4; //hierarchical level (0..15)
       };
    };
    //-- friends:
@@ -598,6 +636,8 @@ public:
   void createdByExon(bool v) {flag_BY_EXON=v; }
   bool isCDSOnly() { return flag_CDS_ONLY; }
   void isCDSOnly(bool v) {  flag_CDS_ONLY=v; }
+  bool isXCDS() { return flag_CDS_X; }
+  void isXCDS(bool v) {  flag_CDS_X=v; }
   bool isFinalized() {  return flag_FINALIZED; }
   void isFinalized(bool v) {  flag_FINALIZED=v; }
 
@@ -620,10 +660,11 @@ public:
     return (isTranscript() && exons.Count()>0);
   }
   int readExon(GffReader& reader, GffLine& gl);
-  int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exntype=exgffNone); //add to cdss or exons
-  //for use only AFTER finalize()
+
+  int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override=exgffNone); //add to cdss or exons
+
   int addExonSegment(uint segstart, uint segend, float sc=0, char ph='.',
-              bool iscds=false, int8_t exontype=0);
+              bool iscds=false, char exontype=exgffNone );
 
 protected:
   //utility segment-merging function for addExon()
@@ -686,13 +727,14 @@ public:
    //--------------
    GffObj* finalize(GffReader* gfr);
                //complete parsing: must be called in order to merge adjacent/close proximity subfeatures
-   void parseAttrs(GffAttrs*& atrlist, char* info);
+   void parseAttrs(GffAttrs*& atrlist, char* info, bool isExon=false);
    const char* getSubfName() { //returns the generic feature type of the entries in exons array
      //int sid=exon_ftype_id;
      //if (sid==gff_fid_exon && isCDS) sid=gff_fid_CDS;
      return names->feats.getName(exon_ftype_id);
      }
    void setCDS(uint cd_start, uint cd_end, char phase=0);
+   void setCDS(GffObj* t); //set CDS from another transcript
 
    bool monoFeature() {
      return (exons.Count()==0 ||
@@ -861,22 +903,21 @@ public:
         }
    int addSeg(GffLine* gfline);
    int addSeg(int fnid, GffLine* gfline);
-   void getCDSegs(GArray<GffCDSeg>& cds);
+   void getCDSegs(GVec<GffExon>& cds);
 
    void updateExonPhase(); //for CDS-only features, updates GExon::phase
    void printGTab(FILE* fout, char** extraAttrs=NULL);
-   void printGxfLine(FILE* fout, const char* tlabel, const char* gseqname,
-          bool iscds, uint segstart, uint segend, int exidx,
-		  char phase, bool gff3, bool cvtChars, char* dbuf, int dbuf_len);
+   void printGxfExon(FILE* fout, const char* tlabel, const char* gseqname,
+          bool iscds, GffExon* exon, bool gff3, bool cvtChars, char* dbuf, int dbuf_len);
    void printGxf(FILE* fout, GffPrintMode gffp=pgffExon,
              const char* tlabel=NULL, const char* gfparent=NULL, bool cvtChars=false);
    void printGtf(FILE* fout, const char* tlabel=NULL, bool cvtChars=false) {
       printGxf(fout, pgtfAny, tlabel, NULL, cvtChars);
-      }
+   }
    void printGff(FILE* fout, const char* tlabel=NULL,
                                 const char* gfparent=NULL, bool cvtChars=false) {
       printGxf(fout, pgffAny, tlabel, gfparent, cvtChars);
-      }
+   }
    void printTranscriptGff(FILE* fout, char* tlabel=NULL,
                             bool showCDS=false, const char* gfparent=NULL, bool cvtChars=false) {
       if (isValidTranscript())
@@ -892,7 +933,6 @@ public:
            uint* cds_start=NULL, uint* cds_end=NULL, GMapSegments* seglst=NULL,
 		   bool cds_open=false);
     char* getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst=NULL);
-   char* getSplicedTr(GFaSeqGet* faseq, bool CDSonly=true, int* rlen=NULL);
    //bool validCDS(GFaSeqGet* faseq); //has In-Frame Stop Codon ?
    bool empty() { return (start==0); }
 };
@@ -1151,7 +1191,7 @@ class GffReader {
   void readAll();
 
   //only for well-formed files: BED or GxF where exons are strictly grouped by their transcript_id/Parent
-  GffObj* readNext(bool keepAttrs=false, bool noExonAttrs=true); //user must free the returned GffObj* !
+  GffObj* readNext(); //user must free the returned GffObj* !
 
 #ifdef CUFFLINKS
     boost::crc_32_type current_crc_result() const { return _crc_result; }
