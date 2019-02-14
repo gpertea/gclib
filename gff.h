@@ -1082,7 +1082,7 @@ class GffReader {
     };
   };
   bool gff_warns; //warn about duplicate IDs, etc. even when they are on different chromosomes
-  char* lastReadNext;
+  //char* lastReadNext;
   FILE* fh;
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
   GffLine* gffline;
@@ -1130,7 +1130,7 @@ class GffReader {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
-      lastReadNext=NULL;
+      //lastReadNext=NULL;
       }
   void init(FILE *f, bool t_only=false, bool sortbyloc=false, bool g2exon=false) {
       fname=NULL;
@@ -1155,7 +1155,7 @@ class GffReader {
       fh=fopen(fname, "rb");
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
-      lastReadNext=NULL;
+      //lastReadNext=NULL;
       }
 
  ~GffReader() {
@@ -1169,7 +1169,7 @@ class GffReader {
       phash.Clear();
       GFREE(fname);
       GFREE(linebuf);
-      GFREE(lastReadNext);
+      //GFREE(lastReadNext);
       gffnames_unref(GffObj::names);
       }
 

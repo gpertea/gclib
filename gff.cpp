@@ -1458,15 +1458,15 @@ GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonEx
   return gfoh; //returns the holder of newly promoted feature
 }
 
-
 GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free the returned GffObj*
  GffObj* gfo=NULL;
- GSeg tseg(0,0);
+ //GSeg tseg(0,0); //transcript boundaries
+ char* lastID=NULL;
  if (is_BED) {
 	 if (nextBEDLine()) {
 		 gfo=new GffObj(this, bedline);
-		 tseg.start=gfo->start;
-		 tseg.end=gfo->end;
+		 //tseg.start=gfo->start;
+		 //tseg.end=gfo->end;
 		 delete bedline;
 		 bedline=NULL;
 	 } //else return NULL;
@@ -1474,45 +1474,58 @@ GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free
     while (nextGffLine()!=NULL) {
     	char* tid=gffline->ID;
     	if (gffline->is_exon) tid=gffline->parents[0];
-    	else if (!gffline->is_transcript) tid=NULL; //sorry, only parsing transcript && their exons this way
-    	//silly gene-only transcripts will be missed here
-    	if (tid==NULL || gffline->num_parents>1) {
+    	else //not an exon
+    		if (!(gffline->is_transcript || gffline->is_gene))
+    			tid=NULL; //WARNING: only parsing transcript && gene records here
+    	//if (tid==NULL || gffline->num_parents>1) {
+    	if (tid==NULL) { //not a suitable transcript ID found, skip this line
     		delete gffline;
     		gffline=NULL;
     		continue;
     	}
-    	bool sameID=(lastReadNext!=NULL && strcmp(lastReadNext, tid)==0);
+    	bool sameID=(lastID!=NULL && strcmp(lastID, tid)==0);
     	if (sameID) {
-    		if (gfo==NULL) GError("Error: same transcript ID but GffObj inexistent?!(%s)\n", tid);
-    		addExonFeature(gfo, gffline, NULL, keepAttrs, noExonAttrs);
-    	} else {
-    		//new transcript
+    		if (gfo==NULL) GError("Error: same transcript ID but GffObj not initialized?!(%s)\n", tid);
+    		//TODO: if gffline->is_transcript: trans-splicing!
+    		if (!gffline->is_exon) {
+    			GMessage("Warning: skipping unexpected non-exon record with previously seen ID:\n%s\n", gffline->dupline);
+    			delete gffline;
+    			gffline=NULL;
+    			continue;
+    		}
+    		addExonFeature(gfo, gffline); //also takes care of adding CDS segments
+    	} else { //new transcript
     		if (gfo==NULL) {
-    			//fresh start
+    			//start gathering this transcript's data now
     			gfo=new GffObj(this, gffline);
-    			if (gffline->is_transcript) {
+    			//GFREE(lastID);
+    			lastID=Gstrdup(tid);
+    			/*if (gffline->is_transcript) {
     				tseg.start=gffline->fstart;
     				tseg.end=gffline->fend;
-    			}
+    			}*/
     		}
     		else {
-    			//this gffline is for the next record
+    			//this gffline is for the next transcript!
     			//return what we've got so far
     			//return gfo;
     			break;
     		}
-			GFREE(lastReadNext);
-			lastReadNext=Gstrdup(tid);
     	} //transcript ID change
     	//gffline processed, move on
 		delete gffline;
 		gffline=NULL;
     } //while nextgffline()
  } //GFF records
+ GFREE(lastID);
+ //gfo populated with all its sub-features (or eof reached)
  if (gfo!=NULL) {
-		if (gfo->exons.Count()==0 && (gfo->isTranscript() || (gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
+	gfo->finalize(this, );
+	/*
+	if (gfo->exons.Count()==0 && (gfo->isTranscript() ||
+				(gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
 			gfo->addExon(gfo->start, gfo->end);
-		}
+	}
 	if (tseg.start>0) {
 		if (tseg.start!=gfo->exons.First()->start ||
 				tseg.end!=gfo->exons.Last()->end) {
@@ -1520,13 +1533,15 @@ GffObj* GffReader::readNext(bool keepAttrs, bool noExonAttrs) { //user must free
 					gfo->getID(), gfo->start, gfo->end);
 		}
 	}
+	*/
  }
  return gfo;
 }
 
-//have to parse the whole file because exons and other subfeatures can be scattered, unordered in the input
-//Trans-splicing and fusions are only accepted in proper GFF3 format, i.e. multiple features with the same ID
-//are accepted if they are NOT overlapping/continuous
+//Usually we have to parse the whole file because exons and other subfeatures can be scattered, unordered in the input
+// (thanks to the annoyingly loose GFF3 specs)
+//Trans-splicing and fusions shall only be accepted in proper GFF3 format, i.e. multiple transcript features
+//with the same ID but NOT overlapping/continuous
 //  *** BUT (exception): proximal xRNA features with the same ID, on the same strand, will be merged
 //  and the segments will be treated like exons (e.g. TRNAR15 (rna1940) in RefSeq)
 void GffReader::readAll(bool keepAttr, bool mergeCloseExons, bool noExonAttr) {
