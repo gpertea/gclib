@@ -663,8 +663,8 @@ public:
 
   int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override=exgffNone); //add to cdss or exons
 
-  int addExonSegment(uint segstart, uint segend, float sc=0, char ph='.',
-              bool iscds=false, char exontype=exgffNone );
+  int addExonSegment(GList<GffExon>& segs, uint segstart, uint segend, float sc=0, char ph='.',
+              char exontype=exgffNone,  GList<GffExon>* );
 
 protected:
   //utility segment-merging function for addExon()
