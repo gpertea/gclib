@@ -195,6 +195,7 @@ class GffLine {
     	    //bool is_gff3:1; //line appears to be in GFF3 format (0=GTF)
     	    bool is_gtf_transcript:1; //GTF transcript line with Parents parsed from gene_id
     	    bool skipLine:1;
+    	    bool gffWarnings:1;
     	};
     };
     int8_t exontype; // gffExonType
@@ -611,7 +612,7 @@ public:
   int track_id; // index of track name in names->tracks
   int gseq_id; // index of genomic sequence name in names->gseqs
   int ftype_id; // index of this record's feature name in names->feats, or the special gff_fid_mRNA value
-  int exon_ftype_id; //index of child subfeature name in names->feats (that subfeature stored in "exons")
+  int subftype_id; //index of child subfeature name in names->feats (subfeatures stored in "exons")
                    //if ftype_id==gff_fid_mRNA then this value is ignored
   GList<GffExon> exons; //for non-mRNA entries, these can be any subfeature of type subftype_id
   GList<GffExon>* cdss; //only !NULL for cases of "programmed frameshift" when CDS boundaries do not match
@@ -663,8 +664,8 @@ public:
 
   int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override=exgffNone); //add to cdss or exons
 
-  int addExonSegment(GList<GffExon>& segs, uint segstart, uint segend, float sc=0, char ph='.',
-              char exontype=exgffNone,  GList<GffExon>* );
+  int addExon(uint segstart, uint segend, int8_t exontype=exgffNone, char phase='.', float exon_score=0,
+		      GList<GffExon>* segs=NULL);
 
 protected:
   //utility segment-merging function for addExon()
@@ -700,7 +701,7 @@ public:
        udata=0;
        parent=NULL;
        ftype_id=-1;
-       exon_ftype_id=-1;
+       subftype_id=-1;
        if (anid!=NULL) gffID=Gstrdup(anid);
        gffnames_ref(names);
        CDstart=0; // hasCDS <=> CDstart>0
@@ -731,7 +732,7 @@ public:
    const char* getSubfName() { //returns the generic feature type of the entries in exons array
      //int sid=exon_ftype_id;
      //if (sid==gff_fid_exon && isCDS) sid=gff_fid_CDS;
-     return names->feats.getName(exon_ftype_id);
+     return names->feats.getName(subftype_id);
      }
    void setCDS(uint cd_start, uint cd_end, char phase=0);
    void setCDS(GffObj* t); //set CDS from another transcript
@@ -905,7 +906,7 @@ public:
    int addSeg(int fnid, GffLine* gfline);
    void getCDSegs(GVec<GffExon>& cds);
 
-   void updateExonPhase(); //for CDS-only features, updates GExon::phase
+   void updateCDSPhase(GList<GffExon>& segs); //for CDS-only features, updates GffExon::phase
    void printGTab(FILE* fout, char** extraAttrs=NULL);
    void printGxfExon(FILE* fout, const char* tlabel, const char* gseqname,
           bool iscds, GffExon* exon, bool gff3, bool cvtChars, char* dbuf, int dbuf_len);
@@ -927,8 +928,9 @@ public:
    void printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len);
        //print a BED-12 line + GFF3 attributes in 13th field
    void printSummary(FILE* fout=NULL);
-   void getCDS_ends(uint& cds_start, uint& cds_end);
-   void mRNA_CDS_coords(uint& cds_start, uint& cds_end);
+
+   //void getCDS_ends(uint& cds_start, uint& cds_end);
+   //void mRNA_CDS_coords(uint& cds_start, uint& cds_end);
    char* getSpliced(GFaSeqGet* faseq, bool CDSonly=false, int* rlen=NULL,
            uint* cds_start=NULL, uint* cds_end=NULL, GMapSegments* seglst=NULL,
 		   bool cds_open=false);
@@ -1074,9 +1076,9 @@ class GffReader {
        bool mergeCloseExons:1;
        bool gene2exon:1;
        bool sortByLoc:1;
+       bool gff_warns:1;
     };
   };
-  bool gff_warns; //warn about duplicate IDs, etc. even when they are on different chromosomes
   //char* lastReadNext;
   FILE* fh;
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
@@ -1117,12 +1119,13 @@ class GffReader {
   bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
-		  buflen(0), flags(0), gff_warns(gff_show_warnings), fh(f), fname(NULL), gffline(NULL),
+		  buflen(0), flags(0), fh(f), fname(NULL), gffline(NULL),
 		  bedline(NULL), discarded_ids(true), phash(true), gseqtable(1,true),
 		  gflst(sortbyloc), gseqStats(1, false) {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
+      gff_warns=gff_show_warnings;
       transcriptsOnly=t_only;
       sortByLoc=sortbyloc;
       noExonAttr=true;
@@ -1149,7 +1152,7 @@ class GffReader {
 	  mergeCloseExons=merge_close_exons;
   }
   GffReader(const char* fn, bool t_only=false, bool sort_by_loc=false):linebuf(NULL), fpos(0),
-	  		  buflen(0), flags(0), gff_warns(gff_show_warnings), fh(NULL), fname(NULL),
+	  		  buflen(0), flags(0), fh(NULL), fname(NULL),
 			  gffline(NULL), bedline(NULL), discarded_ids(true),
 			  phash(true), gseqtable(1,true), gflst(sort_by_loc), gseqStats(1,false) {
       gff_warns=gff_show_warnings;
