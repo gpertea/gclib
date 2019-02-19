@@ -13,7 +13,10 @@ int gff_fid_mRNA=0; //mRNA (has CDS)
 int gff_fid_transcript=1; // generic "transcript" feature
 int gff_fid_exon=2; // generic "exon"-like feature (exon,CDS,UTR,start/stop codon)
 int gff_fid_CDS=3; // CDS feature (CDS, start/stop codon)
+const char* exonTypes[]={"None", "StartCodon", "StopCodon",
+		  "CDS", "UTR", "CDS+UTR", "exon"};
 
+const GffScore GFFSCORE_NONE;
 //const uint gfo_flag_LEVEL_MSK        = 0x00FF0000;
 //const byte gfo_flagShift_LEVEL           = 16;
 
@@ -343,7 +346,7 @@ bool GffLine::parseSegmentList(GVec<GSeg>& segs, char* str) {
 GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len(0),
 		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
 		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), //qstart(0), qend(0), qlen(0),
-		score(0), strand(0), flags(0), exontype(exgffNone), phase(0), cds_start(0), cds_end(0),
+		score(0), score_decimals(-1), strand(0), flags(0), exontype(exgffNone), phase(0), cds_start(0), cds_end(0),
 		exons(), cdss(), gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(0), ID(NULL) {
  llen=strlen(l);
  GMALLOC(line,llen+1);
@@ -389,10 +392,21 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  p=t[5];
  if (p[0]=='.' && p[1]==0) {
   score=0;
-  }
+  score_decimals=-1;
+ }
  else {
+  score_decimals=0;
+  //count decimals
+  char* pd=strchr(p,'.');
+  if (pd) {
+	  ++pd;
+	  char* pde=pd;
+	  while ((*pde)!=0) ++pde;
+	  score_decimals=pde-pd;
+  }
   if (!parseFloat(p, score))
        GError("Error parsing feature score from GFF line:\n%s\n",l);
+
   }
  strand=*t[6];
  if (strand!='+' && strand!='-' && strand!='.')
@@ -865,10 +879,30 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
 
 int GffObj::addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override) {
 	int ex_type=(exontype_override!=exgffNone) ? exontype_override : gl.exontype;
-	return addExon(gl.fstart, gl.fend, ex_type, gl.phase, gl.score, &segs);
+	GffScore exon_score(gl.score, gl.score_decimals);
+	return addExon(gl.fstart, gl.fend, ex_type, gl.phase, exon_score, &segs);
 }
 
-int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, float exon_score, GList<GffExon>* segs) {
+int GffObj::exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen, int start_idx) {
+	//return the exons' index for the overlapping OR ADJACENT exon
+	//ovlen, if given, will return the overlap length
+	//if (s>e) Gswap(s,e);
+	for (int i=start_idx;i<segs.Count();i++) {
+		if (segs[i]->start>e+1) break;
+		if (s-1>segs[i]->end) continue;
+		//-- overlap/adjacent if we are here:
+		if (ovlen!=NULL) {
+			int ovlend= (segs[i]->end>e) ? e : segs[i]->end;
+			*ovlen= ovlend - ((s>segs[i]->start)? s : segs[i]->start)+1;
+		}
+		return i;
+	} //for each exon
+	*ovlen=0;
+	return -1;
+}
+
+
+int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, GffScore exon_score, GList<GffExon>* segs) {
    if (segstart>segend) { Gswap(segstart, segend); }
    if (segs==NULL) segs=&exons;
 	if (exontype!=exgffNone) { //check for overlaps between exon/CDS-type segments
@@ -887,13 +921,13 @@ int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, flo
 		    	//but always merge adjacent features
 		    	int8_t segtype=((*segs)[oi]->exontype==exgffCDS || exontype==exgffCDS) ? exgffCDS : exgffExon;
 		    	//if expanded upward, may overlap the segment(s) above
-		    	expandSegment(*segs, oi, segstart, segend, segtype, exon_score);
+		    	expandSegment(*segs, oi, segstart, segend, segtype);
 		    	return oi;
 		    }
 	    }
 	} //exon overlap/adjacent check
    //new exon/CDS, not merged in a previous one
-   GffExon* enew=new GffExon(segstart, segend, exontype, exon_score, phase);
+   GffExon* enew=new GffExon(segstart, segend, exontype, phase, exon_score.score, exon_score.precision);
    int eidx=segs->Add(enew);
    if (eidx<0) {
     //this would actually be possible if the object is a "Gene" and "exons" are in fact isoforms
@@ -904,10 +938,15 @@ int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, flo
      hasErrors(true);
      return -1;
    }
+   if (isFinalized() && segs==&exons) {
+	   covlen+=(int)(exons[eidx]->end-exons[eidx]->start)+1;
+		start=exons.First()->start;
+		end=exons.Last()->end;
+   }
    return eidx;
 }
 
-void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint segend, int8_t exontype, float sc) {
+void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint segend, int8_t exontype) {
   //oi is the index of the *first* overlapping segment found that must be enlarged
   covlen-=segs[oi]->len();
   if (segstart<segs[oi]->start)
@@ -917,7 +956,7 @@ void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint seg
 	  segs[oi]->end=segend;
   //if (qe && qe>exons[oi]->qend) exons[oi]->qend=qe;
   //warning: score cannot be properly adjusted! e.g. if it's a p-value it's just going to get worse
-  if (sc!=0) segs[oi]->score=sc;
+  //if (sc!=0) segs[oi]->score=sc;
   //covlen+=exons[oi]->len();
   //if (exons[oi]->exontype< exontype) -- always true
   segs[oi]->exontype = exontype;
@@ -941,8 +980,8 @@ void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint seg
   } //until no more overlapping/adjacent segments found
   // -- make sure any other related boundaries are updated:
   if (isFinalized() && &segs==&exons) {
-	start=segs.First()->start;
-	end=segs.Last()->end;
+	start=exons.First()->start;
+	end=exons.Last()->end;
 	//recalculate covlen
     covlen=0;
     for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
@@ -954,10 +993,12 @@ void GffObj::removeExon(int idx) {
   int segstart=exons[idx]->start;
   int segend=exons[idx]->end;
   exons.Delete(idx);
-  covlen -= (int)(segend-segstart)+1;
-  start=exons.First()->start;
-  end=exons.Last()->end;
-  if (isCDSOnly()) { CDstart=start; CDend=end; }
+  if (isFinalized()) {
+    covlen -= (int)(segend-segstart)+1;
+    start=exons.First()->start;
+    end=exons.Last()->end;
+    if (isCDSOnly()) { CDstart=start; CDend=end; }
+  }
 }
 
 void GffObj::removeExon(GffExon* p) {
@@ -979,7 +1020,7 @@ void GffObj::removeExon(GffExon* p) {
 }
 
 GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
-		exons(true,true,false), cdss(NULL) {
+		exons(true,true,false), cdss(NULL), gscore() {
 	uptr=NULL;
 	ulink=NULL;
 	parent=NULL;
@@ -995,12 +1036,10 @@ GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
 	track_id=-1;
 	gseq_id=-1;
 	//ftype_id=-1;
-	subftype_id=-1;
+	//subftype_id=-1;
 	strand='.';
 	gffnames_ref(names);
 	//qlen=0;qstart=0;qend=0;
-	gscore=0;
-	uscore=0;
 	covlen=0;
 	ftype_id=gff_fid_transcript;
 	subftype_id=gff_fid_exon;
@@ -1026,7 +1065,7 @@ GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
 }
 
 GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
-     GSeg(0,0), exons(true,true,false), children(1,false) {
+     GSeg(0,0), exons(true,true,false), cdss(NULL), children(1,false), gscore() {
   uptr=NULL;
   ulink=NULL;
   parent=NULL;
@@ -1046,8 +1085,6 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   strand='.';
   gffnames_ref(names);
   //qlen=0;qstart=0;qend=0;
-  gscore=0;
-  uscore=0;
   covlen=0;
   ftype_id=gffline.ftype_id;
   start=gffline.fstart;
@@ -1103,7 +1140,8 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   else {
     //non-parented feature OR a recognizable transcript
     //create a parent feature in its own right
-    gscore=gffline.score;
+    gscore.score=gffline.score;
+    gscore.precision=gffline.score_decimals;
     if (gffline.ID==NULL || gffline.ID[0]==0)
       GError("Error: no ID found for GFF record start\n");
     this->hasGffID(true);
@@ -1118,25 +1156,19 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 		  if (gffline.exons.Count()>0) {
 			  //for compact GFF-like transcript line format (TLF), exons were already found as attributes
 				for (int i=0;i<gffline.exons.Count();++i) {
-					this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon);
+					this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon, '.', gscore);
 				}
 		  }
 		  if (gffline.cds_start>0) {
 				CDstart=gffline.cds_start;
 				CDend=gffline.cds_end;
 		  }
-		  if (gffline.exons.Count()>0) {
-			  //for compact GFF-like transcript line format (TLF), exons were already found as attributes
-				for (int i=0;i<gffline.exons.Count();++i) {
-					this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon);
-				}
-		  }
 		  if (gffline.phase!=0) CDphase=gffline.phase;
 		  if (gffline.cdss.Count()>0) {
 			    //for compact GFF-like transcript line format (TLF), CDS might be already found as attributes
 			    if (cdss==NULL) cdss=new GList<GffExon>(true, true, false);
 				for (int i=0;i<gffline.cdss.Count();++i) {
-					this->addExon(gffline.cdss[i].start, gffline.cdss[i].end, exgffCDS, 0, 0, cdss);
+					this->addExon(gffline.cdss[i].start, gffline.cdss[i].end, exgffCDS, 0, GFFSCORE_NONE, cdss);
 				}
 		  }
       }
@@ -1362,7 +1394,7 @@ GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline) {
 }
 
 
-bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex) {
+bool GffReader::readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex) {
 	//this should only be called before prevgfo->finalize()!
 	bool r=true;
 	if (gffline->strand!=prevgfo->strand) {
@@ -1466,7 +1498,7 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
     			gffline=NULL;
     			continue;
     		}
-    		addExonFeature(gfo, gffline); //also takes care of adding CDS segments
+    		readExonFeature(gfo, gffline); //also takes care of adding CDS segments
     	} else { //new transcript
     		if (gfo==NULL) {
     			//start gathering this transcript's data now
@@ -1494,19 +1526,6 @@ GffObj* GffReader::readNext() { //user must free the returned GffObj*
  //gfo populated with all its sub-features (or eof reached)
  if (gfo!=NULL) {
 	gfo->finalize(this);
-	/*
-	if (gfo->exons.Count()==0 && (gfo->isTranscript() ||
-				(gfo->isGene() && this->gene2exon && gfo->children.Count()==0))) {
-			gfo->addExon(gfo->start, gfo->end);
-	}
-	if (tseg.start>0) {
-		if (tseg.start!=gfo->exons.First()->start ||
-				tseg.end!=gfo->exons.Last()->end) {
-			GMessage("Warning: boundary mismatch for exons of transcript %s (%d-%d) ?\n",
-					gfo->getID(), gfo->start, gfo->end);
-		}
-	}
-	*/
  }
  return gfo;
 }
@@ -1670,7 +1689,7 @@ void GffReader::readAll() {
 									  addingExon=true;
 								}
 								if (addingExon)
-									if (!addExonFeature(parentgfo, gffline, &pex))
+									if (!readExonFeature(parentgfo, gffline, &pex))
 									   validation_errors=true;
 
 							}
@@ -1688,7 +1707,7 @@ void GffReader::readAll() {
 								//promote that subfeature to a full GffObj
 								GffObj* gfoh=promoteFeature(subp, subp_name, pex);
 								//add current gffline as an exon of the newly promoted subfeature
-								if (!addExonFeature(gfoh, gffline, &pex))
+								if (!readExonFeature(gfoh, gffline, &pex))
 									validation_errors=true;
 							}
 						}
@@ -1787,7 +1806,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		CDend=cdss->Last()->end;
 		CDphase=(strand=='-')? cdss->Last()->phase : cdss->First()->phase;
 		if (cdss->First()->phase==0 && CDphase!=0) updateCDSPhase(*cdss);
-		//there are GFFs out there which only provide UTR and CDS records instead of full exon records
+		//there are GFFs out there which only provide UTR and CDS records instead of full exons
 		//so make sure we add all CDS segments to exons, if they are not already there
 		for (int i=0;i<cdss->Count();++i) {
 			int eidx=addExon((*cdss)[i]->start, (*cdss)[i]->end, exgffExon, 0, (*cdss)[i]->score);
@@ -1830,10 +1849,13 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			} //for each exon
 		} //merge close exons
 	}
-	//-- attribute reduction for GTF records
+	//-- attribute reduction for some records which
+	// repeat the same attr=value for every exon
 	if (gfr->keepAttr && !gfr->noExonAttr //&& !hasGffID()
-			&& exons.Count()>0 && exons[0]->attrs!=NULL) {
+			&& exons.Count()>1 && exons[0]->attrs!=NULL) {
 		bool attrs_discarded=false;
+		//for each attributes of the 1st exon, if its present and it has
+		//the same value for all other exons, move it to transcript level
 		for (int a=0;a<exons[0]->attrs->Count();a++) {
 			int attr_name_id=exons[0]->attrs->Get(a)->attr_id;
 			char* attr_name=names->attrs.getName(attr_name_id);
@@ -2031,7 +2053,7 @@ void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon) {
     if (ech!=NULL) { // attr=value format found
        *ech='\0';
        if (exon2transcript) { //we do NOT want these exon attributes at transcript level
-          if (startsWith(start, "exon_")==0 || strcmp(start, "exon")==0)  {
+          if (startsiWith(start, "exon_") || strcmp(start, "exon")==0)  {
         	  start=pch; continue;
           }
        }
@@ -2354,8 +2376,10 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
 
 void GffObj::printSummary(FILE* fout) {
  if (fout==NULL) fout=stdout;
- fprintf(fout, "%s\t%c\t%d\t%d\t%4.2f\n", gffID,
-          strand, start, end, gscore);
+ fprintf(fout, "%s\t%c\t%d\t%d\t", gffID,
+          strand, start, end);
+ gscore.print(fout);
+ fprintf(fout, "\n");
 }
 //TODO we should also have an escapeChars function for some situations
 //when we want to write a GFF3 strictly compliant to the dang specification
@@ -2417,8 +2441,9 @@ void GffObj::printGTab(FILE* fout, char** extraAttrs) {
 void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, bool iscds,
                              GffExon* exon, bool gff3, bool cvtChars,
 							 char* dbuf, int dbuf_len) {
-  strcpy(dbuf,".");
-  if (exon->score>0) sprintf(dbuf,"%.2f", exon->score);
+  //strcpy(dbuf,".");
+  //if (exon->score>0) sprintf(dbuf,"%.2f", exon->score);
+  exon->score.sprint(dbuf);
   if (exon->phase==0 || !iscds) exon->phase='.';
   const char* ftype=iscds ? "CDS" : getSubfName();
   const char* attrname=NULL;
@@ -2446,13 +2471,33 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
            gseqname, tlabel, ftype, exon->start, exon->end, dbuf, strand, exon->phase, gffID);
     if (geneID)
       fprintf(fout," gene_id \"%s\";",geneID);
+    /*
     if (gene_name!=NULL) {
        fprintf(fout," gene_name \"%s\";",gene_name);
-       }
+    }
+    */
     if (exon->attrs!=NULL) {
+       bool trId=false;
+       bool gId=false;
        for (int i=0;i<exon->attrs->Count();i++) {
             if (exon->attrs->Get(i)->attr_val==NULL) continue;
             attrname=names->attrs.getName(exon->attrs->Get(i)->attr_id);
+            if (strcmp(attrname, "transcriptID")==0) {
+            	if (trId) continue;
+            	trId=true;
+            }
+            if (strcmp(attrname, "transcript_id")==0 && !trId) {
+            	attrname="transcriptID";
+            	trId=true;
+            }
+            if (strcmp(attrname, "geneID")==0) {
+            	if (gId) continue;
+            	gId=true;
+            }
+            if (strcmp(attrname, "gene_id")==0 && !gId) {
+            	attrname="geneID";
+            	gId=true;
+            }
             fprintf(fout, " %s ",attrname);
             if (cvtChars) {
               decodeHexChars(dbuf, exon->attrs->Get(i)->attr_val, dbuf_len-1);
@@ -2490,7 +2535,7 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
 
 void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
                    const char* tlabel, const char* gfparent, bool cvtChars) {
- const int DBUF_LEN=1024;
+ const int DBUF_LEN=1024; //there should not be attribute values longer than 1K!
  char dbuf[DBUF_LEN];
  if (tlabel==NULL) {
     tlabel=track_id>=0 ? names->tracks.Get(track_id)->name :
@@ -2504,8 +2549,9 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
  bool gff3 = (gffp>=pgffAny && gffp<=pgffTLF);
  bool showCDS = (gffp==pgtfAny || gffp==pgtfCDS || gffp==pgffCDS || gffp==pgffAny || gffp==pgffBoth);
  bool showExon = (gffp<=pgtfExon || gffp==pgffAny || gffp==pgffExon || gffp==pgffBoth);
- if (gscore>0.0) sprintf(dbuf,"%.2f", gscore);
-        else strcpy(dbuf,".");
+ //if (gscore>0.0) sprintf(dbuf,"%.2f", gscore);
+ //       else strcpy(dbuf,".");
+ gscore.sprint(dbuf);
  if (gffp<=pgtfCDS && gffp>=pgtfAny) { //GTF output
 	   fprintf(fout,
 	     "%s\t%s\ttranscript\t%d\t%d\t%s\t%c\t.\ttranscript_id \"%s\"",
@@ -2515,10 +2561,28 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	   if (gene_name!=NULL)
 	      fprintf(fout, "; gene_name \"%s\"",gene_name);
 	   if (attrs!=NULL) {
+		    bool trId=false;
+		    bool gId=false;
 		    for (int i=0;i<attrs->Count();i++) {
 		      const char* attrname=names->attrs.getName(attrs->Get(i)->attr_id);
 		      const char* attrval=attrs->Get(i)->attr_val;
 		      if (attrval==NULL || attrval[0]=='\0') continue;
+	            if (strcmp(attrname, "transcriptID")==0) {
+	            	if (trId) continue;
+	            	trId=true;
+	            }
+	            if (strcmp(attrname, "transcript_id")==0 && !trId) {
+	            	attrname="transcriptID";
+	            	trId=true;
+	            }
+	            if (strcmp(attrname, "geneID")==0) {
+	            	if (gId) continue;
+	            	gId=true;
+	            }
+	            if (strcmp(attrname, "gene_id")==0 && !gId) {
+	            	attrname="geneID";
+	            	gId=true;
+	            }
 		      if (cvtChars) {
 		    	  decodeHexChars(dbuf, attrval, DBUF_LEN-1);
 		    	  fprintf(fout,"; %s \"%s\"", attrname, dbuf);
@@ -2625,8 +2689,8 @@ void GffObj::updateCDSPhase(GList<GffExon>& segs) {
   }
 }
 
-
 void GffObj::getCDSegs(GVec<GffExon>& cds) {
+  //like updateCDSPhase() above, also updates phase for each segment
   GffExon cdseg(true);
   cds.Clear();
   if (cdss!=NULL) {

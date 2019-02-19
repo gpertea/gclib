@@ -43,6 +43,8 @@ enum GffExonType {
   exgffExon, //from "exon" feature
 };
 
+extern const char* exonTypes[];
+
 const char* strExonType(char xtype);
 
 class GffReader;
@@ -77,6 +79,23 @@ public:
     	}
     }
 };
+
+struct GffScore {
+	float score;
+	int8_t precision;
+	GffScore(float sc=0, int8_t prec=-1):score(sc),precision(prec) { }
+	void print(FILE* outf) {
+		if (precision<0) fprintf(outf, ".");
+		else fprintf(outf, "%.*f", precision, score);
+	}
+	void sprint(char* outs) {
+		if (precision<0) sprintf(outs, ".");
+		else sprintf(outs, "%.*f", precision, score);
+	}
+
+};
+
+extern const GffScore GFFSCORE_NONE;
 
 class GMapSegments:public GVec<GMapSeg> {
   public:
@@ -181,6 +200,7 @@ class GffLine {
     uint qlen; //query len, if given
     */
     float score;
+    int8_t score_decimals;
     char strand;
     union {
     	unsigned int flags;
@@ -227,7 +247,7 @@ class GffLine {
     		dupline(NULL), line(NULL), llen(l.llen), gseqname(NULL), track(NULL),
     		ftype(NULL), ftype_id(l.ftype_id), info(NULL), fstart(l.fstart), fend(l.fend),
 			//qstart(l.fstart), qend(l.fend), qlen(l.qlen),
-			score(l.score), strand(l.strand), flags(l.flags), exontype(l.exontype),
+			score(l.score), score_decimals(l.score_decimals), strand(l.strand), flags(l.flags), exontype(l.exontype),
 			phase(l.phase), cds_start(l.cds_start), cds_end(l.cds_end), exons(l.exons), cdss(l.cdss),
 			gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(l.num_parents), ID(NULL) {
     	//if (l==NULL || l->line==NULL)
@@ -262,7 +282,7 @@ class GffLine {
     GffLine(): _parents(NULL), _parents_len(0),
     		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
     		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), //qstart(0), qend(0), qlen(0),
-    		score(0), strand(0), flags(0), exontype(0), phase(0), cds_start(0), cds_end(0),
+    		score(0), score_decimals(-1), strand(0), flags(0), exontype(0), phase(0), cds_start(0), cds_end(0),
 			exons(), cdss(), gene_name(NULL), gene_id(NULL), parents(NULL), num_parents(0), ID(NULL) {
     }
     ~GffLine() {
@@ -529,8 +549,7 @@ class GffExon : public GSeg {
  public:
   bool sharedAttrs; //do not free attrs on destruct!
   GffAttrs* attrs; //other attributes kept for this exon/CDS
-  float score; // gff score column
-
+  GffScore score; // gff score column
   int8_t exontype;
   char phase; //GFF phase column - for CDS segments only!
 	             // '.' = undefined (UTR), '0','1','2' for CDS exons
@@ -545,11 +564,11 @@ class GffExon : public GSeg {
     if (attrs==NULL) return NULL;
     return attrs->getAttr(aid);
   }
-  GffExon(bool share_attributes):GSeg(0,0), sharedAttrs(share_attributes), attrs(NULL), score(0),
+  GffExon(bool share_attributes):GSeg(0,0), sharedAttrs(share_attributes), attrs(NULL), score(),
 		  exontype(0), phase('.'), uptr(NULL){
   }
-  GffExon(uint s=0, uint e=0, int8_t et=0, float sc=0, char ph='.'):sharedAttrs(false), attrs(NULL), score(sc),
-		  exontype(et), phase(ph), uptr(NULL) {
+  GffExon(uint s=0, uint e=0, int8_t et=0, char ph='.', float sc=0, int8_t sc_prec=0):sharedAttrs(false), attrs(NULL),
+		  score(sc,sc_prec), exontype(et), phase(ph), uptr(NULL) {
 		if (s<e) { start=s; end=e; }
 		    else { start=e; end=s; }
 
@@ -664,19 +683,18 @@ public:
 
   int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override=exgffNone); //add to cdss or exons
 
-  int addExon(uint segstart, uint segend, int8_t exontype=exgffNone, char phase='.', float exon_score=0,
-		      GList<GffExon>* segs=NULL);
+  int addExon(uint segstart, uint segend, int8_t exontype=exgffNone, char phase='.',
+		      GffScore exon_score=GFFSCORE_NONE, GList<GffExon>* segs=NULL);
 
 protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
-       int8_t exontype, float sc);
+       int8_t exontype);
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
   char  strand; //true if features are on the reverse complement strand
-  double gscore;
-  double uscore; //custom, user-computed score, if needed
+  GffScore gscore;
   int covlen; //total coverage of reference genomic sequence (sum of maxcf segment lengths)
   GffAttrs* attrs; //other gff3 attributes found for the main mRNA feature
    //constructor by gff line parsing:
@@ -692,7 +710,7 @@ public:
       if (sharedattrs) exons[0]->attrs=NULL;
       }
     }
-  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), cdss(NULL), children(1,false) {
+  GffObj(char* anid=NULL):GSeg(0,0), exons(true,true,false), cdss(NULL), children(1,false), gscore() {
                                    //exons: sorted, free, non-unique
        gffID=NULL;
        uptr=NULL;
@@ -710,13 +728,11 @@ public:
        gseq_id=-1;
        track_id=-1;
        strand='.';
-       gscore=0;
-       uscore=0;
        attrs=NULL;
        covlen=0;
        gene_name=NULL;
        geneID=NULL;
-       }
+   }
    ~GffObj() {
        GFREE(gffID);
        GFREE(gene_name);
@@ -821,25 +837,9 @@ public:
      return false;
    }
 
-   int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0) {
-      //return the exons' index for the overlapping OR ADJACENT exon
-      //ovlen, if given, will return the overlap length
-      //if (s>e) Gswap(s,e);
-      for (int i=start_idx;i<segs.Count();i++) {
-            if (segs[i]->start>e+1) break;
-            if (s-1>segs[i]->end) continue;
-            //-- overlap/adjacent if we are here:
-            if (ovlen!=NULL) {
-              int ovlend= (segs[i]->end>e) ? e : segs[i]->end;
-              *ovlen= ovlend - ((s>segs[i]->start)? s : segs[i]->start)+1;
-            }
-            return i;
-      } //for each exon
-      *ovlen=0;
-      return -1;
-    }
+   int exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen=NULL, int start_idx=0);
 
-    int exonOverlapLen(GffObj& m) {
+   int exonOverlapLen(GffObj& m) {
       if (start>m.end || m.start>end) return 0;
       int i=0;
       int j=0;
@@ -929,8 +929,6 @@ public:
        //print a BED-12 line + GFF3 attributes in 13th field
    void printSummary(FILE* fout=NULL);
 
-   //void getCDS_ends(uint& cds_start, uint& cds_end);
-   //void mRNA_CDS_coords(uint& cds_start, uint& cds_end);
    char* getSpliced(GFaSeqGet* faseq, bool CDSonly=false, int* rlen=NULL,
            uint* cds_start=NULL, uint* cds_end=NULL, GMapSegments* seglst=NULL,
 		   bool cds_open=false);
@@ -1116,7 +1114,7 @@ class GffReader {
   //GffObj* replaceGffRec(GffLine* gffline, bool keepAttr, bool noExonAttr, int replaceidx);
   GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline);
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
-  bool addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
+  bool readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
 		  buflen(0), flags(0), fh(f), fname(NULL), gffline(NULL),
