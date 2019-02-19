@@ -298,20 +298,25 @@ class GffLine {
 
 class GffAttr {
  public:
-   int attr_id;
-   char* attr_val;
-   GffAttr(int an_id, const char* av=NULL) {
-     attr_id=an_id;
-     attr_val=NULL;
-     setValue(av);
-   }
+  union {
+    int id_full;
+    struct {
+      bool      cds:1;
+      int  attr_id:31;
+    };
+  };
+  char* attr_val;
+  GffAttr(int an_id, const char* av=NULL, bool is_cds=false):id_full(0), attr_val(NULL) {
+	 attr_id=an_id;
+     setValue(av, is_cds);
+  }
   ~GffAttr() {
      GFREE(attr_val);
-     }
-  void setValue(const char* av) {
+  }
+  void setValue(const char* av, bool is_cds=false) {
      if (attr_val!=NULL) {
         GFREE(attr_val);
-        }
+     }
      if (av==NULL || av[0]==0) return;
      //trim spaces
      const char* vstart=av;
@@ -322,25 +327,26 @@ class GffAttr {
         if (*vend==' ' && vend[1]!=' ') keep_dq=true;
           else if (*vend==';') keep_dq=true;
         vend++;
-        }
+     }
      //remove spaces at the end:
      while (*vend==' ' && vend!=vstart) vend--;
      //practical clean-up: if it doesn't have any internal spaces just strip those useless double quotes
      if (!keep_dq && *vstart=='"' && *vend=='"') {
                vend--;
                vstart++;
-               }
-     attr_val=Gstrdup(vstart, vend);
      }
+     attr_val=Gstrdup(vstart, vend);
+     cds=is_cds;
+  }
   bool operator==(GffAttr& d){
       return (this==&d);
-      }
+  }
   bool operator>(GffAttr& d){
      return (this>&d);
-     }
+  }
   bool operator<(GffAttr& d){
     return (this<&d);
-    }
+  }
 
  };
 
@@ -470,25 +476,25 @@ enum GffPrintMode {
 class GffAttrs:public GList<GffAttr> {
   public:
     GffAttrs():GList<GffAttr>(false,true,true) { }
-    void add_if_new(GffNames* names, const char* attrname, const char* attrval) {
+    void add_if_new(GffNames* names, const char* attrname, const char* attrval, bool is_cds=false) {
         int nid=names->attrs.getId(attrname);
         if (nid>=0) { //attribute name found in the dictionary
            for (int i=0;i<Count();i++)
-              if (nid==Get(i)->attr_id) { return; } //don't update existing
+              if (nid==Get(i)->attr_id && is_cds==Get(i)->cds) { return; } //don't update existing
         }
         else { //adding attribute name to global attr name dictionary
            nid=names->attrs.addNewName(attrname);
         }
-        this->Add(new GffAttr(nid, attrval));
+        this->Add(new GffAttr(nid, attrval, is_cds));
     }
 
-    void add_or_update(GffNames* names, const char* attrname, const char* val) {
+    void add_or_update(GffNames* names, const char* attrname, const char* val, bool is_cds=false) {
       int aid=names->attrs.getId(attrname);
       if (aid>=0) {
          //attribute found in the dictionary
          for (int i=0;i<Count();i++) {
             //do we have it?
-            if (aid==Get(i)->attr_id) {
+            if (aid==Get(i)->attr_id && Get(i)->cds==is_cds) {
                 //update the existing value for this attribute
                 Get(i)->setValue(val);
                 return;
@@ -498,49 +504,50 @@ class GffAttrs:public GList<GffAttr> {
       else { //adding attribute name to global attr name dictionary
          aid=names->attrs.addNewName(attrname);
       }
-      this->Add(new GffAttr(aid, val));
+      this->Add(new GffAttr(aid, val, is_cds));
     }
 
-    int haveId(int attr_id) {
+    int haveId(int attr_id, bool is_cds=false) {
         for (int i=0;i<Count();i++)
-           if (attr_id==Get(i)->attr_id)
+           if (attr_id==Get(i)->attr_id && Get(i)->cds==is_cds)
         	   return i;
         return -1;
     }
 
-    int haveId(const char* attrname, GffNames* names) {
+    int haveId(const char* attrname, GffNames* names, bool is_cds=false) {
     	int aid=names->attrs.getId(attrname);
     	if (aid>=0) {
             for (int i=0;i<Count();i++)
-               if (aid==Get(i)->attr_id)
+               if (aid==Get(i)->attr_id && Get(i)->cds==is_cds)
             	   return i;
     	}
     	return -1;
     }
 
-    char* getAttr(GffNames* names, const char* attrname) {
+    char* getAttr(GffNames* names, const char* attrname, bool is_cds=false) {
       int aid=names->attrs.getId(attrname);
       if (aid>=0)
         for (int i=0;i<Count();i++)
-          if (aid==Get(i)->attr_id) return Get(i)->attr_val;
+          if (aid==Get(i)->attr_id && Get(i)->cds==is_cds) return Get(i)->attr_val;
       return NULL;
     }
 
-    char* getAttr(int aid) {
+    char* getAttr(int aid, bool is_cds=false) {
       if (aid>=0)
         for (int i=0;i<Count();i++)
-          if (aid==Get(i)->attr_id) return Get(i)->attr_val;
+          if (aid==Get(i)->attr_id && Get(i)->cds==is_cds)
+            return Get(i)->attr_val;
       return NULL;
     }
 
-    void copyAttrs(GffAttrs* attrs) {
+    void copyAttrs(GffAttrs* attrs, bool is_cds=false) {
  	 //deep copy attributes from another GffAttrs list
      // (only the ones which do not exist yet)
     	if (attrs==NULL) return;
     	for (int i=0;i<attrs->Count();i++) {
     		int aid=attrs->Get(i)->attr_id;
-    		if (haveId(aid)<0)
-    			Add(new GffAttr(aid, attrs->Get(i)->attr_val));
+    		if (haveId(aid, is_cds)<0)
+    			Add(new GffAttr(aid, attrs->Get(i)->attr_val, is_cds));
     	}
     }
 };
@@ -744,7 +751,7 @@ public:
    //--------------
    GffObj* finalize(GffReader* gfr);
                //complete parsing: must be called in order to merge adjacent/close proximity subfeatures
-   void parseAttrs(GffAttrs*& atrlist, char* info, bool isExon=false);
+   void parseAttrs(GffAttrs*& atrlist, char* info, bool isExon=false, bool CDSsrc=false);
    const char* getSubfName() { //returns the generic feature type of the entries in exons array
      //int sid=exon_ftype_id;
      //if (sid==gff_fid_exon && isCDS) sid=gff_fid_CDS;

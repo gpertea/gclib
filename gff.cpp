@@ -871,7 +871,7 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
            parseAttrs(attrs, gl.info, true);
      }
      else { //need all exon-level attributes
-         parseAttrs((*segs)[eidx]->attrs, gl.info, true);
+         parseAttrs((*segs)[eidx]->attrs, gl.info, true, gl.is_cds);
      }
   }
   return eidx;
@@ -1766,7 +1766,8 @@ void GfList::finalize(GffReader* gfr) { //if set, enforce sort by locus
       	 for (int c=0;c<fList[i]->children.Count();c++) {
       		 fList[i]->children[c]->parent=NULL;
       		 if (gfr->keepAttr)
-      			 fList[i]->children[c]->copyAttrs(fList[i]); //inherit the attributes of discarded parent (e.g. pseudo=true; )
+      			 //inherit the attributes of discarded parent (e.g. pseudo=true; )
+      			 fList[i]->children[c]->copyAttrs(fList[i]);
       	 }
        }
        this->Forget(i);
@@ -1810,11 +1811,11 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		//so make sure we add all CDS segments to exons, if they are not already there
 		for (int i=0;i<cdss->Count();++i) {
 			int eidx=addExon((*cdss)[i]->start, (*cdss)[i]->end, exgffExon, 0, (*cdss)[i]->score);
-			if (eidx<0) GError("Error: could add properly add exon %d-%d to transcript %s\n",
+			if (eidx<0) GError("Error: could not properly add exon %d-%d to transcript %s\n",
 					(*cdss)[i]->start, (*cdss)[i]->end, gffID);
-			if (gfr->keepAttr && (*cdss)[i]->attrs!=NULL && (*cdss)[i]->attrs->Count()>0) {
+			if (gfr->keepAttr && !gfr->noExonAttr && (*cdss)[i]->attrs!=NULL && (*cdss)[i]->attrs->Count()>0) {
 				if (exons[eidx]->attrs==NULL)  exons[eidx]->attrs=new GffAttrs();
-				exons[eidx]->attrs->copyAttrs((*cdss)[i]->attrs);
+				exons[eidx]->attrs->copyAttrs((*cdss)[i]->attrs, true);
 				if (exons[eidx]->attrs->Count()==0) {
 					delete exons[eidx]->attrs;
 					exons[eidx]->attrs=NULL;
@@ -2034,7 +2035,7 @@ void GffObj::printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len) {
  fprintf(fout, "\n");
 }
 
-void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon) {
+void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon, bool CDSsrc) {
   if (names==NULL)
      GError(ERR_NULL_GFNAMES, "parseAttrs()");
   if (atrlist==NULL) {
@@ -2070,7 +2071,7 @@ void GffObj::parseAttrs(GffAttrs*& atrlist, char* info, bool isExon) {
        */
        if (exon2transcript)
             atrlist->add_if_new(this->names, start, ech); //never override transcript attribute with exon's
-       else atrlist->add_or_update(this->names, start, ech); //overwrite previous attr with the same name
+       else atrlist->add_or_update(this->names, start, ech, CDSsrc); //overwrite previous attr with the same name
     }
     start=pch;
   } //while info characters
