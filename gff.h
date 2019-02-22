@@ -476,7 +476,20 @@ enum GffPrintMode {
 class GffAttrs:public GList<GffAttr> {
   public:
     GffAttrs():GList<GffAttr>(false,true,true) { }
-    void add_if_new(GffNames* names, const char* attrname, const char* attrval, bool is_cds=false) {
+    void add_if_new(GffNames* names, const char* attrname, const char* attrval) {
+        //adding a new value without checking for cds status
+        int nid=names->attrs.getId(attrname);
+        if (nid>=0) { //attribute name found in the dictionary
+           for (int i=0;i<Count();i++)
+              if (nid==Get(i)->attr_id) { return; } //don't update existing
+        }
+        else { //adding attribute name to global attr name dictionary
+           nid=names->attrs.addNewName(attrname);
+        }
+        this->Add(new GffAttr(nid, attrval));
+    }
+
+    void add_if_new(GffNames* names, const char* attrname, const char* attrval, bool is_cds) {
         int nid=names->attrs.getId(attrname);
         if (nid>=0) { //attribute name found in the dictionary
            for (int i=0;i<Count();i++)
@@ -488,7 +501,27 @@ class GffAttrs:public GList<GffAttr> {
         this->Add(new GffAttr(nid, attrval, is_cds));
     }
 
-    void add_or_update(GffNames* names, const char* attrname, const char* val, bool is_cds=false) {
+    void add_or_update(GffNames* names, const char* attrname, const char* val) {
+    //adding a new value without checking for cds status
+        int aid=names->attrs.getId(attrname);
+        if (aid>=0) {
+           //attribute found in the dictionary
+           for (int i=0;i<Count();i++) {
+              //do we have it?
+              if (aid==Get(i)->attr_id) {
+                  //update the existing value for this attribute
+                  Get(i)->setValue(val);
+                  return;
+                  }
+              }
+        }
+        else { //adding attribute name to global attr name dictionary
+           aid=names->attrs.addNewName(attrname);
+        }
+        this->Add(new GffAttr(aid, val));
+    }
+
+    void add_or_update(GffNames* names, const char* attrname, const char* val, bool is_cds) {
       int aid=names->attrs.getId(attrname);
       if (aid>=0) {
          //attribute found in the dictionary

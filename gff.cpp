@@ -2456,6 +2456,7 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
 	  exon->phase, gffID);
     if (exon->attrs!=NULL) {
       for (int i=0;i<exon->attrs->Count();i++) {
+        if (exon->attrs->Get(i)->cds!=iscds) continue;
         attrname=names->attrs.getName(exon->attrs->Get(i)->attr_id);
         if (cvtChars) {
           decodeHexChars(dbuf, exon->attrs->Get(i)->attr_val, dbuf_len-1);
@@ -2482,6 +2483,7 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
        bool gId=false;
        for (int i=0;i<exon->attrs->Count();i++) {
             if (exon->attrs->Get(i)->attr_val==NULL) continue;
+            if (exon->attrs->Get(i)->cds!=iscds) continue;
             attrname=names->attrs.getName(exon->attrs->Get(i)->attr_id);
             if (strcmp(attrname, "transcriptID")==0) {
             	if (trId) continue;
@@ -2721,6 +2723,8 @@ void GffObj::getCDSegs(GVec<GffExon>& cds) {
         //cdseg.phase='0'+(cdsacc>0 ? (3-cdsacc%3)%3 : 0);
         cdseg.phase='0'+ (3-cdsacc%3)%3;
         cdsacc+=sgend-sgstart+1;
+        cdseg.attrs=exons[x]->attrs;
+        cdseg.sharedAttrs=true;
         cds.Add(cdseg);
        } //for each exon
      cds.Reverse();
@@ -2739,6 +2743,8 @@ void GffObj::getCDSegs(GVec<GffExon>& cds) {
        //cdseg.phase='0'+(cdsacc>0 ? (3-cdsacc%3)%3 : 0);
        cdseg.phase='0' + (3-cdsacc%3)%3 ;
        cdsacc+=sgend-sgstart+1;
+       cdseg.attrs=exons[x]->attrs;
+       cdseg.sharedAttrs=true;
        cds.Add(cdseg);
        } //for each exon
    } // + strand
