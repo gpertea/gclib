@@ -92,7 +92,21 @@ struct GffScore {
 		if (precision<0) sprintf(outs, ".");
 		else sprintf(outs, "%.*f", precision, score);
 	}
-
+	bool operator<(GffScore& v) {
+		return this->score<v.score;
+	}
+	bool operator<=(GffScore& v) {
+		return this->score<=v.score;
+	}
+	bool operator>(GffScore& v) {
+		return this->score>v.score;
+	}
+	bool operator>=(GffScore& v) {
+		return this->score>=v.score;
+	}
+	bool operator==(GffScore& v) {
+		return this->score==v.score;
+	}
 };
 
 extern const GffScore GFFSCORE_NONE;
