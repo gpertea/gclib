@@ -142,7 +142,7 @@ template <class OBJ> class GPVec {
   public:
     static void DefaultFreeProc(pointer item) {
       delete (OBJ*)item;
-      }
+    }
     virtual ~GPVec();
     GPVec(int init_capacity=2, bool free_elements=true); //also the default constructor
     GPVec(bool free_elements);

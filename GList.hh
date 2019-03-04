@@ -561,14 +561,14 @@ template <class OBJ> bool GList<OBJ>::Found(OBJ* item, int& idx) {
        i = (l + h) >> 1;
        c = (*fCompareProc)(this->fList[i], item);
        if (c < 0)  l = i + 1;
-         else {
-            h = i - 1;
-            if (c == 0) {
-                 idx=i;
-                 return true;
-                }
-            }
-       } //while
+       else {
+          h = i - 1;
+          if (c == 0) {
+               idx=i;
+               return true;
+          }
+       }
+   } //while
    idx = l;
    return false;
    }

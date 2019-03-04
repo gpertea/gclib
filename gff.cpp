@@ -1782,7 +1782,102 @@ void GfList::finalize(GffReader* gfr) { //if set, enforce sort by locus
   }
 }
 
+bool GffObj::reduceExonAttrs(GList<GffExon>& segs) {
+	bool attrs_discarded=false;
+	for (int a=0;a<segs[0]->attrs->Count();a++) {
+		int attr_id=segs[0]->attrs->Get(a)->attr_id;
+		char* attr_name=names->attrs.getName(attr_id);
+		char* attr_val =segs[0]->attrs->Get(a)->attr_val;
+		bool sameExonAttr=true;
+		for (int i=1;i<segs.Count();i++) {
+			char* ov=segs[i]->getAttr(attr_id);
+			if (ov==NULL || (strcmp(ov,attr_val)!=0)) {
+				sameExonAttr=false;
+				break;
+			}
+		}
+		if (sameExonAttr) {
+			//delete this attribute from exon level
+			attrs_discarded=true;
+			//add the attribute to transcript level
+			//rename it if it exists and is different for the transcript!
+			char* t_val=NULL;
+			bool same_aval=false;
+			if (this->attrs!=NULL &&
+					(t_val=this->attrs->getAttr(attr_id))!=NULL) {
+				//same attribute name already exists in
+				same_aval=(strcmp(attr_val, t_val)==0);
+				if (!same_aval) {
+					//add renamed attribute
+					const char* prefix = (&segs==cdss) ? "CDS_" : "exon_";
+					char* new_attr_name=NULL;
+					GMALLOC(new_attr_name, strlen(prefix)+strlen(attr_name)+1);
+					new_attr_name[0]=0;
+					strcat(new_attr_name, prefix);
+					strcat(new_attr_name, attr_name);
+					this->attrs->add_or_update(names, new_attr_name, attr_val);
+					GFREE(new_attr_name);
+				}
+			}
+			else { //no such attribute exists for the transcript
+				this->addAttr(attr_name, attr_val);
+			}
+			for (int i=1;i<segs.Count();i++) {
+				removeExonAttr(*(segs[i]), attr_id);
+			}
+			segs[0]->attrs->freeItem(a);
+		}
+	}
+	if (attrs_discarded) segs[0]->attrs->Pack();
+	return attrs_discarded;
+}
+
+int GffObj::whichExon(uint coord, GList<GffExon>* segs) {
+	 //segs MUST be sorted by GSeg order (start coordinate)
+	if (segs==NULL) segs=&exons;
+	if (segs->Count()==0) return -1;
+	if (coord<segs->First()->start || coord>segs->Last()->end)
+		return -1;
+	if (segs->Count()<6) {
+		//simple scan
+		for (int i=0;i<segs->Count();i++)
+			if ((*segs)[i]->overlap(coord))
+				return i;
+		return -1;
+	}
+	else { //use quick search
+		int i=0;
+		int l=0; //lower boundary
+		int h=segs->Count(); //higher boundary
+		while (l<=h) {
+			i = (l+h) >> 1; //range midpoint
+			if (coord > segs->Get(i)->end)
+				l=i+1;
+			else { //coord <= segs->Get(i)->end
+				if (coord >= segs->Get(i)->start) {
+					return i;
+				}
+				//here: coord < segs->Get(i)->start
+				h = i-1;
+			}
+		}
+	}
+	return -1;
+}
+
 GffObj* GffObj::finalize(GffReader* gfr) {
+	if (this->createdByExon() && this->end-this->start<10 && this->exons.Count()<=1) {
+		//? misleading exon-like feature parented by an exon or CDS mistakenly
+		//  interpreted as a standalone transcript
+		// example: GENCODE gff3 feature "stop_codon_redefined_as_selenocysteine" which is
+		// parented by a CDS !
+		if (cdss==NULL || cdss->Count()<=1) {
+			if (gff_show_warnings) {
+			 GMessage("Warning: unrecognized component record with ID %s discarded.\n",gffID);
+			}
+		   isDiscarded(true);
+		}
+	}
 	if (!isDiscarded()) {
 		if (exons.Count()==0 && (isTranscript() || (isGene() && children.Count()==0 && gfr->gene2exon)) ) {
 			//add exon feature to an exonless transcript/gene
@@ -1813,14 +1908,19 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			int eidx=addExon((*cdss)[i]->start, (*cdss)[i]->end, exgffExon, 0, (*cdss)[i]->score);
 			if (eidx<0) GError("Error: could not properly add exon %d-%d to transcript %s\n",
 					(*cdss)[i]->start, (*cdss)[i]->end, gffID);
-			if (gfr->keepAttr && !gfr->noExonAttr && (*cdss)[i]->attrs!=NULL && (*cdss)[i]->attrs->Count()>0) {
-				if (exons[eidx]->attrs==NULL)  exons[eidx]->attrs=new GffAttrs();
-				exons[eidx]->attrs->copyAttrs((*cdss)[i]->attrs, true);
-				if (exons[eidx]->attrs->Count()==0) {
-					delete exons[eidx]->attrs;
-					exons[eidx]->attrs=NULL;
-				}
-			}
+		}
+	}
+	//-- attribute reduction for some records which
+	//   repeat the same attr=value for every exon
+	bool reduceAttributes=(gfr->keepAttr && !gfr->noExonAttr &&
+			exons.Count()>1 && exons[0]->attrs!=NULL);
+	if (reduceAttributes) {
+		//for each attributes of the 1st exon, if its present and it has
+		//the same value for all other exons, move it to transcript level
+		reduceExonAttrs(exons);
+		//do the same for CDS segments, if any
+		if (cdss!=NULL && cdss->Count()>1 && (*cdss)[0]->attrs!=NULL) {
+			reduceExonAttrs(*cdss);
 		}
 	}
 	//merge close exons if requested
@@ -1850,37 +1950,6 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			} //for each exon
 		} //merge close exons
 	}
-	//-- attribute reduction for some records which
-	// repeat the same attr=value for every exon
-	if (gfr->keepAttr && !gfr->noExonAttr //&& !hasGffID()
-			&& exons.Count()>1 && exons[0]->attrs!=NULL) {
-		bool attrs_discarded=false;
-		//for each attributes of the 1st exon, if its present and it has
-		//the same value for all other exons, move it to transcript level
-		for (int a=0;a<exons[0]->attrs->Count();a++) {
-			int attr_name_id=exons[0]->attrs->Get(a)->attr_id;
-			char* attr_name=names->attrs.getName(attr_name_id);
-			char* attr_val =exons[0]->attrs->Get(a)->attr_val;
-			bool sameExonAttr=true;
-			for (int i=1;i<exons.Count();i++) {
-				char* ov=exons[i]->getAttr(attr_name_id);
-				if (ov==NULL || (strcmp(ov,attr_val)!=0)) {
-					sameExonAttr=false;
-					break;
-				}
-			}
-			if (sameExonAttr) {
-				//delete this attribute from exon level
-				attrs_discarded=true;
-				this->addAttr(attr_name, attr_val);
-				for (int i=1;i<exons.Count();i++) {
-					removeExonAttr(*(exons[i]), attr_name_id);
-				}
-				exons[0]->attrs->freeItem(a);
-			}
-		}
-		if (attrs_discarded) exons[0]->attrs->Pack();
-	}
 	//-- check features vs their exons' span
 	if (isTranscript()) {
 	   if (exons.Count()>0) {
@@ -1902,13 +1971,17 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		bool cds_exComp=true; //CDSs are compatible with the exon boundaries
 		if (cdss->Count()==1) {
 			//check that the CDS segment is within a single exon
+			int start_eidx=-1;
+			int end_eidx=-1;
 			for (int i=0;i<exons.Count();i++) {
-				if (CDstart>=exons[i]->start && CDend<=exons[i]->end ) {
-					cds_exComp=false;
-					break;
-				}
+				//GMessage("[DBG:] checking if CDS %d-%d is within exon %d-%d\n", CDstart, CDend, exons[i]->start,
+				//		exons[i]->end);
+				if (CDstart>=exons[i]->start && CDstart<=exons[i]->end) start_eidx=i;
+				if (CDend>=exons[i]->start || CDend<=exons[i]->end ) end_eidx=i;
+				if (start_eidx>=0 && end_eidx>=0) break;
 			}
-			if (!cds_exComp) GMessage("Warning: transcript %s has incorrect CDS segment definition (%d-$d)!\n",
+			cds_exComp=(start_eidx==end_eidx && start_eidx>=0);
+			if (!cds_exComp) GMessage("Warning: transcript %s has incorrect CDS segment definition (%d-%d)!\n",
 					gffID, CDstart, CDend);
 			cds_exComp=true; //just to free cdss, even though it's wrong
 		} else {
@@ -1943,6 +2016,25 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			}
 		} //multiple CDS segments
 		if (cds_exComp) {
+			if (gfr->keepAttr && !gfr->noExonAttr) {
+				 //TODO: copy CDS attributes to corresponding exons
+				int eidx=whichExon((*cdss)[0]->start, &exons);
+				if (eidx<0)
+					GError("Error finding CDS coordinate inside exons (?) for %s\n",
+						    gffID);
+				for (int i=0;i<cdss->Count();i++) {
+					if ((*cdss)[i]->attrs!=NULL && (*cdss)[i]->attrs->Count()>0) {
+						if (exons[eidx]->attrs==NULL)
+							exons[eidx]->attrs=new GffAttrs();
+						exons[eidx]->attrs->copyAttrs((*cdss)[i]->attrs, true);
+						if (exons[eidx]->attrs->Count()==0) {
+							delete exons[eidx]->attrs;
+							exons[eidx]->attrs=NULL;
+						}
+					}
+					++eidx;
+				}
+			}
 			delete cdss;
 			cdss=NULL;
 			//this->isXCDS(false);

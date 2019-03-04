@@ -1,6 +1,6 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.10.6"
+#define GCLIB_VERSION "0.10.8"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -316,11 +316,14 @@ class GSeg {
      return (start<=d.end+fuzz && end+fuzz>=d.start);
      }
 
+  bool overlap(uint x) {
+	return (start<=x && x<=end);
+  }
+
   bool overlap(uint s, uint e) {
      if (s>e) { Gswap(s,e); }
-     //return start<s ? (s<=end) : (start<=e);
      return (start<=e && end>=s);
-     }
+  }
 
   //return the length of overlap between two segments
   int overlapLen(GSeg* r) {

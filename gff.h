@@ -557,7 +557,15 @@ class GffAttrs:public GList<GffAttr> {
     	return -1;
     }
 
-    char* getAttr(GffNames* names, const char* attrname, bool is_cds=false) {
+    char* getAttr(GffNames* names, const char* attrname) {
+      int aid=names->attrs.getId(attrname);
+      if (aid>=0)
+        for (int i=0;i<Count();i++)
+          if (aid==Get(i)->attr_id) return Get(i)->attr_val;
+      return NULL;
+    }
+
+    char* getAttr(GffNames* names, const char* attrname, bool is_cds) {
       int aid=names->attrs.getId(attrname);
       if (aid>=0)
         for (int i=0;i<Count();i++)
@@ -565,7 +573,14 @@ class GffAttrs:public GList<GffAttr> {
       return NULL;
     }
 
-    char* getAttr(int aid, bool is_cds=false) {
+    char* getAttr(int aid) {
+      if (aid>=0)
+        for (int i=0;i<Count();i++)
+          if (aid==Get(i)->attr_id) return Get(i)->attr_val;
+      return NULL;
+    }
+
+    char* getAttr(int aid, bool is_cds) {
       if (aid>=0)
         for (int i=0;i<Count();i++)
           if (aid==Get(i)->attr_id && Get(i)->cds==is_cds)
@@ -719,6 +734,9 @@ public:
     //return (ftype_id==gff_fid_mRNA && exons.Count()>0);
     return (isTranscript() && exons.Count()>0);
   }
+
+  //return the index of exon containing coordinate coord, or -1 if not
+  int whichExon(uint coord, GList<GffExon>* segs=NULL);
   int readExon(GffReader& reader, GffLine& gl);
 
   int addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override=exgffNone); //add to cdss or exons
@@ -727,6 +745,7 @@ public:
 		      GffScore exon_score=GFFSCORE_NONE, GList<GffExon>* segs=NULL);
 
 protected:
+  bool reduceExonAttrs(GList<GffExon>& segs);
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
        int8_t exontype);
@@ -777,7 +796,7 @@ public:
        GFREE(gffID);
        GFREE(gene_name);
        GFREE(geneID);
-       GFREE(cdss);
+       delete cdss;
        clearAttrs();
        gffnames_unref(names);
        }
