@@ -26,7 +26,7 @@ extern const uint GFF_MAX_INTRON;
 //extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
 //extern const byte gfo_flagShift_LEVEL;
 
-extern bool gff_show_warnings;
+//extern bool gff_show_warnings;
 
 #define GFF_LINELEN 4096
 #define ERR_NULL_GFNAMES "Error: GffObj::%s requires a non-null GffNames* names!\n"
@@ -1051,23 +1051,14 @@ class GSeqStat {
 
 
 int gfo_cmpByLoc(const pointer p1, const pointer p2);
+int gfo_cmpRefByID(const pointer p1, const pointer p2);
 
 class GfList: public GList<GffObj> {
-  //just adding the option to sort by genomic sequence and coordinate
-   bool mustSort;
  public:
-   GfList(bool sortbyloc=false):GList<GffObj>(false,false,false) {
+   GfList():GList<GffObj>(false,false,false) {
      //GffObjs in this list are NOT deleted when the list is cleared
      //-- for deallocation of these objects, call freeAll() or freeUnused() as needed
-     mustSort=sortbyloc;
-     }
-   void sortedByLoc(bool v=true) {
-     bool prev=mustSort;
-     mustSort=v;
-     if (fCount>0 && mustSort && !prev) {
-       this->setSorted((GCompareProc*)gfo_cmpByLoc);
-       }
-     }
+   }
    void finalize(GffReader* gfr);
 
    void freeAll() {
@@ -1081,7 +1072,6 @@ class GfList: public GList<GffObj> {
      for (int i=0;i<fCount;i++) {
        if (fList[i]->isUsed()) continue;
        /*//inform the children?
-       //FIXME: some of these children may have been deallocated (?)
        for (int c=0;c<fList[i]->children.Count();c++) {
           fList[i]->children[c]->parent=NULL;
        }
@@ -1091,18 +1081,8 @@ class GfList: public GList<GffObj> {
        }
      Clear();
      }
+};
 
-};
-/*
-struct GfoHolder {
-   //int idx; //position in GffReader::gflst array
-   GffObj* gffobj;
-   GfoHolder(GffObj* gfo=NULL) { //, int i=0) {
-     //idx=i;
-     gffobj=gfo;
-     }
-};
-*/
 class CNonExon { //utility class used in subfeature promotion
  public:
    //int idx;
@@ -1146,7 +1126,9 @@ class GffReader {
        bool noExonAttr:1;
        bool mergeCloseExons:1;
        bool gene2exon:1;
-       bool sortByLoc:1;
+       bool sortByLoc:1; //if records should be sorted by location
+       bool refAlphaSort:1; //is sortByLoc, reference sequences are
+                       // sorted lexically instead of their id#
        bool gff_warns:1;
     };
   };
@@ -1189,19 +1171,20 @@ class GffReader {
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
   bool readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
-  GffReader(FILE* f=NULL, bool t_only=false, bool sortbyloc=false):linebuf(NULL), fpos(0),
+  GffReader(FILE* f=NULL, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
 		  buflen(0), flags(0), fh(f), fname(NULL), gffline(NULL),
 		  bedline(NULL), discarded_ids(true), phash(true), gseqtable(1,true),
-		  gflst(sortbyloc), gseqStats(1, false) {
+		  gflst(), gseqStats(1, false) {
       GMALLOC(linebuf, GFF_LINELEN);
       buflen=GFF_LINELEN-1;
       gffnames_ref(GffObj::names);
-      gff_warns=gff_show_warnings;
+      //gff_warns=gff_show_warnings;
       transcriptsOnly=t_only;
-      sortByLoc=sortbyloc;
+      sortByLoc=sort;
       noExonAttr=true;
       //lastReadNext=NULL;
   }
+  /*
   void init(FILE *f, bool t_only=false, bool sortbyloc=false, bool g2exon=false) {
       fname=NULL;
       fh=f;
@@ -1212,6 +1195,7 @@ class GffReader {
       gflst.sortedByLoc(sortbyloc);
       gene2exon=g2exon;
   }
+  */
   void set_gene2exon(bool v) { gene2exon=v;}
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
   void isTLF(bool v=true) { is_TLF=v; } //should be set before any parsing!
@@ -1222,15 +1206,15 @@ class GffReader {
   void mergingCloseExons(bool merge_close_exons=true) {
 	  mergeCloseExons=merge_close_exons;
   }
-  GffReader(const char* fn, bool t_only=false, bool sort_by_loc=false):linebuf(NULL), fpos(0),
+  GffReader(const char* fn, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
 	  		  buflen(0), flags(0), fh(NULL), fname(NULL),
 			  gffline(NULL), bedline(NULL), discarded_ids(true),
-			  phash(true), gseqtable(1,true), gflst(sort_by_loc), gseqStats(1,false) {
-      gff_warns=gff_show_warnings;
+			  phash(true), gseqtable(1,true), gflst(), gseqStats(1,false) {
+      //gff_warns=gff_show_warnings;
       gffnames_ref(GffObj::names);
       noExonAttr=true;
       transcriptsOnly=t_only;
-      sortByLoc=sort_by_loc;
+      sortByLoc=sort;
       fname=Gstrdup(fn);
       fh=fopen(fname, "rb");
       GMALLOC(linebuf, GFF_LINELEN);
@@ -1253,9 +1237,16 @@ class GffReader {
       gffnames_unref(GffObj::names);
       }
 
-  void showWarnings(bool v=true) {
+  void showWarnings(bool v) {
      gff_warns=v;
-     gff_show_warnings=v;
+     //gff_show_warnings=v;
+  }
+  bool showWarnings() {
+     return gff_warns;
+  }
+  void setRefAlphaSorted(bool v=true) {
+	refAlphaSort=v;
+	if (v) sortByLoc=true;
   }
 
   GffLine* nextGffLine();

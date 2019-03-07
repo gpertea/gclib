@@ -8,7 +8,7 @@ const uint GFF_MAX_LOCUS = 7000000; //longest known gene in human is ~2.2M, UCSC
 const uint GFF_MAX_EXON  =   30000; //longest known exon in human is ~11K
 const uint GFF_MAX_INTRON= 6000000; //Ensembl shows a >5MB mouse intron
 const int  GFF_MIN_INTRON = 4; //for mergeCloseExons option
-bool gff_show_warnings = false; //global setting, set by GffReader->showWarnings()
+//bool gff_show_warnings = false; //global setting, set by GffReader->showWarnings()
 int gff_fid_mRNA=0; //mRNA (has CDS)
 int gff_fid_transcript=1; // generic "transcript" feature
 int gff_fid_exon=2; // generic "exon"-like feature (exon,CDS,UTR,start/stop codon)
@@ -75,6 +75,23 @@ int gfo_cmpByLoc(const pointer p1, const pointer p2) {
              }
              else //return (int)(g1.gseq_id-g2.gseq_id); // input order !
             	 return strcmp(g1.getGSeqName(), g2.getGSeqName()); //lexicographic !
+}
+
+//comparator for ordering by reference sequence (chromosome) index
+int gfo_cmpRefByID(const pointer p1, const pointer p2) {
+ GffObj& g1=*((GffObj*)p1);
+ GffObj& g2=*((GffObj*)p2);
+ if (g1.gseq_id==g2.gseq_id) {
+             if (g1.start!=g2.start)
+                    return (int)(g1.start-g2.start);
+               else if (g1.getLevel()!=g2.getLevel())
+                        return (int)(g1.getLevel()-g2.getLevel());
+                    else
+                        if (g1.end!=g2.end)
+                              return (int)(g1.end-g2.end);
+                        else return strcmp(g1.getID(), g2.getID());
+             }
+             else return (g1.gseq_id-g2.gseq_id); // sort refs by their id# order
 }
 
 char* GffLine::extractGFFAttr(char* & infostr, const char* oline, const char* attr, bool caseStrict, bool enforce_GTF2, int* rlen) {
@@ -931,9 +948,6 @@ int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, Gff
    int eidx=segs->Add(enew);
    if (eidx<0) {
     //this would actually be possible if the object is a "Gene" and "exons" are in fact isoforms
-     if (gff_show_warnings)
-       GMessage("GFF Warning: failed adding segment %d-%d for %s (discarded)!\n",
-            segstart, segend, gffID);
      delete enew;
      hasErrors(true);
      return -1;
@@ -1053,7 +1067,11 @@ GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
 	isTranscript(true);
 	gffID=Gstrdup(bedline.ID);
 	for (int i=0;i<bedline.exons.Count();++i) {
-		this->addExon(bedline.exons[i].start, bedline.exons[i].end, exgffExon);
+		int eidx=this->addExon(bedline.exons[i].start, bedline.exons[i].end, exgffExon);
+	    if (eidx<0 && gfrd.showWarnings())
+	       GMessage("GFF Warning: failed adding segment %d-%d for %s (discarded)!\n",
+	    		   bedline.exons[i].start, bedline.exons[i].end, gffID);
+
 	}
 	if (bedline.cds_start>0) {
 		CDstart=bedline.cds_start;
@@ -1156,7 +1174,11 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 		  if (gffline.exons.Count()>0) {
 			  //for compact GFF-like transcript line format (TLF), exons were already found as attributes
 				for (int i=0;i<gffline.exons.Count();++i) {
-					this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon, '.', gscore);
+					int eidx=this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon, '.', gscore);
+				    if (eidx<0 && gfrd.showWarnings())
+				       GMessage("GFF Warning: failed adding exon %d-%d for %s (discarded)!\n",
+				    		   gffline.exons[i].start, gffline.exons[i].end, gffID);
+
 				}
 		  }
 		  if (gffline.cds_start>0) {
@@ -1168,7 +1190,11 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 			    //for compact GFF-like transcript line format (TLF), CDS might be already found as attributes
 			    if (cdss==NULL) cdss=new GList<GffExon>(true, true, false);
 				for (int i=0;i<gffline.cdss.Count();++i) {
-					this->addExon(gffline.cdss[i].start, gffline.cdss[i].end, exgffCDS, 0, GFFSCORE_NONE, cdss);
+					int eidx=this->addExon(gffline.cdss[i].start, gffline.cdss[i].end, exgffCDS, 0, GFFSCORE_NONE, cdss);
+				    if (eidx<0 && gfrd.showWarnings())
+				       GMessage("GFF Warning: failed adding CDS segment %d-%d for %s (discarded)!\n",
+				    		   gffline.cdss[i].start, gffline.cdss[i].end, gffID);
+
 				}
 		  }
       }
@@ -1584,7 +1610,7 @@ void GffReader::readAll() {
 				if (prevseen) {
 					//same ID seen in the same locus/region
 					if (prevseen->createdByExon()) {
-						if (gff_show_warnings && (prevseen->start<gffline->fstart ||
+						if (gff_warns && (prevseen->start<gffline->fstart ||
 								prevseen->end>gffline->fend))
 							GMessage("GFF Warning: invalid coordinates for %s parent feature (ID=%s)\n", gffline->ftype, gffline->ID);
 						//an exon of this ID was given before
@@ -1597,7 +1623,8 @@ void GffReader::readAll() {
 						if (prevseen->overlap(gffline->fstart, gffline->fend) && !gtf_gene_dupID) {
 							//in some GTFs a gene ID may actually be the same with the parented transcript ID (thanks)
 							//overlapping feature with same ID is going too far
-							GMessage("GFF Error: overlapping duplicate %s feature (ID=%s)\n", gffline->ftype, gffline->ID);
+							GMessage("GFF Error: discarding overlapping duplicate %s feature (%d-%d) with ID=%s\n", gffline->ftype,
+									gffline->fstart, gffline->fend, gffline->ID);
 							//validation_errors = true;
 							if (gff_warns) { //validation intent: just skip the feature, allow the user to see other errors
 								delete gffline;
@@ -1776,9 +1803,12 @@ void GfList::finalize(GffReader* gfr) { //if set, enforce sort by locus
   if (discarded.Count()>0) {
           this->Pack();
   }
-  if (mustSort) { //force (re-)sorting
-     this->setSorted(false);
-     this->setSorted((GCompareProc*)gfo_cmpByLoc);
+  if (gfr->sortByLoc) {
+    this->setSorted(false);
+    if (gfr->refAlphaSort)
+      this->setSorted((GCompareProc*)gfo_cmpByLoc);
+    else
+      this->setSorted((GCompareProc*)gfo_cmpRefByID);
   }
 }
 
@@ -1872,8 +1902,8 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		// example: GENCODE gff3 feature "stop_codon_redefined_as_selenocysteine" which is
 		// parented by a CDS !
 		if (cdss==NULL || cdss->Count()<=1) {
-			if (gff_show_warnings) {
-			 GMessage("Warning: unrecognized component record with ID %s discarded.\n",gffID);
+			if (gfr->showWarnings()) {
+			 GMessage("Warning: discarding unrecognized '%s' record with ID=%s\n",this->getFeatureName(),gffID);
 			}
 		   isDiscarded(true);
 		}
@@ -1906,21 +1936,24 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		//so make sure we add all CDS segments to exons, if they are not already there
 		for (int i=0;i<cdss->Count();++i) {
 			int eidx=addExon((*cdss)[i]->start, (*cdss)[i]->end, exgffExon, 0, (*cdss)[i]->score);
-			if (eidx<0) GError("Error: could not properly add exon %d-%d to transcript %s\n",
+			if (eidx<0) GError("Error: could not reconcile CDS %d-%d with exons of transcript %s\n",
 					(*cdss)[i]->start, (*cdss)[i]->end, gffID);
 		}
 	}
 	//-- attribute reduction for some records which
-	//   repeat the same attr=value for every exon
+	//   repeat the exact same attr=value for every exon
 	bool reduceAttributes=(gfr->keepAttr && !gfr->noExonAttr &&
 			exons.Count()>1 && exons[0]->attrs!=NULL);
 	if (reduceAttributes) {
-		//for each attributes of the 1st exon, if its present and it has
-		//the same value for all other exons, move it to transcript level
-		reduceExonAttrs(exons);
+		//for each attribute of the 1st exon, if it has the
+		//same value for all other exons, move it to transcript level
+		if (reduceExonAttrs(exons) && gfr->showWarnings()) {
+			GMessage("Info: duplicate exon attributes reduced for %s\n", gffID);
+		}
 		//do the same for CDS segments, if any
 		if (cdss!=NULL && cdss->Count()>1 && (*cdss)[0]->attrs!=NULL) {
-			reduceExonAttrs(*cdss);
+			if (reduceExonAttrs(*cdss) && gfr->showWarnings())
+				GMessage("Info: duplicate CDS attributes reduced for %s\n", gffID);
 		}
 	}
 	//merge close exons if requested
@@ -1953,14 +1986,28 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	//-- check features vs their exons' span
 	if (isTranscript()) {
 	   if (exons.Count()>0) {
+		 if (gfr->gff_warns && (this->start!=exons.First()->start ||
+				 this->end!=exons.Last()->end) )
+			 GMessage("Warning: adjusted transcript %s boundaries according to terminal exons.\n",
+					 gffID);
 	     this->start=exons.First()->start;
 	     this->end=exons.Last()->end;
 	   }
 	}
 	else { //non-transcripts just have to be at least as wide as their sub-features
 	  if (exons.Count()>0) {
-		  if (this->start>exons.First()->start) this->start=exons.First()->start;
-		  if (this->end<exons.Last()->end) this->end=exons.First()->end;
+		  bool adj=false;
+		  if (this->start>exons.First()->start) {
+			  this->start=exons.First()->start;
+			  adj=true;
+		  }
+		  if (this->end<exons.Last()->end) {
+			  this->end=exons.First()->end;
+			  adj=true;
+		  }
+		  if (gfr->gff_warns && adj)
+			  GMessage("Warning: adjusted %s %s boundaries according to terminal sub-features.\n",
+			  					 this->getFeatureName(), gffID);
 	  }
 	}
 	//-- update covlen
@@ -2849,7 +2896,10 @@ bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen) {
  GSeg mseg(m.start, m.end);
  ovlen=mseg.overlapLen(r.start,r.end);
  // fuzzy matching for single-exon transcripts:
- // overlap should be 80% of the length of the longer one
+ // matching = overlap is at least 80% of the length of the longer transcript
+ // *OR* in case of reverse containment (reference contained in m)
+ //   it's also considered "matching" if the overlap is at least 80% of
+ //   the reference len AND at least 70% of the query len
  if (m.covlen>r.covlen) {
    return ( (ovlen >= m.covlen*0.8) ||
 		   (ovlen >= r.covlen*0.8 && ovlen >= m.covlen* 0.7 ));
