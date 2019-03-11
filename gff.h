@@ -47,6 +47,10 @@ extern const char* exonTypes[];
 
 const char* strExonType(char xtype);
 
+typedef void GFFCommentParser(const char* cmline); //comment parser callback
+//Useful for parsing/maintaining ref seq info from comment lines like this:
+//##sequence-region chr1 1 24895642
+
 class GffReader;
 class GffObj;
 
@@ -678,7 +682,7 @@ class GffObj:public GSeg {
     	  bool flag_CHILDREN_PROMOTED :1;
     	  bool flag_IS_GENE           :1;
     	  bool flag_IS_TRANSCRIPT     :1;
-    	  bool flag_HAS_GFF_ID        :1; //found transcript/RNA feature line (GFF3 or GTF)
+    	  bool flag_HAS_GFF_ID        :1; //found transcript/RNA feature line (GFF3 or GTF2 with transcript line)
     	  bool flag_BY_EXON           :1; //created by subfeature (exon/CDS) directly
     	  bool flag_CDS_ONLY          :1; //transcript defined by CDS features only (GffObj::isCDS())
     	  bool flag_CDS_NOSTART       :1; //partial CDS at 5' end (no start codon)
@@ -1140,6 +1144,7 @@ class GffReader {
   //char* lastReadNext;
   FILE* fh;
   char* fname;  //optional fasta file with the underlying genomic sequence to be attached to this reader
+  GFFCommentParser* commentParser;
   GffLine* gffline;
   BEDLine* bedline;
   //bool transcriptsOnly; //keep only transcripts w/ their exon/CDS features
@@ -1177,7 +1182,7 @@ class GffReader {
   bool readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon>* pex=NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
-		  buflen(0), flags(0), fh(f), fname(NULL), gffline(NULL),
+		  buflen(0), flags(0), fh(f), fname(NULL), commentParser(NULL), gffline(NULL),
 		  bedline(NULL), discarded_ids(true), phash(true), gseqtable(1,true),
 		  gflst(), gseqStats(1, false) {
       GMALLOC(linebuf, GFF_LINELEN);
@@ -1230,9 +1235,12 @@ class GffReader {
 	refAlphaSort=v;
 	if (v) sortByLoc=true;
   }
+  void setCommentParser(GFFCommentParser* cmParser=NULL) {
+	  commentParser=cmParser;
+  }
 
   GffReader(const char* fn, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
-	  		  buflen(0), flags(0), fh(NULL), fname(NULL),
+	  		  buflen(0), flags(0), fh(NULL), fname(NULL), commentParser(NULL),
 			  gffline(NULL), bedline(NULL), discarded_ids(true),
 			  phash(true), gseqtable(1,true), gflst(), gseqStats(1,false) {
       //gff_warns=gff_show_warnings;

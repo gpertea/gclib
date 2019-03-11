@@ -371,7 +371,7 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  memcpy(line, l, llen+1);
  GMALLOC(dupline, llen+1);
  memcpy(dupline, l, llen+1);
- skipLine=1; //reset only if it reaches the end of this function
+ skipLine=true; //clear only if we make it to the end of this function
  char* t[9];
  int i=0;
  int tidx=1;
@@ -387,7 +387,6 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
   i++;
   }
  if (tidx<8) { // ignore non-GFF lines
-  // GMessage("Warning: error parsing GFF/GTF line:\n%s\n", l);
   return;
  }
  gffWarnings=reader->gff_warns;
@@ -763,7 +762,7 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 GMessage("Warning: could not parse ID or Parent from GFF line:\n%s\n",dupline);
 	 return; //skip
  }
- skipLine=0;
+ skipLine=false;
 }
 
 //FIXME - this should only be used AFTER finalize() was called, and must have cdss=NULL of course
@@ -1258,10 +1257,18 @@ GffLine* GffReader::nextGffLine() {
      _crc_result.process_bytes( linebuf, llen );
 #endif
     int ns=0; //first nonspace position
+    bool commentLine=false;
     while (l[ns]!=0 && isspace(l[ns])) ns++;
-    if (l[ns]=='#' || llen<10) continue;
+    if (l[ns]=='#') {
+    	commentLine=true;
+    	if (llen<10) {
+    		if (commentParser!=NULL) (*commentParser)(l);
+    		continue;
+    	}
+    }
     gffline=new GffLine(this, l);
     if (gffline->skipLine) {
+       if (commentParser!=NULL) (*commentParser)(gffline->dupline);
        delete gffline;
        gffline=NULL;
        continue;
@@ -2700,7 +2707,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	     gseqname, tlabel, start, end, dbuf, strand, gffID);
 	   if (geneID!=NULL)
 	      fprintf(fout, "; gene_id \"%s\"",geneID);
-	   if (gene_name!=NULL && this->getAttr("gene_name")==NULL)
+	   if (gene_name!=NULL && getAttr("gene_name")==NULL)
 	      fprintf(fout, "; gene_name \"%s\"",gene_name);
 	   if (attrs!=NULL) {
 		    bool trId=false;
@@ -2777,8 +2784,9 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	   }
    }
    if (CDphase>0 && (gffp==pgffTLF || !showCDS)) fprintf(fout,";CDSphase=%c", CDphase);
-
-   if (geneID!=NULL && !parentPrint && getAttr("geneID")==NULL)
+   char* g_id=NULL;
+   if (geneID!=NULL && !parentPrint && getAttr("geneID")==NULL &&
+		   ((g_id=getAttr("gene_id"))!=NULL && strcmp(g_id, geneID)!=0))
       fprintf(fout, ";geneID=%s",geneID);
    if (gene_name!=NULL && !parentPrint && getAttr("gene_name")==NULL)
       fprintf(fout, ";gene_name=%s",gene_name);
