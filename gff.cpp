@@ -630,6 +630,10 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 			 }
 		 }
 	 } //has Parent field
+	 //special case for gene_id: for genes, this is the ID
+	 if (is_gene && gene_id==NULL && ID!=NULL) {
+	    	 gene_id=Gstrdup(ID);
+	 }
 	 //parse other potentially useful GFF3 attributes
 	 /*
 	 if ((p=strstr(info,"Target="))!=NULL) { //has Target attr
@@ -722,7 +726,8 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 }
 	 }
 	 //more GTF attribute parsing
-
+	 if (is_gene && gene_id==NULL && ID!=NULL)
+    	 gene_id=Gstrdup(ID);
 	 gene_name=getAttrValue("gene_name");
 	 if (gene_name==NULL) {
 		 gene_name=getAttrValue("gene_sym");
@@ -1171,7 +1176,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
     gscore.score=gffline.score;
     gscore.precision=gffline.score_decimals;
     if (gffline.ID==NULL || gffline.ID[0]==0)
-      GError("Error: no ID found for GFF record start\n");
+      GError("Error: no valid ID found for GFF record\n");
     this->hasGffID(true);
     gffID=Gstrdup(gffline.ID); //there must be an ID here
     //if (gffline.is_transcript) ftype_id=gff_fid_mRNA;
@@ -1208,7 +1213,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 				}
 		  }
       }
-    } //is transcript
+    } //is_transcript
     if (gfrd.keep_Attrs) this->parseAttrs(attrs, gffline.info);
     if (gfrd.is_gff3 && gffline.parents==NULL && gffline.exontype!=exgffNone) {
        //special case with bacterial genes just given as a CDS/exon, without parent!
@@ -1223,11 +1228,14 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   if (gffline.gene_name!=NULL) {
      gene_name=Gstrdup(gffline.gene_name);
      }
-  if (gffline.gene_id) { //only for GTF2: value of gene_id attribute
+  if (gffline.gene_id) { //only for gene features or GTF2 gene_id attribute
      geneID=Gstrdup(gffline.gene_id);
-  } else if (gffline.is_transcript && gffline.parents!=NULL) {
+  }
+  /*//we cannot assume parents[0] is a gene! for NCBI miRNA, parent can be a primary_transcript feature!
+  else if (gffline.is_transcript && gffline.parents!=NULL) {
 	 geneID=Gstrdup(gffline.parents[0]);
   }
+  */
 }
 
 BEDLine* GffReader::nextBEDLine() {
@@ -1371,12 +1379,12 @@ GffObj* GffReader::updateParent(GffObj* newgfo, GffObj* parent) {
   parent->children.Add(newgfo);
   if (newgfo->parent==NULL) newgfo->parent=parent;
   newgfo->setLevel(parent->getLevel()+1);
-  if (parent->isGene()) {
-      if (parent->gene_name!=NULL && newgfo->gene_name==NULL)
-        newgfo->gene_name=Gstrdup(parent->gene_name);
-      if (parent->geneID!=NULL && newgfo->geneID==NULL)
-        newgfo->geneID=Gstrdup(parent->geneID);
-      }
+  //if (parent->isGene()) {
+  if (parent->gene_name!=NULL && newgfo->gene_name==NULL)
+      newgfo->gene_name=Gstrdup(parent->gene_name);
+  if (parent->geneID!=NULL && newgfo->geneID==NULL)
+      newgfo->geneID=Gstrdup(parent->geneID);
+  //}
 
   return newgfo;
 }
@@ -1709,9 +1717,10 @@ void GffReader::readAll() {
 						}
 						if (parentgfo!=NULL) { //parent GffObj parsed earlier
 							found_parent=true;
-							if (parentgfo->isGene() && (gffline->is_transcript ||
+							if ((parentgfo->isGene() || parentgfo->isTranscript()) && (gffline->is_transcript ||
 									 gffline->exontype==exgffNone)) {
-								//not an exon, but a transcript parented by a gene
+								//not an exon, but could be a transcript parented by a gene
+								// *or* by another transcript (! miRNA -> primary_transcript)
 								if (newgfo) {
 									updateParent(newgfo, parentgfo);
 								}
@@ -2626,11 +2635,9 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
            gseqname, tlabel, ftype, exon->start, exon->end, dbuf, strand, exon->phase, gffID);
     if (geneID)
       fprintf(fout," gene_id \"%s\";",geneID);
-    /*
     if (gene_name!=NULL) {
        fprintf(fout," gene_name \"%s\";",gene_name);
     }
-    */
     if (exon->attrs!=NULL) {
        bool trId=false;
        bool gId=false;
@@ -2653,6 +2660,9 @@ void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, 
             if (strcmp(attrname, "gene_id")==0 && !gId) {
             	attrname="geneID";
             	gId=true;
+            }
+            if (Gstricmp(attrname, "gene_name")==0 && gene_name!=NULL) {
+            	continue;
             }
             fprintf(fout, " %s ",attrname);
             if (cvtChars) {
@@ -2712,33 +2722,36 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	   fprintf(fout,
 	     "%s\t%s\ttranscript\t%d\t%d\t%s\t%c\t.\ttranscript_id \"%s\"",
 	     gseqname, tlabel, start, end, dbuf, strand, gffID);
-	   if (geneID!=NULL)
-	      fprintf(fout, "; gene_id \"%s\"",geneID);
+	   char* gid=NULL;
+	   if (geneID!=NULL) {
+	      gid=geneID;
+	   }
+	   else {
+		   gid=getAttr("gene_id");
+		   if (gid==NULL)
+			   gid=gffID; //last resort, write gid the same with gffID
+	   }
+	   fprintf(fout, "; gene_id \"%s\"",geneID);
 	   if (gene_name!=NULL && getAttr("gene_name")==NULL && getAttr("GENE_NAME")==NULL)
 	      fprintf(fout, "; gene_name \"%s\"",gene_name);
 	   if (attrs!=NULL) {
 		    bool trId=false;
-		    bool gId=false;
+		    //bool gId=false;
 		    for (int i=0;i<attrs->Count();i++) {
 		      const char* attrname=names->attrs.getName(attrs->Get(i)->attr_id);
 		      const char* attrval=attrs->Get(i)->attr_val;
 		      if (attrval==NULL || attrval[0]=='\0') continue;
-	            if (strcmp(attrname, "transcriptID")==0) {
+		      if (strcmp(attrname, "transcriptID")==0) {
 	            	if (trId) continue;
 	            	trId=true;
-	            }
-	            if (strcmp(attrname, "transcript_id")==0 && !trId) {
+		      }
+		      if (strcmp(attrname, "transcript_id")==0 && !trId) {
 	            	attrname="transcriptID";
 	            	trId=true;
-	            }
-	            if (strcmp(attrname, "geneID")==0) {
-	            	if (gId) continue;
-	            	gId=true;
-	            }
-	            if (strcmp(attrname, "gene_id")==0 && !gId) {
-	            	attrname="geneID";
-	            	gId=true;
-	            }
+		      }
+		      if (Gstrcmp(attrname, "geneID")==0 && gid!=NULL &&
+	            		strcmp(attrval, gid)==0) continue;
+		      if (strcmp(attrname, "gene_id")==0) continue;
 		      if (cvtChars) {
 		    	  decodeHexChars(dbuf, attrval, DBUF_LEN-1);
 		    	  fprintf(fout,"; %s \"%s\"", attrname, dbuf);
@@ -2770,7 +2783,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
    }
    else if (parent!=NULL && !parent->isDiscarded() && gffp!=pgffTLF) {
            fprintf(fout, ";Parent=%s",parent->getID());
-           parentPrint=true;
+           if (parent->isGene()) parentPrint=true;
    }
    if (gffp==pgffTLF) {
 	   fprintf(fout, ";exonCount=%d",exons.Count());

@@ -852,10 +852,12 @@ public:
    int removeAttr(int aid, const char* attrval=NULL);
    int removeExonAttr(GffExon& exon, const char* attrname, const char* attrval=NULL);
    int removeExonAttr(GffExon& exon, int aid, const char* attrval=NULL);
+
    const char* getAttrName(int i) {
      if (attrs==NULL) return NULL;
      return names->attrs.getName(attrs->Get(i)->attr_id);
-     }
+   }
+
    char* getAttr(const char* attrname, bool checkFirstExon=false) {
      if (names==NULL || attrname==NULL) return NULL;
      char* r=NULL;
