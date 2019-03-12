@@ -1155,9 +1155,6 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
            GMessage("Warning: unrecognized parented feature without ID found before its parent:\n%s\n", gffline.dupline);
            gffID=Gstrdup(gffline.parents[0]);
            this->createdByExon(true);
-           //if (gfrd.is_gff3 && gfrd.showWarnings())
-           //   GMessage("Warning: exon feature found before transcript ID %s\n",gffID);
-           //this is the first exon/segment of the transcript
            readExon(gfrd, gffline);
        }
     } //unrecognized (non-exon) feature
@@ -2790,7 +2787,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
    if (CDphase>0 && (gffp==pgffTLF || !showCDS)) fprintf(fout,";CDSphase=%c", CDphase);
    char* g_id=NULL;
    if (geneID!=NULL && !parentPrint && getAttr("geneID")==NULL &&
-		   ((g_id=getAttr("gene_id"))!=NULL && strcmp(g_id, geneID)!=0))
+		   ((g_id=getAttr("gene_id"))==NULL || strcmp(g_id, geneID)!=0))
       fprintf(fout, ";geneID=%s",geneID);
    if (gene_name!=NULL && !parentPrint && getAttr("gene_name")==NULL && getAttr("GENE_NAME")==NULL)
       fprintf(fout, ";gene_name=%s",gene_name);
