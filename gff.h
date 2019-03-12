@@ -46,8 +46,9 @@ enum GffExonType {
 extern const char* exonTypes[];
 
 const char* strExonType(char xtype);
+class GfList;
 
-typedef void GFFCommentParser(const char* cmline); //comment parser callback
+typedef void GFFCommentParser(const char* cmline, GfList* gflst); //comment parser callback
 //Useful for parsing/maintaining ref seq info from comment lines like this:
 //##sequence-region chr1 1 24895642
 
@@ -1075,7 +1076,7 @@ class GfList: public GList<GffObj> {
        fList[i]=NULL;
        }
      Clear();
-     }
+   }
    void freeUnused() {
      for (int i=0;i<fCount;i++) {
        if (fList[i]->isUsed()) continue;

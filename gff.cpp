@@ -405,7 +405,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
    GMessage("Warning: invalid end coordinate at line:\n%s\n",l);
    return;
    }
- if (fend<fstart) Gswap(fend,fstart); //make sure fstart<=fend, always
+ if (fend<fstart) {
+	 GMessage("Error: invalid feature coordinates (end<start!) at line:\n%s\n",l);
+	 Gswap(fend,fstart); //make sure fstart<=fend, always
+	 //return;
+ }
  p=t[5];
  if (p[0]=='.' && p[1]==0) {
   score=0;
@@ -1124,39 +1128,39 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   isGene(gffline.is_gene);
   isTranscript(gffline.is_transcript || gffline.exontype!=exgffNone);
   //fromGff3(gffline.is_gff3);
-
   if (gffline.parents!=NULL && !gffline.is_transcript) {
     //GTF style -- create a GffObj directly by subfeature
     //(also possible orphan GFF3 exon line, or an exon given before its parent (chado))
     if (gffline.exontype!=exgffNone) { //recognized exon-like feature
        ftype_id=gff_fid_transcript; //so this is some sort of transcript
        subftype_id=gff_fid_exon; //subfeatures MUST be exons
-       }
-     else {//unrecognized subfeatures
+       //typical GTF2 without "transcript" line
+       // or malformed GFF3 with orphan or premature exon feature (found before the transcript line)
+       gffID=Gstrdup(gffline.parents[0]);
+       this->createdByExon(true);
+       if (gfrd.is_gff3 && gfrd.showWarnings())
+     	   GMessage("Warning: exon feature found before transcript ID %s\n",gffID);
+       //this is the first exon/segment of the transcript
+       readExon(gfrd, gffline);
+    }
+    else {//unrecognized (non-exon) subfeature
        //make this GffObj of the same feature type
        ftype_id=names->feats.addName(gffline.ftype);
+       if (gffline.ID!=NULL) { //unrecognized non-exon feature ? use the ID instead
+            this->hasGffID(true);
+            gffID=Gstrdup(gffline.ID);
+            if (gfrd.keep_Attrs) this->parseAttrs(attrs, gffline.info);
        }
-    if (gffline.ID==NULL) { //typical GTF2 without "transcript" line
-        gffID=Gstrdup(gffline.parents[0]);
-        this->createdByExon(true);
-        //this is likely the first exon/segment of the feature
-        readExon(gfrd, gffline);
-        }
-      else { //a parented feature with an ID: orphan or premature GFF3 subfeature line
-        if (gfrd.is_gff3 && gffline.exontype!=exgffNone) {
-             //premature exon given before its parent transcript
-             //create the transcript entry here
-             gffID=Gstrdup(gffline.parents[0]);
-             this->createdByExon(true);
-             //this is the first exon/segment of the transcript
-             readExon(gfrd, gffline);
-             }
-        else { //unrecognized non-exon feature ? use the ID instead
-             this->hasGffID(true);
-             gffID=Gstrdup(gffline.ID);
-             if (gfrd.keep_Attrs) this->parseAttrs(attrs, gffline.info);
-             }
-     }
+       else { //no ID, just Parent
+           GMessage("Warning: unrecognized parented feature without ID found before its parent:\n%s\n", gffline.dupline);
+           gffID=Gstrdup(gffline.parents[0]);
+           this->createdByExon(true);
+           //if (gfrd.is_gff3 && gfrd.showWarnings())
+           //   GMessage("Warning: exon feature found before transcript ID %s\n",gffID);
+           //this is the first exon/segment of the transcript
+           readExon(gfrd, gffline);
+       }
+    } //unrecognized (non-exon) feature
   } //non-transcript parented subfeature given directly
   else {
     //non-parented feature OR a recognizable transcript
@@ -1262,13 +1266,13 @@ GffLine* GffReader::nextGffLine() {
     if (l[ns]=='#') {
     	commentLine=true;
     	if (llen<10) {
-    		if (commentParser!=NULL) (*commentParser)(l);
+    		if (commentParser!=NULL) (*commentParser)(l, &gflst);
     		continue;
     	}
     }
     gffline=new GffLine(this, l);
     if (gffline->skipLine) {
-       if (commentParser!=NULL) (*commentParser)(gffline->dupline);
+       if (commentLine && commentParser!=NULL) (*commentParser)(gffline->dupline, &gflst);
        delete gffline;
        gffline=NULL;
        continue;
@@ -2707,7 +2711,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	     gseqname, tlabel, start, end, dbuf, strand, gffID);
 	   if (geneID!=NULL)
 	      fprintf(fout, "; gene_id \"%s\"",geneID);
-	   if (gene_name!=NULL && getAttr("gene_name")==NULL)
+	   if (gene_name!=NULL && getAttr("gene_name")==NULL && getAttr("GENE_NAME")==NULL)
 	      fprintf(fout, "; gene_name \"%s\"",gene_name);
 	   if (attrs!=NULL) {
 		    bool trId=false;
@@ -2788,7 +2792,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
    if (geneID!=NULL && !parentPrint && getAttr("geneID")==NULL &&
 		   ((g_id=getAttr("gene_id"))!=NULL && strcmp(g_id, geneID)!=0))
       fprintf(fout, ";geneID=%s",geneID);
-   if (gene_name!=NULL && !parentPrint && getAttr("gene_name")==NULL)
+   if (gene_name!=NULL && !parentPrint && getAttr("gene_name")==NULL && getAttr("GENE_NAME")==NULL)
       fprintf(fout, ";gene_name=%s",gene_name);
    if (attrs!=NULL) {
 	    for (int i=0;i<attrs->Count();i++) {
