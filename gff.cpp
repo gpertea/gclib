@@ -860,7 +860,7 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
             }
          else { //multiple subfeatures, prefer those exon-like
              if (reader.gff_warns)
-               GMessage("GFF Warning: multiple subfeatures (%s and %s) found for %s, discarding ",
+               GMessage("Warning: multiple subfeatures (%s and %s) found for %s, discarding ",
                   names->feats.getName(subf_id), names->feats.getName(subftype_id),gffID);
             if (gl.exontype>exgffNone) { //new feature is an exon, discard previously parsed subfeatures
                if (reader.gff_warns) GMessage("%s.\n", names->feats.getName(subftype_id));
@@ -959,10 +959,10 @@ int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, Gff
      hasErrors(true);
      return -1;
    }
+   if (start>segs->First()->start) start=segs->First()->start;
+   if (end<segs->Last()->end) end=segs->Last()->end;
    if (isFinalized() && segs==&exons) {
 	   covlen+=(int)(exons[eidx]->end-exons[eidx]->start)+1;
-		start=exons.First()->start;
-		end=exons.Last()->end;
    }
    return eidx;
 }
@@ -1000,12 +1000,18 @@ void GffObj::expandSegment(GList<GffExon>& segs, int oi, uint segstart, uint seg
       } else ++ni;
   } //until no more overlapping/adjacent segments found
   // -- make sure any other related boundaries are updated:
-  if (isFinalized() && &segs==&exons) {
-	start=exons.First()->start;
-	end=exons.Last()->end;
-	//recalculate covlen
-    covlen=0;
-    for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
+  if (isFinalized()) {
+	  if (&segs==&exons) {
+		start=exons.First()->start;
+		end=exons.Last()->end;
+		//recalculate covlen
+		covlen=0;
+		for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
+	  }
+  }
+  else {
+	  if (start>segs.First()->start) start=segs.First()->start;
+	  if (end<segs.Last()->end) end=segs.Last()->end;
   }
 }
 
@@ -1076,7 +1082,7 @@ GffObj::GffObj(GffReader& gfrd, BEDLine& bedline):GSeg(0,0),
 	for (int i=0;i<bedline.exons.Count();++i) {
 		int eidx=this->addExon(bedline.exons[i].start, bedline.exons[i].end, exgffExon);
 	    if (eidx<0 && gfrd.showWarnings())
-	       GMessage("GFF Warning: failed adding segment %d-%d for %s (discarded)!\n",
+	       GMessage("Warning: failed adding segment %d-%d for %s (discarded)!\n",
 	    		   bedline.exons[i].start, bedline.exons[i].end, gffID);
 
 	}
@@ -1180,7 +1186,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 				for (int i=0;i<gffline.exons.Count();++i) {
 					int eidx=this->addExon(gffline.exons[i].start, gffline.exons[i].end, exgffExon, '.', gscore);
 				    if (eidx<0 && gfrd.showWarnings())
-				       GMessage("GFF Warning: failed adding exon %d-%d for %s (discarded)!\n",
+				       GMessage("Warning: failed adding exon %d-%d for %s (discarded)!\n",
 				    		   gffline.exons[i].start, gffline.exons[i].end, gffID);
 
 				}
@@ -1196,7 +1202,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
 				for (int i=0;i<gffline.cdss.Count();++i) {
 					int eidx=this->addExon(gffline.cdss[i].start, gffline.cdss[i].end, exgffCDS, 0, GFFSCORE_NONE, cdss);
 				    if (eidx<0 && gfrd.showWarnings())
-				       GMessage("GFF Warning: failed adding CDS segment %d-%d for %s (discarded)!\n",
+				       GMessage("Warning: failed adding CDS segment %d-%d for %s (discarded)!\n",
 				    		   gffline.cdss[i].start, gffline.cdss[i].end, gffID);
 
 				}
@@ -1435,7 +1441,7 @@ bool GffReader::readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExo
 			prevgfo->strand=gffline->strand;
 		}
 		else {
-			GMessage("GFF Error at %s (%c): exon %d-%d (%c) found on different strand; discarded.\n",
+			GMessage("Error at %s (%c): exon %d-%d (%c) found on different strand; discarded.\n",
 					prevgfo->gffID, prevgfo->strand, gffline->fstart, gffline->fend, gffline->strand,
 					prevgfo->getGSeqName());
 			return true;
@@ -1619,7 +1625,7 @@ void GffReader::readAll() {
 					if (prevseen->createdByExon()) {
 						if (gff_warns && (prevseen->start<gffline->fstart ||
 								prevseen->end>gffline->fend))
-							GMessage("GFF Warning: invalid coordinates for %s parent feature (ID=%s)\n", gffline->ftype, gffline->ID);
+							GMessage("Warning: invalid coordinates for %s parent feature (ID=%s)\n", gffline->ftype, gffline->ID);
 						//an exon of this ID was given before
 						//this line has the main attributes for this ID
 						updateGffRec(prevseen, gffline);
@@ -1630,7 +1636,7 @@ void GffReader::readAll() {
 						if (prevseen->overlap(gffline->fstart, gffline->fend) && !gtf_gene_dupID) {
 							//in some GTFs a gene ID may actually be the same with the parented transcript ID (thanks)
 							//overlapping feature with same ID is going too far
-							GMessage("GFF Error: discarding overlapping duplicate %s feature (%d-%d) with ID=%s\n", gffline->ftype,
+							GMessage("Error: discarding overlapping duplicate %s feature (%d-%d) with ID=%s\n", gffline->ftype,
 									gffline->fstart, gffline->fend, gffline->ID);
 							//validation_errors = true;
 							if (gff_warns) { //validation intent: just skip the feature, allow the user to see other errors
@@ -1648,7 +1654,7 @@ void GffReader::readAll() {
 							//create a separate entry (true discontinuous feature)
 							prevseen=newGffRec(gffline, prevseen->parent, NULL, prevgflst);
 							if (gff_warns) {
-								GMessage("GFF Warning: duplicate feature ID %s (%d-%d) (discontinuous feature?)\n",
+								GMessage("Warning: duplicate feature ID %s (%d-%d) (discontinuous feature?)\n",
 										gffline->ID, gffline->fstart, gffline->fend);
 							}
 						}
@@ -1975,7 +1981,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 					int dist=(int)(exons[ni]->start-mend-1); //<0 = overlap, 0 = adjacent, >0 = bases apart
 					if (dist>GFF_MIN_INTRON) break; //no merging with next segment
 					if (gfr!=NULL && gfr->gff_warns && dist!=0 && (exons[ni]->exontype!=exgffUTR && exons[i]->exontype!=exgffUTR)) {
-						GMessage("GFF warning: merging adjacent/overlapping segments (distance=%d) of %s on %s (%d-%d, %d-%d)\n",
+						GMessage("Warning: merging adjacent/overlapping segments (distance=%d) of %s on %s (%d-%d, %d-%d)\n",
 								dist, gffID, getGSeqName(), exons[i]->start, exons[i]->end,exons[ni]->start, exons[ni]->end);
 					}
 					mend=exons[ni]->end;
