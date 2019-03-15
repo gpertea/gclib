@@ -1883,7 +1883,7 @@ bool GffObj::reduceExonAttrs(GList<GffExon>& segs) {
 	if (attrs_discarded) segs[0]->attrs->Pack();
 	return attrs_discarded;
 }
-
+//return the segs index of segment containing coord:
 int GffObj::whichExon(uint coord, GList<GffExon>* segs) {
 	 //segs MUST be sorted by GSeg order (start coordinate)
 	if (segs==NULL) segs=&exons;
@@ -1900,7 +1900,7 @@ int GffObj::whichExon(uint coord, GList<GffExon>* segs) {
 	else { //use quick search
 		int i=0;
 		int l=0; //lower boundary
-		int h=segs->Count(); //higher boundary
+		int h=segs->Count()-1; //higher boundary
 		while (l<=h) {
 			i = (l+h) >> 1; //range midpoint
 			if (coord > segs->Get(i)->end)
