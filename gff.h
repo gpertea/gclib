@@ -1066,6 +1066,8 @@ int gfo_cmpRefByID(const pointer p1, const pointer p2);
 
 class GfList: public GList<GffObj> {
  public:
+
+   GfList(bool sorted):GList<GffObj>(sorted,false,false) { }
    GfList():GList<GffObj>(false,false,false) {
      //GffObjs in this list are NOT deleted when the list is cleared
      //-- for deallocation of these objects, call freeAll() or freeUnused() as needed
@@ -1139,7 +1141,7 @@ class GffReader {
        bool merge_CloseExons:1;
        bool gene2exon:1;
        bool sortByLoc:1; //if records should be sorted by location
-       bool refAlphaSort:1; //is sortByLoc, reference sequences are
+       bool refAlphaSort:1; //if sortByLoc, reference sequences are
                        // sorted lexically instead of their id#
        bool gff_warns:1;
     };
