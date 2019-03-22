@@ -2478,8 +2478,8 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
     	//CDS_start=g_start;
     }
     for (int x=xsegs->Count()-1;x>=0;x--) {
-       uint sgstart=exons[x]->start;
-       uint sgend=exons[x]->end;
+       uint sgstart=xsegs->Get(x)->start;
+       uint sgend=xsegs->Get(x)->end;
        if (g_end<sgstart || g_start>sgend) continue;
        if (g_start>=sgstart && g_start<=sgend)
           sgstart=g_start; //3' end within this segment
@@ -2508,8 +2508,8 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
       	//CDS_stop=g_end;
     }
     for (int x=0;x<xsegs->Count();x++) {
-      uint sgstart=exons[x]->start;
-      uint sgend=exons[x]->end;
+      uint sgstart=xsegs->Get(x)->start;
+      uint sgend=xsegs->Get(x)->end;
       if (g_end<sgstart || g_start>sgend) continue;
       if (g_start>=sgstart && g_start<=sgend)
             sgstart=g_start; //seqstart within this segment
