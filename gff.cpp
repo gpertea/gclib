@@ -1967,7 +1967,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	//-- attribute reduction for some records which
 	//   repeat the exact same attr=value for every exon
 	bool reduceAttributes=(gfr->keep_Attrs && !gfr->noExonAttrs &&
-			exons.Count()>1 && exons[0]->attrs!=NULL);
+			exons.Count()>0 && exons[0]->attrs!=NULL);
 	if (reduceAttributes) {
 		//for each attribute of the 1st exon, if it has the
 		//same value for all other exons, move it to transcript level
@@ -1975,7 +1975,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			GMessage("Info: duplicate exon attributes reduced for %s\n", gffID);
 		}
 		//do the same for CDS segments, if any
-		if (cdss!=NULL && cdss->Count()>1 && (*cdss)[0]->attrs!=NULL) {
+		if (cdss!=NULL && cdss->Count()>0 && (*cdss)[0]->attrs!=NULL) {
 			if (reduceExonAttrs(*cdss) && gfr->showWarnings())
 				GMessage("Info: duplicate CDS attributes reduced for %s\n", gffID);
 		}
