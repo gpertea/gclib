@@ -1857,7 +1857,8 @@ bool GffObj::reduceExonAttrs(GList<GffExon>& segs) {
 			bool same_aval=false;
 			if (this->attrs!=NULL &&
 					(t_val=this->attrs->getAttr(attr_id))!=NULL) {
-				//same attribute name already exists in
+				//same attribute name already exists for the transcript!
+				//write it using CDS_ or exon_ prefix
 				same_aval=(strcmp(attr_val, t_val)==0);
 				if (!same_aval) {
 					//add renamed attribute
@@ -1871,8 +1872,9 @@ bool GffObj::reduceExonAttrs(GList<GffExon>& segs) {
 					GFREE(new_attr_name);
 				}
 			}
-			else { //no such attribute exists for the transcript
-				this->addAttr(attr_name, attr_val);
+			else { //no such attribute exists for the transcript, copy it from the exon
+				if (!GstrEq("exon_id", attr_name) && !GstrEq("exon_number", attr_name))
+				    this->addAttr(attr_name, attr_val);
 			}
 			for (int i=1;i<segs.Count();i++) {
 				removeExonAttr(*(segs[i]), attr_id);

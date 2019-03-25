@@ -233,24 +233,34 @@ FILE* Gfopen(const char *path, char *mode) {
 
 bool GstrEq(const char* a, const char* b) {
 	 if (a==NULL || b==NULL) return false;
+	 return (strcmp(a,b)==0);
+	 /*
 	 register int i=0;
 	 while (a[i]==b[i]) {
 		 if (a[i]==0) return true;
 		 ++i;
 	 }
 	 return false;
+	 */
 }
 
 bool GstriEq(const char* a, const char* b) {
 	 if (a==NULL || b==NULL) return false;
+	 return (strcasecmp(a,b)==0);
+	 /*
 	 register int i=0;
 	 while (tolower((unsigned char)a[i])==tolower((unsigned char)b[i])) {
 		 if (a[i]==0) return true;
 	 }
 	 return false;
+	 */
 }
 
 int Gstricmp(const char* a, const char* b, int n) {
+ if (a==NULL || b==NULL) return a==NULL ? -1 : 1;
+ if (n>=0) return strncasecmp(a,b,n);
+      else return strcasecmp(a,b);
+/*
  if (a==NULL || b==NULL) return a==NULL ? -1 : 1;
  register int ua, ub;
  if (n<0) {
@@ -273,6 +283,7 @@ int Gstricmp(const char* a, const char* b, int n) {
    if (n==0) return 0;
    else { return (*a == 0) ? ( (*b == 0) ? 0 : -1 ) : 1 ; }
   }
+*/
 }
 
 int strsplit(char* str, GDynArray<char*>& fields, const char* delim, int maxfields) {

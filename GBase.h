@@ -15,13 +15,19 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#if defined __WIN32__ || defined WIN32 || defined _WIN32 || defined _WIN32_
+#if defined __WIN32 || defined __WIN32__ || defined _WIN32 || defined _WIN32_ || defined _WINDOWS
   #ifndef __WIN32__
     #define __WIN32__
   #endif
   #include <windows.h>
   #include <direct.h>
   #include <io.h>
+  #ifndef strcasecmp
+      #define strcasecmp _stricmp
+  #endif
+  #ifndef strncasecmp
+      #define strncasecmp _strnicmp
+  #endif
   #define CHPATHSEP '\\'
   #undef off_t
   #define off_t int64_t
@@ -32,10 +38,6 @@
 		#ifdef _fseeki64
 			#define fseeko(stream, offset, origin) _fseeki64(stream, offset, origin)
 		#else
-			/*
-			#define _DEFINE_WIN32_FSEEKO
-			int fseeko(FILE *stream, off_t offset, int whence);
-			*/
 			#define fseeko fseek
 		#endif
   #endif
