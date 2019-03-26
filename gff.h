@@ -235,6 +235,7 @@ class GffLine {
     	    bool is_gtf_transcript:1; //GTF transcript line with Parents parsed from gene_id
     	    bool skipLine:1;
     	    bool gffWarnings:1;
+    	    bool is_gene_segment:1; //for NCBI's D/J/V/C_gene_segment
     	};
     };
     int8_t exontype; // gffExonType
@@ -690,6 +691,7 @@ class GffObj:public GSeg {
     	  bool flag_CDS_NOSTOP        :1; //partial CDS at 3' end (no stop codon)
     	  bool flag_CDS_X             :1; //transcript having CDS with ribosomal shift (i.e. after merging exons)
     	                                  //CDS segments stored in ::cdss are incompatible with the exon segments
+    	  bool flag_GENE_SEGMENT      :1; //a transcript-like C/D/J/V_gene_segment (NCBI's annotation)
     	  bool flag_TRANS_SPLICED     :1;
     	  bool flag_DISCONTINUOUS     :1; //discontinuous feature (e.g. cDNA_match) segments linked by same ID
     	  bool flag_TARGET_ONLY       :1; //Target= feature (e.g. from RepeatMasker output), lacks ID
@@ -746,6 +748,8 @@ public:
   void isUsed(bool v) {flag_LST_KEEP=v; }
   bool isTranscript() { return flag_IS_TRANSCRIPT; }
   void isTranscript(bool v) {flag_IS_TRANSCRIPT=v; }
+  bool isGeneSegment() { return flag_GENE_SEGMENT; }
+  void isGeneSegment(bool v) {flag_GENE_SEGMENT=v; }
   bool promotedChildren() { return flag_CHILDREN_PROMOTED; }
   void promotedChildren(bool v) { flag_CHILDREN_PROMOTED=v; }
   void setLevel(byte v) { gff_level=v; }
@@ -771,6 +775,7 @@ protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
        int8_t exontype);
+  bool processGeneSegments(); //for genes that have _gene_segment features (NCBI annotation)
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
