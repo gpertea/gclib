@@ -484,6 +484,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 	 is_t_data=true;
 	 if (someRNA) ftype_id=GffObj::names->feats.addName(ftype);
  }
+ else if (endsWith(fnamelc, "_gene_segment")) {
+	 is_transcript=true;
+	 is_t_data=true;
+	 is_gene_segment=true;
+ }
  else if (endsWith(fnamelc, "gene") || startsWith(fnamelc, "gene")) {
 	 is_gene=true;
 	 is_t_data=true; //because its name will be attached to parented transcripts
@@ -909,7 +914,14 @@ int GffObj::readExon(GffReader& reader, GffLine& gl) {
 int GffObj::addExon(GList<GffExon>& segs, GffLine& gl, int8_t exontype_override) {
 	int ex_type=(exontype_override!=exgffNone) ? exontype_override : gl.exontype;
 	GffScore exon_score(gl.score, gl.score_decimals);
-	return addExon(gl.fstart, gl.fend, ex_type, gl.phase, exon_score, &segs);
+	int eidx=addExon(gl.fstart, gl.fend, ex_type, gl.phase, exon_score, &segs);
+	if (&segs==cdss && isGene() && gl.ID!=NULL && eidx>=0) {
+     //special NCBI cases where CDS can be treated as discontiguous features, grouped by their ID
+	 //-- used for genes with X_gene_segment features
+	 char* cds_id=Gstrdup(gl.ID);
+	 segs[eidx]->uptr=cds_id;
+	}
+	return eidx;
 }
 
 int GffObj::exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen, int start_idx) {
@@ -1139,6 +1151,7 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
   isGene(gffline.is_gene);
   isTranscript(gffline.is_transcript || gffline.exontype!=exgffNone);
   //fromGff3(gffline.is_gff3);
+  isGeneSegment(gffline.is_gene_segment);
   if (gffline.parents!=NULL && !gffline.is_transcript) {
     //GTF style -- create a GffObj directly by subfeature
     //(also possible orphan GFF3 exon line, or an exon given before its parent (chado))
@@ -1919,6 +1932,14 @@ int GffObj::whichExon(uint coord, GList<GffExon>* segs) {
 	return -1;
 }
 
+bool GffObj::processGeneSegments() {
+	if (cdss==NULL || cdss->Count()==0 || children.Count()==0)
+		return false; //we shouldn't be here
+
+
+	return true;
+}
+
 GffObj* GffObj::finalize(GffReader* gfr) {
 	if (this->createdByExon() && this->end-this->start<10 && this->exons.Count()<=1) {
 		//? misleading exon-like feature parented by an exon or CDS mistakenly
@@ -1933,11 +1954,20 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		}
 	}
 	if (!isDiscarded()) {
-		if (exons.Count()==0 && (isTranscript() || (isGene() && children.Count()==0 && gfr->gene2exon)) ) {
-			//add exon feature to an exonless transcript/gene
-			addExon(this->start, this->end, exgffExon);
-			//effectively this becomes a transcript (even childless genes if gene2exon)
-			isTranscript(true);
+		bool noExons=(exons.Count()==0 && (cdss==NULL || cdss->Count()==0));
+		if (noExons) {
+			if (isTranscript() || (isGene() && children.Count()==0 && gfr->gene2exon)) {
+				//add exon feature to an exonless transcript/gene
+				addExon(this->start, this->end, exgffExon);
+				//effectively this becomes a transcript (even childless genes if gene2exon)
+				isTranscript(true);
+			}
+		}
+		else { //it has exons or CDSs
+			if (cdss!=NULL && isGene() && children.Count()>0) {
+				//check for X_gene_segment processing
+				processGeneSegments();//distribute the cdss to children _gene_segments
+			} // _gene_segment processing
 		}
 	}
 	if (gfr->transcripts_Only && !isTranscript() &&
@@ -1947,6 +1977,11 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	}
 	if (isDiscarded()) {
 		isFinalized(true);
+		//just in case we have cds with uptr in use (X_gene_segment), free them
+		if (cdss!=NULL)
+			for (int i=0;i<cdss->Count();i++) {
+				GFREE(cdss->Get(i)->uptr);
+			}
 		return this;
 	}
 	if (isTranscript()) {
@@ -2133,6 +2168,11 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	}
 	uptr=NULL;
 	udata=0;
+	//just in case we had a gene with X_gene_segment feature, free the CDS IDs
+	if (cdss!=NULL)
+		for (int i=0;i<cdss->Count();i++) {
+			GFREE(cdss->Get(i)->uptr);
+		}
 	return this;
 }
 
