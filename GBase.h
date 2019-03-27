@@ -356,7 +356,11 @@ class GSeg {
     uint sd = (start>s->start) ? start-s->start : s->start-start;
     uint ed = (end>s->end) ? end-s->end : s->end-end;
     return (sd<=fuzz && ed<=fuzz);
-    }
+  }
+  void expand(int by) { //expand in both directions
+	  start-=by;
+	  end+=by;
+  }
   //comparison operators required for sorting
   bool operator==(GSeg& d){
       return (start==d.start && end==d.end);
