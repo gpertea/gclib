@@ -300,23 +300,23 @@ class GSeg {
   GSeg(uint s=0,uint e=0) {
     if (s>e) { start=e;end=s; }
         else { start=s;end=e; }
-    }
+  }
   //check for overlap with other segment
   uint len() { return end-start+1; }
   bool overlap(GSeg* d) {
      //return start<d->start ? (d->start<=end) : (start<=d->end);
      return (start<=d->end && end>=d->start);
-     }
+  }
 
   bool overlap(GSeg& d) {
      //return start<d.start ? (d.start<=end) : (start<=d.end);
      return (start<=d.end && end>=d.start);
-     }
+  }
 
   bool overlap(GSeg& d, int fuzz) {
      //return start<d.start ? (d.start<=end+fuzz) : (start<=d.end+fuzz);
      return (start<=d.end+fuzz && end+fuzz>=d.start);
-     }
+  }
 
   bool overlap(uint x) {
 	return (start<=x && x<=end);
@@ -348,10 +348,17 @@ class GSeg {
         if (start>rend) return 0;
         return (rend<end)? rend-start+1 : end-start+1;
         }
-     }
+  }
+
+  bool contains(GSeg* s) {
+	  return (start<=s->start && end>=s->end);
+  }
+  bool contained(GSeg* s) {
+	  return (s->start<=start && s->end>=end);
+  }
 
   //fuzzy coordinate matching:
-  bool coordMatch(GSeg* s, uint fuzz=0) {
+  bool coordMatch(GSeg* s, uint fuzz=0) { //caller must check for s!=NULL
     if (fuzz==0) return (start==s->start && end==s->end);
     uint sd = (start>s->start) ? start-s->start : s->start-start;
     uint ed = (end>s->end) ? end-s->end : s->end-end;
@@ -360,6 +367,11 @@ class GSeg {
   void expand(int by) { //expand in both directions
 	  start-=by;
 	  end+=by;
+  }
+  void expandInclude(uint rstart, uint rend) { //expand to include given coordinates
+	 if (rstart>rend) { Gswap(rstart,rend); }
+	 if (rstart<start) start=rstart;
+	 if (rend>end) end=rend;
   }
   //comparison operators required for sorting
   bool operator==(GSeg& d){

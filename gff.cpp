@@ -13,8 +13,8 @@ int gff_fid_mRNA=0; //mRNA (has CDS)
 int gff_fid_transcript=1; // generic "transcript" feature
 int gff_fid_exon=2; // generic "exon"-like feature (exon,CDS,UTR,start/stop codon)
 int gff_fid_CDS=3; // CDS feature (CDS, start/stop codon)
-const char* exonTypes[]={"None", "StartCodon", "StopCodon",
-		  "CDS", "UTR", "CDS+UTR", "exon"};
+const char* exonTypes[]={ "None", "StartCodon", "StopCodon",
+		  "CDS", "UTR", "CDS+UTR", "exon" };
 
 const GffScore GFFSCORE_NONE;
 //const uint gfo_flag_LEVEL_MSK        = 0x00FF0000;
@@ -942,6 +942,11 @@ int GffObj::exonOverlapIdx(GList<GffExon>& segs, uint s, uint e, int* ovlen, int
 	return -1;
 }
 
+void GffObj::move_CDS(GffExon* cds) {
+	//direct adding of a cds to the cdss pointer, without checking
+	 if (cdss==NULL) cdss=new GList<GffExon>(true, true, false);
+	 cdss->Add(cds); //now the caller must remove/forget it
+}
 
 int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, GffScore exon_score, GList<GffExon>* segs) {
    if (segstart>segend) { Gswap(segstart, segend); }
@@ -955,11 +960,15 @@ int GffObj::addExon(uint segstart, uint segend, int8_t exontype, char phase, Gff
 		    if ((*segs)[oi]->exontype>exgffNone &&
 		    		(*segs)[oi]->start<=segstart && (*segs)[oi]->end>=segend) {
 		    		//existing feature contains this segment, so we do NOT need to add it
-		    		return oi;
+		    	    //-- unless its the annoying NCBI exception: gene with multiple alternate
+		    	    //        _gene_segment CDS features!
+		    		if (!(this->isGene() && exontype==exgffCDS &&
+		    				(*segs)[oi]->exontype==exgffCDS ))
+		    			return oi;
 		    }
-		    if (ovlen==0 || exontype!=exgffCDS || (*segs)[oi]->exontype!=exgffCDS) {
-		    	//NEVER merge two CDS overlapping/neighbouring features!
-		    	//but always merge adjacent features
+		    if (ovlen==0 || !(exontype==exgffCDS && (*segs)[oi]->exontype==exgffCDS)) {
+		    	//always merge adjacent features
+		    	//but NEVER merge two overlapping CDS (CDS programmed ribosomal shift aware)
 		    	int8_t segtype=((*segs)[oi]->exontype==exgffCDS || exontype==exgffCDS) ? exgffCDS : exgffExon;
 		    	//if expanded upward, may overlap the segment(s) above
 		    	expandSegment(*segs, oi, segstart, segend, segtype);
@@ -1932,11 +1941,99 @@ int GffObj::whichExon(uint coord, GList<GffExon>* segs) {
 	return -1;
 }
 
-bool GffObj::processGeneSegments() {
+bool GffObj::processGeneSegments(GffReader* gfr) {
+	/* procedure:
+	 1)store the info about any X_gene_segment entries in a GVec<GSegInfo>
+     2)for each CDS, store them by ID in a GHash<GSegInfo>
+     3)match boundaries of each entry in the hash to the GVec<GSegInfo> entries
+	*/
+	class GeneSegInfo: public GSeg { //keeping track of each CDS segment chain in this gene
+	   public:
+		  int gsidx; //for X_gene_segment: index of it in this->children array
+		           //(-1 for CDS segment chains, then set after matched with a _gene_segment)
+		  GVec<int> cdix; // for X_gene_segment in GVec<GSegInfo>:  empty, then populated with
+		                  //        the indexes of matching cdss entries
+		                  // indexes of separate CDS segments in this->cdss
+		  GeneSegInfo(int i=-1, int st=0, int en=0):GSeg(st, en),
+				  gsidx(i),cdix() { }
+	};
+    GVec<GeneSegInfo> gene_segs; //X_gene_segment features (transcripts)
+    GHash<GeneSegInfo> h_gene_cds(false); // hash of CDS chains: CDS feature grouped by ID
+    GPVec<GeneSegInfo> gene_cds; // CDS chains storage
 	if (cdss==NULL || cdss->Count()==0 || children.Count()==0)
 		return false; //we shouldn't be here
-
-
+	//check if we have any _gene_segment children for this gene
+    for (int i=0;i<children.Count();i++)
+    	if (children[i]->flag_GENE_SEGMENT) {
+    		GeneSegInfo t(i, children[i]->start, children[i]->end);
+    		gene_segs.Add(t);
+    	}
+    if (gene_segs.Count()==0) {
+       if (gfr->gff_warns)
+    	   GMessage("Warning: gene %s has CDS and transcripts but no _gene_segment features\n",gffID);
+       return false; //nothing to do
+    }
+    //now group CDSs by their ID
+    for (int i=0;i<cdss->Count();i++) {
+    	char* id=(char*)(cdss->Get(i)->uptr);
+    	GeneSegInfo *gsinfo=h_gene_cds.Find(id);
+    	if (gsinfo) {
+             gsinfo->expandInclude(cdss->Get(i)->start, cdss->Get(i)->end);
+             gsinfo->cdix.Add(i);
+    	} else {
+    	     gsinfo=new GeneSegInfo(-1, cdss->Get(i)->start, cdss->Get(i)->end);
+    	     gsinfo->cdix.Add(i);
+    	     gene_cds.Add(gsinfo);
+    	     h_gene_cds.shkAdd(id, gsinfo);
+    	}
+    }
+    for (int i=0;i<gene_cds.Count();i++) {
+    	GeneSegInfo &gc=*(gene_cds[i]);
+    	//try to match this CDS chain with a gene_segs entry
+    	bool matched=false;
+        for (int s=0;s<gene_segs.Count();s++) {
+        	if (gene_segs[s].coordMatch(&gc)) {
+        	  gc.gsidx=s; //set gsidx to index in gene_segs array
+        	  matched=true;
+              break;
+        	}
+        }
+        if (!matched) //try again, just with boundary inclusion
+            for (int s=0;s<gene_segs.Count();s++) {
+            	if (gene_segs[s].contains(&gc)) {
+            	  gc.gsidx=s; //set gsidx to index in gene_segs array
+                  break;
+            	}
+            }
+    }
+    //check if all gene_cds chains got assigned to a gene_seg entry:
+    for (int i=0;i<gene_cds.Count();i++) {
+    	GeneSegInfo &gc=*(gene_cds[i]); //gene cds chain
+    	if (gc.gsidx>=0) {
+    		//gsidx assigned = index in children array
+    		GffObj* t=children[gene_segs[gc.gsidx].gsidx];
+    		if (t->hasCDS()) GMessage("Error: cannot transfer CDS from %s to %s which already has its own\n",
+    				t->gffID, gffID);
+    		else { // matched gene_segment without CDS
+    			for (int c=0;c<gc.cdix.Count();c++) {
+    				t->move_CDS(cdss->Get(gc.cdix[c]));
+    				GFREE(cdss->Get(gc.cdix[c])->uptr);
+    				cdss->Forget(gc.cdix[c]);
+    			}
+    			if (t->isFinalized()) t->finalize(gfr);
+    		} // matched gene_segment
+    	}
+    	else { // no matching gene_segment
+    		GMessage("Error: could not find a corresponding gene segment for CDS chain %d-%d of gene %s\n",
+    		    				gc.start, gc.end, gffID);
+    	}
+    }
+    cdss->Pack();
+    if (cdss->Count()==0) {
+    	delete cdss;
+    	cdss=NULL;
+    	if (exons.Count()==0) isTranscript(false);
+    }
 	return true;
 }
 
@@ -1966,22 +2063,25 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		else { //it has exons or CDSs
 			if (cdss!=NULL && isGene() && children.Count()>0) {
 				//check for X_gene_segment processing
-				processGeneSegments();//distribute the cdss to children _gene_segments
+				processGeneSegments(gfr);//distribute the cdss to children _gene_segments
 			} // _gene_segment processing
 		}
 	}
+	if (cdss!=NULL && isGene()) //in case we stored IDs for gene_segment features
+		for (int i=0;i<cdss->Count();i++) {
+			GFREE(cdss->Get(i)->uptr);
+		}
 	if (gfr->transcripts_Only && !isTranscript() &&
 			!(gfr->keep_Genes && isGene())) {
 		//discard non-transcripts, unless it's a gene and keepGenes was specified
 		isDiscarded(true);
 	}
+	isFinalized(true);
+
 	if (isDiscarded()) {
-		isFinalized(true);
 		//just in case we have cds with uptr in use (X_gene_segment), free them
-		if (cdss!=NULL)
-			for (int i=0;i<cdss->Count();i++) {
-				GFREE(cdss->Get(i)->uptr);
-			}
+		uptr=NULL;
+		udata=0;
 		return this;
 	}
 	if (isTranscript()) {
@@ -2076,7 +2176,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	for (int i=0;i<exons.Count();++i) covlen+=exons[i]->len();
 	//-- check if CDS segments are different from exons and thus worth keeping separately in cdss
 	if (cdss!=NULL && cdss->Count()>0) {
-		bool cds_exComp=true; //CDSs are compatible with the exon boundaries
+		bool cds_exComp=true; //CDSs are exon-compatible (no need to keep them separately)
 		if (cdss->Count()==1) {
 			//check that the CDS segment is within a single exon
 			int start_eidx=-1;
@@ -2168,11 +2268,6 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	}
 	uptr=NULL;
 	udata=0;
-	//just in case we had a gene with X_gene_segment feature, free the CDS IDs
-	if (cdss!=NULL)
-		for (int i=0;i<cdss->Count();i++) {
-			GFREE(cdss->Get(i)->uptr);
-		}
 	return this;
 }
 

@@ -775,7 +775,8 @@ protected:
   //utility segment-merging function for addExon()
   void expandSegment(GList<GffExon>&segs, int oi, uint segstart, uint segend,
        int8_t exontype);
-  bool processGeneSegments(); //for genes that have _gene_segment features (NCBI annotation)
+  bool processGeneSegments(GffReader* gfr); //for genes that have _gene_segment features (NCBI annotation)
+  void move_CDS(GffExon* cds);
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
