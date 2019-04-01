@@ -2267,6 +2267,8 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 				} //check for merge with next exon
 			} //for each exon
 		} //merge close exons
+		if (isCDSOnly() && exons.Count()!=cdss->Count())
+			isCDSOnly(false);
 	}
 	//-- check features vs their exons' span
 	if (isTranscript()) {
@@ -2308,8 +2310,12 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			for (int i=0;i<exons.Count();i++) {
 				//GMessage("[DBG:] checking if CDS %d-%d is within exon %d-%d\n", CDstart, CDend, exons[i]->start,
 				//		exons[i]->end);
-				if (CDstart>=exons[i]->start && CDstart<=exons[i]->end) start_eidx=i;
-				if (CDend>=exons[i]->start || CDend<=exons[i]->end ) end_eidx=i;
+				if (CDstart>=exons[i]->start && CDstart<=exons[i]->end) {
+					start_eidx=i;
+				}
+				if (CDend>=exons[i]->start || CDend<=exons[i]->end ) {
+					end_eidx=i;
+				}
 				if (start_eidx>=0 && end_eidx>=0) break;
 			}
 			cds_exComp=(start_eidx==end_eidx && start_eidx>=0);
@@ -2348,12 +2354,17 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 			}
 		} //multiple CDS segments
 		if (cds_exComp) {
+			if (isCDSOnly() && cdss->Count()==exons.Count())
+				for (int i=0;i<cdss->Count();i++)
+					exons[i]->phase=cdss->Get(i)->phase;
 			if (gfr->keep_Attrs && !gfr->noExonAttrs) {
 				int eidx=whichExon((*cdss)[0]->start, &exons);
 				if (eidx<0)
 					GError("Error finding CDS coordinate inside exons (?) for %s\n",
 						    gffID);
 				for (int i=0;i<cdss->Count();i++) {
+					if (isCDSOnly()) //eidx should be the same with i
+						exons[eidx]->phase=cdss->Get(i)->phase;
 					if ((*cdss)[i]->attrs!=NULL && (*cdss)[i]->attrs->Count()>0) {
 						if (exons[eidx]->attrs==NULL)
 							exons[eidx]->attrs=new GffAttrs();
@@ -2992,7 +3003,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 		   if (gid==NULL)
 			   gid=gffID; //last resort, write gid the same with gffID
 	   }
-	   fprintf(fout, "; gene_id \"%s\"",geneID);
+	   if (gid!=NULL) fprintf(fout, "; gene_id \"%s\"",gid);
 	   if (gene_name!=NULL && getAttr("gene_name")==NULL && getAttr("GENE_NAME")==NULL)
 	      fprintf(fout, "; gene_name \"%s\"",gene_name);
 	   if (attrs!=NULL) {

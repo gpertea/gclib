@@ -484,10 +484,10 @@ enum GffPrintMode {
   pgtfAny, //print record as read, if GTF
   pgtfExon, //print exon only features
   pgtfCDS,  //print CDS and exon features
-  pgffAny, //print record as read
+  pgffAny, //print record as read (if isCDSonly() prints only CDS)
   pgffExon,
   pgffCDS,
-  pgffBoth,
+  pgffBoth, //enforce exon printing if isCDSOnly()
   pgffTLF,  //exon and CDS data shown as additional GFF attributes
             //in the transcript line (Transcript Line Format)
             //every line has the whole transcript data
