@@ -2225,6 +2225,10 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 					(*cdss)[i]->start, (*cdss)[i]->end, gffID);
 		}
 	}
+	else if (CDstart==0) {//no CDS, no phase
+		CDphase=0;
+		CDend=0;
+	}
 	//-- attribute reduction for some records which
 	//   repeat the exact same attr=value for every exon
 	bool reduceAttributes=(gfr->keep_Attrs && !gfr->noExonAttrs &&
@@ -2428,7 +2432,7 @@ void GffObj::printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len) {
 //print a BED-12 line + GFF3 attributes in 13th field
  int cd_start=CDstart>0? CDstart-1 : start-1;
  int cd_end=CDend>0 ? CDend : end;
- char cdphase=CDphase>0 ? CDphase : '0';
+ char cdphase=(CDphase>0) ? CDphase : '0';
  fprintf(fout, "%s\t%d\t%d\t%s\t%d\t%c\t%d\t%d\t%c,0,0", getGSeqName(), start-1, end, getID(),
 		 100, strand, cd_start, cd_end, cdphase);
  if (exons.Count()>0) {
