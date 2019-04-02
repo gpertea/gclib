@@ -496,9 +496,9 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  char* Parent=NULL;
  /*
   Rejecting non-transcript lines early if only transcripts are requested ?!
-  It would be faster to do this here but there are GFF cases when we reject a parent feature here
-  (e.g. protein with 2 CDS children) and then their exon/CDS children show up and
-  get assigned to an implicit parent mRNA
+  It would be faster to do this here but there are GFF cases when we reject an
+  unusual parent feature here  (e.g. protein with CDS children) and then
+  their exon/CDS children show up and get assigned to an implicit parent mRNA
   The solution is to still load this parent as GffObj for now and BAN it later
   so its children get dismissed/discarded as well.
  */
@@ -773,7 +773,7 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 
  if (ID==NULL && parents==NULL) {
 	 if (gffWarnings)
-		 GMessage("Warning: could not parse ID or Parent from GFF line:\n%s\n",dupline);
+		 GMessage("Warning: discarding unrecognized feature (no ID or Parent):\n%s\n",dupline);
 	 return; //skip
  }
  skipLine=false;
@@ -830,7 +830,7 @@ void GffObj::setCDS(GffObj* t) {
        if (this->cdss!=NULL) delete cdss;
        cdss=new GList<GffExon>(true, true, false);
        for (int i=0;i<t->cdss->Count();i++) {
-    	   cdss->Add(new GffExon(*(cdss->Get(i))));
+    	   cdss->Add(new GffExon(*(t->cdss->Get(i))));
        }
 	}
 }
