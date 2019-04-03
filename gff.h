@@ -1143,6 +1143,7 @@ class GffReader {
        bool transcripts_Only:1; //default ; only keep recognized transcript features
        bool keep_Genes:1; //for transcriptsOnly, do not discard genes from gflst
        bool keep_Attrs:1;
+       bool keep_AllExonAttrs:1; //when keep_Attrs, do not attempt to reduce exon attributes
        bool noExonAttrs:1;
        bool merge_CloseExons:1;
        bool gene2exon:1;
@@ -1222,9 +1223,10 @@ class GffReader {
   bool getSorting() { return sortByLoc; }
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
   void isTLF(bool v=true) { is_TLF=v; } //should be set before any parsing!
-  void keepAttrs(bool keep_attrs=true, bool discardExonAttrs=true) {
+  void keepAttrs(bool keep_attrs=true, bool discardExonAttrs=true, bool preserve_exon_attrs=false) {
 	  keep_Attrs=keep_attrs;
 	  noExonAttrs=discardExonAttrs;
+	  keep_AllExonAttrs=preserve_exon_attrs;
   }
   void transcriptsOnly(bool t_only) { transcripts_Only=t_only; }
   bool transcriptsOnly() { return transcripts_Only; }

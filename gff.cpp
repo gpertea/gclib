@@ -1866,46 +1866,49 @@ bool GffObj::reduceExonAttrs(GList<GffExon>& segs) {
 		char* attr_name=names->attrs.getName(attr_id);
 		char* attr_val =segs[0]->attrs->Get(a)->attr_val;
 		bool sameExonAttr=true;
-		for (int i=1;i<segs.Count();i++) {
-			char* ov=segs[i]->getAttr(attr_id);
-			if (ov==NULL || (strcmp(ov,attr_val)!=0)) {
-				sameExonAttr=false;
-				break;
+		bool discardAll=(GstrEq("exon_id", attr_name) || GstrEq("exon_number", attr_name));
+		if (!discardAll)
+			for (int i=1;i<segs.Count();i++) {
+				char* ov=segs[i]->getAttr(attr_id);
+				if (ov==NULL || (strcmp(ov,attr_val)!=0)) {
+					sameExonAttr=false;
+					break;
+				}
 			}
-		}
 		if (sameExonAttr) {
 			//delete this attribute from exon level
 			attrs_discarded=true;
-			//add the attribute to transcript level
-			//rename it if it exists and is different for the transcript!
-			char* t_val=NULL;
-			bool same_aval=false;
-			if (this->attrs!=NULL &&
-					(t_val=this->attrs->getAttr(attr_id))!=NULL) {
-				//same attribute name already exists for the transcript!
-				//write it using CDS_ or exon_ prefix
-				same_aval=(strcmp(attr_val, t_val)==0);
-				if (!same_aval) {
-					//add renamed attribute
-					const char* prefix = (&segs==cdss) ? "CDS_" : "exon_";
-					char* new_attr_name=NULL;
-					GMALLOC(new_attr_name, strlen(prefix)+strlen(attr_name)+1);
-					new_attr_name[0]=0;
-					strcat(new_attr_name, prefix);
-					strcat(new_attr_name, attr_name);
-					this->attrs->add_or_update(names, new_attr_name, attr_val);
-					GFREE(new_attr_name);
+			if (!discardAll) {
+				//add the attribute to transcript level
+				//rename it if it exists and is different for the transcript!
+				char* t_val=NULL;
+				bool same_aval=false;
+				if (this->attrs!=NULL &&
+						(t_val=this->attrs->getAttr(attr_id))!=NULL) {
+					//same attribute name already exists for the transcript!
+					//write it using CDS_ or exon_ prefix
+					same_aval=(strcmp(attr_val, t_val)==0);
+					if (!same_aval) {
+						//add renamed attribute
+						const char* prefix = (&segs==cdss) ? "CDS_" : "exon_";
+						char* new_attr_name=NULL;
+						GMALLOC(new_attr_name, strlen(prefix)+strlen(attr_name)+1);
+						new_attr_name[0]=0;
+						strcat(new_attr_name, prefix);
+						strcat(new_attr_name, attr_name);
+						this->attrs->add_or_update(names, new_attr_name, attr_val);
+						GFREE(new_attr_name);
+					}
 				}
-			}
-			else { //no such attribute exists for the transcript, copy it from the exon
-				if (!GstrEq("exon_id", attr_name) && !GstrEq("exon_number", attr_name))
-				    this->addAttr(attr_name, attr_val);
+				else { //no such attribute exists for the transcript, copy it from the exon
+						this->addAttr(attr_name, attr_val);
+				}
 			}
 			for (int i=1;i<segs.Count();i++) {
 				removeExonAttr(*(segs[i]), attr_id);
 			}
 			segs[0]->attrs->freeItem(a);
-		}
+		} //sameExonAttr
 	}
 	if (attrs_discarded) segs[0]->attrs->Pack();
 	return attrs_discarded;
@@ -2232,7 +2235,7 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	//-- attribute reduction for some records which
 	//   repeat the exact same attr=value for every exon
 	bool reduceAttributes=(gfr->keep_Attrs && !gfr->noExonAttrs &&
-			exons.Count()>0 && exons[0]->attrs!=NULL);
+			!gfr->keep_AllExonAttrs && exons.Count()>0 && exons[0]->attrs!=NULL);
 	if (reduceAttributes) {
 		//for each attribute of the 1st exon, if it has the
 		//same value for all other exons, move it to transcript level
