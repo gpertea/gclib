@@ -58,7 +58,7 @@ class GffObj;
 //---transcript overlapping - utility functions:
 int classcode_rank(char c); //returns priority value for class codes
 
-char getOvlCode(GffObj& m, GffObj& r, int& ovlen); //returns: class code
+char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch=false); //returns: class code
 
 bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen); //single-exon fuzzy transcript match
 

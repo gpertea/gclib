@@ -33,7 +33,8 @@ void gffnames_unref(GffNames* &n) {
 
 int classcode_rank(char c) {
 	switch (c) {
-		case '=': return 0; //intron chain match
+		case '=': return 0; //intron chain match or full exon chain match if strict matching is enabled
+		case '~': return 1; //intron chain match when strict matching is enabled
 		case 'c': return 2; //containment, perfect partial match (transfrag < reference)
 		case 'k': return 6; // reverse containment (reference < transfrag)
 		case 'm': return 6; // full span overlap with all reference introns either matching or retained
@@ -3227,7 +3228,7 @@ bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen) {
 }
 
 //formerly in gffcompare
-char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
+char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 	ovlen=0; //total actual exonic overlap
 	if (!m.overlap(r.start,r.end)) return 0;
 	int jmax=r.exons.Count()-1;
@@ -3237,8 +3238,11 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
 		GSeg mseg(m.start, m.end);
 		if (jmax==0) { //also single-exon ref
 			//ovlen=mseg.overlapLen(r.start,r.end);
-			if (singleExonTMatch(m, r, ovlen))
-				return '=';
+			if (singleExonTMatch(m, r, ovlen)) {
+				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
+						r.exons[0]->end==m.exons[0]->end) ? '=' : '~';
+				else return '=';
+			}
 			if (m.covlen<r.covlen)
 			   { if (ovlen >= m.covlen*0.8) return 'c'; } // fuzzy containment
 			else
@@ -3376,7 +3380,11 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
 	} //while checking intron overlaps
 	if (ichain_match) { //intron sub-chain match
 		if (imfirst==1 && imlast==imax) { // qry full intron chain match
-			if (jmfirst==1 && jmlast==jmax) return '='; //identical intron chains
+			if (jmfirst==1 && jmlast==jmax) {//identical intron chains
+				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
+						              r.exons.Last()->end && m.exons.Last()->end) ? '=' : '~';
+				else return '=';
+			}
 			// -- qry intron chain is shorter than ref intron chain --
 			int l_iovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
 			int r_iovh=0;   // same type of overhang through the ref intron on the right
@@ -3396,7 +3404,7 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
 			if (l_jovh<4 && r_jovh<4) return 'k'; //reverse containment
 		}
 	}
-	//'=', 'c' and 'k' where checked and assigned, check for 'm' and 'n' before falling back to 'j'
+	//'=', 'c' and 'k' were checked and assigned, check for 'm' and 'n' before falling back to 'j'
 	if (!intron_conflict && (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)) {
 			return 'm';
 	}
