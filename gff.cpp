@@ -2219,7 +2219,8 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 		CDstart=cdss->First()->start;
 		CDend=cdss->Last()->end;
 		CDphase=(strand=='-')? cdss->Last()->phase : cdss->First()->phase;
-		if (cdss->First()->phase==0 && CDphase!=0) updateCDSPhase(*cdss);
+		//if (CDphase==0 || CDphase=='.') //cdss->First()->phase==0 && CDphase!=0)
+		updateCDSPhase(*cdss); //always recompute phase
 		//there are GFFs out there which only provide UTR and CDS records instead of full exons
 		//so make sure we add all CDS segments to exons, if they are not already there
 		for (int i=0;i<cdss->Count();++i) {
@@ -3127,6 +3128,7 @@ void GffObj::updateCDSPhase(GList<GffExon>& segs) {
   if (CDphase=='1' || CDphase=='2') {
       cdsacc+= 3-(CDphase-'0');
   }
+  else CDphase='0';
   if (strand=='-') { //reverse strand
      for (int i=segs.Count()-1;i>=0;i--) {
          segs[i]->phase='0'+ (3-cdsacc%3)%3;
