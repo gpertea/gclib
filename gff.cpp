@@ -503,6 +503,16 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
   The solution is to still load this parent as GffObj for now and BAN it later
   so its children get dismissed/discarded as well.
  */
+ if (reader->ignoreLocus) {
+	 if (strcmp(ftype, "locus")==0) return;
+	 if (is_transcript || is_gene) {
+		 char* locus=NULL;
+        if (reader->is_gff3 || reader->gff_type==0)
+        	locus=extractAttr("locus=");
+		else locus=extractAttr("locus");
+        if (locus!=NULL) { GFREE(locus); }
+	 }
+ }
  char *gtf_tid=NULL;
  char *gtf_gid=NULL;
  if (reader->is_gff3 || reader->gff_type==0) {

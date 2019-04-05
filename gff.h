@@ -1145,6 +1145,7 @@ class GffReader {
        bool keep_Attrs:1;
        bool keep_AllExonAttrs:1; //when keep_Attrs, do not attempt to reduce exon attributes
        bool noExonAttrs:1;
+       bool ignoreLocus:1; //discard locus features and attributes from input
        bool merge_CloseExons:1;
        bool gene2exon:1;
        bool sortByLoc:1; //if records should be sorted by location
@@ -1230,6 +1231,7 @@ class GffReader {
   }
   void transcriptsOnly(bool t_only) { transcripts_Only=t_only; }
   bool transcriptsOnly() { return transcripts_Only; }
+  void setIgnoreLocus(bool nolocus) { ignoreLocus=nolocus; }
   void keepGenes(bool keep_genes) {
 	  keep_Genes=keep_genes;
   }
