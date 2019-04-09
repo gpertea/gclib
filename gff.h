@@ -551,7 +551,7 @@ class GffAttrs:public GList<GffAttr> {
             //do we have it?
             if (aid==Get(i)->attr_id && Get(i)->cds==is_cds) {
                 //update the existing value for this attribute
-                Get(i)->setValue(val);
+                Get(i)->setValue(val, is_cds);
                 return;
                 }
             }
