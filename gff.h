@@ -1291,6 +1291,13 @@ class GffReader {
 
   // load all subfeatures, re-group them:
   void readAll();
+  void readAll(bool keepAttr, bool mergeCloseExons=false, bool noExonAttr=true) {
+	  this->keep_Attrs=keepAttr;
+	  this->merge_CloseExons=mergeCloseExons;
+	  this->noExonAttrs=noExonAttr;
+	  readAll();
+  }
+
 
   //only for well-formed files: BED or GxF where exons are strictly grouped by their transcript_id/Parent
   GffObj* readNext(); //user must free the returned GffObj* !
