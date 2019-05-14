@@ -21,8 +21,6 @@ ifndef WINDOWS
 TLIBS += -lpthread
 endif
 
-
-
 DMACH := $(shell ${CXX} -dumpmachine)
 
 # MinGW32 GCC 4.5 link problem fix

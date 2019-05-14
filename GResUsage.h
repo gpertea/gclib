@@ -13,15 +13,14 @@ double get_usecTime();
 class GResUsage {
   protected:
 	struct rusage start_ru;
-	struct rusage end_ru;
+	struct rusage stop_ru;
 	struct timespec start_ts;
-	struct timespec end_ts;
+	struct timespec stop_ts;
   public:
 	double start(); //returns microseconds time using clock_gettime(CLOCK_MONOTONIC
-	double stop(); //stop the stopwatch
+	double stop(); //stop the stopwatch, returns the current time in microseconds
 	double elapsed(); //microseconds elapsed between start and stop;
 	int memoryUsed(); //memory increase between start and stop in KB (can be negative)
-
 };
 
 
