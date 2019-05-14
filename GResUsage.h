@@ -19,10 +19,10 @@ class GResUsage {
   public:
 	double start(); //returns microseconds time using clock_gettime(CLOCK_MONOTONIC
 	double stop(); //stop the stopwatch, returns the current time in microseconds
-	double elapsed(); //microseconds elapsed between start and stop;
+	double elapsed(); //microseconds elapsed between start and stop (wallclock time)
+	double u_elapsed(); //microseconds of user time elapsed
+	double s_elapsed(); //microseconds of system time elapsed
 	int memoryUsed(); //memory increase between start and stop in KB (can be negative)
 };
-
-
 
 #endif

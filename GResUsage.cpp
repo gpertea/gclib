@@ -33,6 +33,7 @@ void getMemUsage(double& vm_usage, double& resident_set) {
 
 #else //assume Linux
 #include <unistd.h>
+/*
 #include <string>
 #include <ios>
 #include <fstream>
@@ -66,6 +67,8 @@ void getMemUsage(double& vm_usage, double& resident_set) {
    vm_usage     = vsize / 1024.0;
    resident_set = rss * page_size_kb;
 }
+*/
+
 #endif
 
 
@@ -76,7 +79,7 @@ void getMemUsage(double& vm_usage, double& resident_set) {
 // On failure, returns 0.0, 0.0
 void printMemUsage(FILE* fout) {
   double vs, rs;
-  get_mem_usage(vs,rs);
+  getMemUsage(vs,rs);
   vs/=1024;
   rs/=1024;
   fprintf(fout, "VMSize: %6.1fMB\tRSize: %6.1fMB\n", vs, rs);
