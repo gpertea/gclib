@@ -228,7 +228,7 @@ public:
 };
 
 
-// from code.google.com/p/smhasher/wiki/MurmurHash3
+// -- from code.google.com/p/smhasher/wiki/MurmurHash3
 inline uint32_t integerHash(uint32_t h)
 {
 	h ^= h >> 16;
@@ -239,15 +239,19 @@ inline uint32_t integerHash(uint32_t h)
 	return h;
 }
 
-// from code.google.com/p/smhasher/wiki/MurmurHash3
-inline uint64_t integerHash(uint64_t k)
-{
-	k ^= k >> 33;
-	k *= 0xff51afd7ed558ccd;
-	k ^= k >> 33;
-	k *= 0xc4ceb9fe1a85ec53;
-	k ^= k >> 33;
-	return k;
+inline int32_t int_hashfunc_Wang(int32_t key) {
+ key += ~(key << 15);
+ key ^=  (key >> 10);
+ key +=  (key << 3);
+ key ^=  (key >> 6);
+ key += ~(key << 11);
+ key ^=  (key >> 16);
+ return key;
+}
+
+// -- from Heng Li's khash.h:
+inline uint32_t int64_hashfunc(uint64_t k) {
+	return (uint32_t)(k>>33^k^k<<11);
 }
 
 #define GIHASH_FIRST_CELL(hash) (m_cells + ((hash) & (m_arraySize - 1)))
