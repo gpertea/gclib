@@ -71,7 +71,8 @@ void GMessage(const char* format,...){
 // Allocate memory
 bool GMalloc(pointer* ptr,unsigned long size){
   //GASSERT(ptr);
-  if (size!=0) *ptr=malloc(size);
+  if (size!=0)
+	  *ptr=malloc(size);
   return *ptr!=NULL;
   }
 
