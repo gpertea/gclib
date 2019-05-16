@@ -1,4 +1,4 @@
-#ifndef _GRESUSAGE
+#ifndef _GRESUSAGE_
 #define _GRESUSAGE_
 #include "GBase.h"
 #include <sys/resource.h>
@@ -6,7 +6,7 @@
 
 // report the memory usage of the current process, rounded to kilobytes
 size_t getCurrentMemUse(); //current memory usage of the program (RSS)
-size_t getPeakMemUse(); //maximum memory usage for the program at the time of the call
+size_t getPeakMemUse(); //maximum memory usage (RSS) for the program until now
 
 void printMemUsage(FILE* fout=stderr);
 
@@ -26,8 +26,7 @@ class GResUsage {
 	void stopCheck(const char* s);
   public:
 	GResUsage(bool do_start=false):started(false),
-	   stopped(false), start_mem(0), stop_mem(0),
-	   start_ts({0, 0}), stop_ts({0,0}) {
+	   stopped(false), start_mem(0), stop_mem(0) {
           if (do_start) start();
 	}
 
