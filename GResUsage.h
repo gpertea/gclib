@@ -10,7 +10,6 @@ size_t getPeakMemUse(); //maximum memory usage (RSS) for the program until now
 
 void printMemUsage(FILE* fout=stderr);
 
-//get a timer counter in microseconds (using clock_gettime(CLOCK_MONOTONIC )
 double get_usecTime();
 
 class GResUsage {

@@ -1,24 +1,92 @@
 #include "GResUsage.h"
 
-#ifdef __APPLE__
-#include <mach/mach.h>
-double getMemUsage() {
-  double resident_set=0;
-  struct task_basic_info t_info;
-  mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
+#define G_gettime(s) clock_gettime(CLOCK_MONOTONIC, &s)
 
-  if (KERN_SUCCESS == task_info(mach_task_self(),
-         TASK_BASIC_INFO, (task_info_t)&t_info, &t_info_count)) {
-    //vm_usage=double(t_info.virtual_size)/1024;
-    resident_set=double(t_info.resident_size)/1024;
-    }
-// resident size is in t_info.resident_size;
-  return resident_set;
-}
+#if defined(__APPLE__) && defined(__MACH__)
+  #include <AvailabilityMacros.h>
+  #ifndef MAC_OS_X_VERSION_10_12
+    #define MAC_OS_X_VERSION_10_12 101200
+  #endif
+  #if MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12
+    #define G_gettime(s) clock_gettime(CLOCK_MONOTONIC, &s);
+  #else
+    #include <mach/mach_time.h>
+	#define MACHGT_NANO (+1.0E-9)
+	#define MACHGT_GIGA UINT64_C(1000000000)
+	void mach_gettime( struct timespec* t) {
+	  // be more careful in a multithreaded environement
+	  static double machgt_timebase = 0.0;
+	  static uint64_t machgt_timestart = 0;
+	  if (!machgt_timestart) {
+		mach_timebase_info_data_t tb = { 0 };
+		mach_timebase_info(&tb);
+		machgt_timebase = tb.numer;
+		machgt_timebase /= tb.denom;
+		machgt_timestart = mach_absolute_time();
+	  }
+	 ;
+	  double diff = (mach_absolute_time() - machgt_timestart) * machgt_timebase;
+	  t.tv_sec = diff * MACHGT_NANO;
+	  t.tv_nsec = diff - (t.tv_sec * MACHGT_GIGA);
+	}
+    #define G_gettime(s) mach_gettime(&s)
+  #endif
+#else
+ #if defined(_WIN32_)
+    //Windows implementation:
+	LARGE_INTEGER
+	getFILETIMEoffset() {
+	    SYSTEMTIME s;
+	    FILETIME f;
+	    LARGE_INTEGER t;
+	    s.wYear = 1970;  s.wMonth = 1; s.wDay = 1;
+	    s.wHour = 0; s.wMinute = 0; s.wSecond = 0;
+	    s.wMilliseconds = 0;
+	    SystemTimeToFileTime(&s, &f);
+	    t.QuadPart = f.dwHighDateTime;
+	    t.QuadPart <<= 32;
+	    t.QuadPart |= f.dwLowDateTime;
+	    return (t);
+	}
+
+	void win_gettime(struct timespec* ts) {
+	    LARGE_INTEGER           t;
+	    FILETIME            f;
+	    double                  microseconds;
+	    static LARGE_INTEGER    offset;
+	    static double           frequencyToMicroseconds;
+	    static int              initialized = 0;
+	    static BOOL             usePerformanceCounter = 0;
+
+	    if (!initialized) {
+	        LARGE_INTEGER performanceFrequency;
+	        initialized = 1;
+	        usePerformanceCounter = QueryPerformanceFrequency(&performanceFrequency);
+	        if (usePerformanceCounter) {
+	            QueryPerformanceCounter(&offset);
+	            frequencyToMicroseconds = (double)performanceFrequency.QuadPart / 1000000.;
+	        } else {
+	            offset = getFILETIMEoffset();
+	            frequencyToMicroseconds = 10.;
+	        }
+	    }
+	    if (usePerformanceCounter) QueryPerformanceCounter(&t);
+	    else {
+	        GetSystemTimeAsFileTime(&f);
+	        t.QuadPart = f.dwHighDateTime;
+	        t.QuadPart <<= 32;
+	        t.QuadPart |= f.dwLowDateTime;
+	    }
+
+	    t.QuadPart -= offset.QuadPart;
+	    microseconds = (double)t.QuadPart / frequencyToMicroseconds;
+	    t.QuadPart = microseconds;
+	    ts->tv_sec = t.QuadPart / 1000000;
+	    ts->tv_nsec = (t.QuadPart % 1000000)*1000;
+	}
+   #define G_gettime(s) win_gettime(&s)
+ #endif
 #endif
-
-
-
 
 // Returns the peak (maximum so far) resident set size (physical
 // memory use) measured in bytes
@@ -32,11 +100,11 @@ size_t getPeakMemUse() {
 	// asssume BSD, Linux, or OSX
 	struct rusage rusage;
 	getrusage( RUSAGE_SELF, &rusage );
-#if defined(__APPLE__) && defined(__MACH__)
+ #if defined(__APPLE__) && defined(__MACH__)
 	return (size_t)rusage.ru_maxrss/1024;
-#else
+ #else
 	return (size_t)(rusage.ru_maxrss);
-#endif
+ #endif
 #endif
 }
 
@@ -88,12 +156,18 @@ void printMemUsage(FILE* fout) {
   fprintf(fout, "Resident Size: %6.1fMB\n", rs);
 }
 
+double get_usecTime() {
+	struct timespec start_ts;
+	G_gettime(start_ts);
+	return (((double)start_ts.tv_sec)*1000000.0 + ((double)start_ts.tv_nsec)/1000.0);
+}
+
 double GResUsage::start() {
 	started=true;
 	stopped=false;
 	start_mem=getCurrentMemUse();
 	getrusage(RUSAGE_SELF, &start_ru);
-	clock_gettime(CLOCK_MONOTONIC, &start_ts);
+	G_gettime(start_ts);
 	double tm=start_ts.tv_sec*1000000.0 + start_ts.tv_nsec/1000.0;
 	return tm;
 }
@@ -102,7 +176,7 @@ double GResUsage::stop() {
 	if (started!=true)
 		GError("Error: calling GResUsage::stop() without starting it first?\n");
 	stopped=true;
-	clock_gettime(CLOCK_MONOTONIC, &stop_ts);
+	G_gettime(stop_ts);
 	getrusage(RUSAGE_SELF, &stop_ru);
 	double tm=stop_ts.tv_sec*1000000.0 + stop_ts.tv_nsec/1000.0;
 	stop_mem=getCurrentMemUse();
