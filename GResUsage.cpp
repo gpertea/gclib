@@ -1,9 +1,11 @@
 #include "GResUsage.h"
 
-#define G_gettime(s) clock_gettime(CLOCK_MONOTONIC, &s)
-
 #if defined(__APPLE__) && defined(__MACH__)
   #include <AvailabilityMacros.h>
+  #include <sys/resource.h>
+  #include <mach/mach.h>
+  #include <mach/task_info.h>
+
   #ifndef MAC_OS_X_VERSION_10_12
     #define MAC_OS_X_VERSION_10_12 101200
   #endif
@@ -18,7 +20,8 @@
 	  static double machgt_timebase = 0.0;
 	  static uint64_t machgt_timestart = 0;
 	  if (!machgt_timestart) {
-		mach_timebase_info_data_t tb = { 0 };
+		mach_timebase_info_data_t tb;
+		tb.numer=0;tb.denom=0;
 		mach_timebase_info(&tb);
 		machgt_timebase = tb.numer;
 		machgt_timebase /= tb.denom;
@@ -26,8 +29,8 @@
 	  }
 	 ;
 	  double diff = (mach_absolute_time() - machgt_timestart) * machgt_timebase;
-	  t.tv_sec = diff * MACHGT_NANO;
-	  t.tv_nsec = diff - (t.tv_sec * MACHGT_GIGA);
+	  t->tv_sec = diff * MACHGT_NANO;
+	  t->tv_nsec = diff - (t->tv_sec * MACHGT_GIGA);
 	}
     #define G_gettime(s) mach_gettime(&s)
   #endif
@@ -85,6 +88,8 @@
 	    ts->tv_nsec = (t.QuadPart % 1000000)*1000;
 	}
    #define G_gettime(s) win_gettime(&s)
+ #else  //assume Linux compatible
+   #define G_gettime(s) clock_gettime(CLOCK_MONOTONIC, &s)
  #endif
 #endif
 
@@ -120,8 +125,14 @@ size_t getCurrentMemUse() {
 	return (size_t)info.WorkingSetSize;
 
 #elif defined(__APPLE__) && defined(__MACH__)
-	// Mac OSX
+#if defined MACH_TASK_BASIC_INFO
 	struct mach_task_basic_info info;
+#else
+  struct task_basic_info info;
+  #define MACH_TASK_BASIC_INFO TASK_BASIC_INFO
+  #define MACH_TASK_BASIC_INFO_COUNT TASK_BASIC_INFO_COUNT
+#endif
+
 	mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
 	if ( task_info( mach_task_self( ), MACH_TASK_BASIC_INFO,
 		(task_info_t)&info, &infoCount ) != KERN_SUCCESS )
