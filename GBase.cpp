@@ -380,6 +380,102 @@ char* rstrchr(char* str, char ch) {  /* returns a pointer to the rightmost
 }
 
 
+GFileReader::GFileReader(char* filename, int bufSize):fh(NULL),fname(NULL),fbuf(NULL),
+		fbufcap(bufSize), fbufread(0), fpos(-1), fbufpos(0), is_eof(false) {
+  GMALLOC(fbuf, fbufcap);
+  if (filename!=NULL) setFile(filename);
+}
+
+void GFileReader::setFile(char* filename) {
+ if (filename==NULL) GError("Error: a file name must be given!\n");
+ GFREE(fname);
+ fname=Gstrdup(filename);
+ fh=fopen(fname, "rb");
+ if (fh==NULL) GError("Error: failed opening file %s\n", fname);
+ fbufread=0;
+ fpos=0;
+ fbufpos=0;
+}
+
+GFileReader::GFileReader(FILE* afh, int64_t afpos):fh(afh),fname(NULL),fbuf(NULL),
+		fbufcap(16384), fbufread(0), fpos(afpos), fbufpos(0), is_eof(false) {
+	GMALLOC(fbuf, fbufcap);
+}
+
+GFileReader::GFileReader(FILE* afh):fh(NULL),fname(NULL),fbuf(NULL),
+		fbufcap(16384), fbufread(0), fpos(-1), fbufpos(0), is_eof(false)  {
+	GMALLOC(fbuf, fbufcap);
+}
+
+#define GFR_CKFH if (fh==NULL) \
+	GError("Error: attempt to use uninitialized file handle!\n")
+
+#define GFR_CKBUF if (fbufread==0 || fbufpos==fbufread) \
+	readnext()
+#define GFR_CKEOF(ret) if (is_eof) return ret
+
+
+void GFileReader::readnext() {
+	//this should only be called when fbufread==0 (nothing read)
+	// or the read buffer was exhausted (fbufpos==fbufread)
+	if (feof(fh)) {
+		is_eof=true;
+		return;
+	}
+	if (fbufread==0) { //first read -- fill the whole buffer
+		fbufread=fread(fbuf, 1, fbufcap, fh);
+		if (fbufread<fbufcap) {
+			if (ferror(fh))
+				GError("Error: failed reading block from file (%s)\n", fname);
+		}
+		fbufpos=0;
+	}
+	else { //subsequent reads beyond the first: preserve the last 4 bytes
+		int bcap=fbufcap-4;
+		//copy the last 4 bytes of the buffer at the beginning
+		//memcpy((void*)fbuf, (void*)(fbuf+bcap), 4);
+		*((uint32_t*)fbuf)=*((uint32_t*)(fbuf+bcap));
+		//fill the rest of the buffer with new file data
+		fbufread=fread((void*)(fbuf+4), 1, bcap, fh);
+		if (fbufread<bcap) {
+			if (ferror(fh))
+				GError("Error: failed reading block from file (%s)\n", fname);
+		}
+		fbufpos=4;
+	}
+}
+
+int GFileReader::getc() {
+	//GFR_CKFH;
+	GFR_CKEOF(-1);
+	GFR_CKBUF;
+	GFR_CKEOF(-1);
+	int ch = fbuf[fbufpos];
+	fbufpos++;
+	fpos++;
+	return ch;
+}
+
+char* GFileReader::readAlloc(int64_t numBytes, int64_t* nbRead) {
+  char* r=NULL;
+  GFR_CKFH;
+  GFR_CKEOF(r);
+  GFR_CKBUF;
+  GFR_CKEOF(r);
+  int64_t to_read=numBytes;
+  int64_t actual_read=0;
+  while (to_read>0) {
+	  memcpy();
+  }
+  return r;
+}
+
+GFileReader::~GFileReader() {
+  GFREE(fbufcap);
+  GFREE(fname);
+  if (fh!=NULL) fclose(fh);
+}
+
 /* DOS/UNIX safer fgets : reads a text line from a (binary) file and
   update the file position accordingly and the buffer capacity accordingly.
   The given buf is resized to read the entire line in memory

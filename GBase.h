@@ -197,13 +197,15 @@ template<class T> void Gswap(T& lhs, T& rhs) {
 }
 
 
+
+
+
 /**************** Memory management ***************************/
 
 bool GMalloc(pointer* ptr, unsigned long size); // Allocate memory
 bool GCalloc(pointer* ptr, unsigned long size); // Allocate and initialize memory
 bool GRealloc(pointer* ptr,unsigned long size); // Resize memory
 void GFree(pointer* ptr); // Free memory, resets ptr to NULL
-
 
 //int saprintf(char **retp, const char *fmt, ...);
 
@@ -232,6 +234,19 @@ char* loCase(const char* str);
 // changing string in place:
 char* strlower(char * str);
 char* strupper(char * str);
+
+// generic memory block (pointer with associated length)
+struct GMemBlock {
+	char* data; //pointer to memory block
+	int64_t len; //length of interest
+	bool is_new; //freshly allocated
+	GMemBlock(void* ptr=NULL, int64_t blockLen=0):data((char*)ptr),
+		  len(blockLen),is_new(false) {  }
+	GMemBlock(int64_t newSize):data(NULL), len(newSize), is_new(true) {
+		GMALLOC(data, newSize);
+	}
+	void free() { if (is_new) GFREE(data); }
+};
 
 //strstr but for memory zones: scans a memory region
 //for a substring:
@@ -539,6 +554,36 @@ int strsplit(char* str, GDynArray<char*>& fields, const char delim, int maxfield
 int strsplit(char* str, GDynArray<char*>& fields, int maxfields=MAX_INT); //splits by tab or space
 //splits a string by placing 0 where tab or space is found, setting fields[] to the beginning
 //of each field (stopping after maxfields); returns number of fields parsed
+
+class GFileReader {
+ protected:
+	FILE* fh;
+	char* fname;
+	char* fbuf;
+	int fbufcap; //buffer initial capacity
+	int fbufread; //buffer data length (how much was read last)
+	int64_t fpos; //current reading offset in FILE* fh
+	int fbufpos; //current reading offset in fbuf
+	bool is_eof;
+	void readnext(); //fetch next chunk in fbuf
+ public:
+	GFileReader(char* filename=NULL, int bufSize=32768);
+	GFileReader(FILE* afh, int64_t afpos); //passing an open file, at a known offset
+	GFileReader(FILE* afh); //passing an open file (fseekpos will be unknown!)
+	void setFile(char* filename);
+	bool eof() { return is_eof; }
+	int getc();
+	int64_t getpos() { return fpos; }
+	char* readAlloc(int64_t numBytes, int64_t* nbRead=NULL); //read a fixed number of bytes
+	//int64_t skip(int numChars); //skip numChars in the file stream, returns new file position
+	char* getLine(int* rlen=NULL);
+	GMemBlock getLine(); //caller has to mem-manage the resulting GMemBlock
+	GMemBlock getUntil(const char c); //caller has to mem-manage the resulting GMemBlock
+	GMemBlock getUntil(const char* delim); //caller has to mem-manage the resulting GMemBlock
+	~GFileReader();
+};
+
+
 
 //--------------------------------------------------------
 // ************** simple line reading class for text files
