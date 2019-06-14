@@ -444,7 +444,7 @@ template<class OBJ> class GDynArray {
     		Clear();
     		return *this;
     	}
-    	increaseCapacity(a.fCapacity); //set size
+    	growTo(a.fCapacity); //set size
         memcpy(fArray, a.fArray, sizeof(OBJ)*a.fCount);
         return *this;
     }
@@ -459,7 +459,7 @@ template<class OBJ> class GDynArray {
     	if (GDynArray_MAXCOUNT-delta<=fCapacity)
     		delta=GDynArray_MAXCOUNT-fCapacity;
     	if (delta<=1) GError("Error at GDynArray::Grow(): max capacity reached!\n");
-    	increaseCapacity(fCapacity + delta);
+    	growTo(fCapacity + delta);
     }
 #define GDynArray_ADD(item) \
     	if (fCount==MAX_UINT-1) GError("Error at GDynArray: cannot add item, maximum count reached!\n"); \
@@ -491,12 +491,27 @@ template<class OBJ> class GDynArray {
 
     uint Count() { return fCount; } // get size of array (elements)
     uint Capacity() { return fCapacity; }
-    void increaseCapacity(uint newcap) {
+    void growTo(uint newcap) {
     	if (newcap==0) { Clear(); return; }
-    	if (newcap <= fCapacity) return; //never shrinks (use Pack() for this)
+    	if (newcap <= fCapacity) return; //never shrink! (use Pack() for shrinking)
     	GREALLOC(fArray, newcap*sizeof(OBJ));
     	fCapacity=newcap;
     }
+
+    void append(OBJ* arr, uint count) {
+    	//fast adding of a series of objects
+    	growTo(fCount+count);
+    	memcpy(fArray+fCount, arr, count*sizeof(OBJ));
+    	fCount+=count;
+    }
+
+    void append(GDynArray<OBJ> arr) {
+    	//fast adding of a series of objects
+    	growTo(fCount+arr.fCount);
+    	memcpy(fArray+fCount, arr.fArray, arr.fCount*sizeof(OBJ));
+    	fCount+=arr.fCount;
+    }
+
     void Trim(int tcount=1) {
     	//simply cut (discard) the last tcount items
     	//new Count is now fCount-tcount
@@ -510,6 +525,15 @@ template<class OBJ> class GDynArray {
     	GREALLOC(fArray, newcap*sizeof(OBJ));
     	fCapacity=newcap;
     }
+
+    void zPack(OBJ z) { //shrink capacity to fCount+1 and adds a z terminator
+    	if (fCapacity-fCount<=1) { fArray[fCount]=z; return; }
+    	int newcap=fCount+1;
+    	GREALLOC(fArray, newcap*sizeof(OBJ));
+    	fCapacity=newcap;
+    	fArray[fCount]=z;
+    }
+
 
     inline void Shrink() { Pack(); }
 
@@ -535,7 +559,7 @@ template<class OBJ> class GDynArray {
 
     OBJ* operator()() { return fArray; }
 
-    //use below to prevent freeing the fArray pointer
+    //use methods below in order to prevent deallocation of fArray pointer on destruct
     //could be handy for adopting stack objects (e.g. cheap dynamic strings)
     void ForgetPtr() { byptr=true;  }
     void DetachPtr() { byptr=true;  }
@@ -561,29 +585,36 @@ class GFileReader {
 	char* fname;
 	char* fbuf;
 	int fbufcap; //buffer initial capacity
-	int fbufread; //buffer data length (how much was read last)
 	int64_t fpos; //current reading offset in FILE* fh
-	int fbufpos; //current reading offset in fbuf
-	bool is_eof;
-	void readnext(); //fetch next chunk in fbuf
+	int fbufpos; //current buffer reading offset in fbuf (next byte to be consumed)
+	int fbufzpos; //offset of the byte after the last loaded byte from file into fbuf
+	bool is_eof; //if the last character in the file has been read
+	  //by any of the get*() or read*() functions
+	void freadnext(); //fetch next chunk in fbuf
+    size_t readToMem(char* mem, int64_t rcount);
  public:
 	GFileReader(char* filename=NULL, int bufSize=32768);
 	GFileReader(FILE* afh, int64_t afpos); //passing an open file, at a known offset
 	GFileReader(FILE* afh); //passing an open file (fseekpos will be unknown!)
 	void setFile(char* filename);
 	bool eof() { return is_eof; }
-	int getc();
 	int64_t getpos() { return fpos; }
-	char* readAlloc(int64_t numBytes, int64_t* nbRead=NULL); //read a fixed number of bytes
-	//int64_t skip(int numChars); //skip numChars in the file stream, returns new file position
-	char* getLine(int* rlen=NULL);
-	GMemBlock getLine(); //caller has to mem-manage the resulting GMemBlock
+	int getc();
+	void ungetc();
+	char* readAlloc(int64_t numBytes, int64_t* nbRead=NULL);
+	  //read a fixed number of bytes, caller has to free the returned pointer
+	size_t read(char* mem, int64_t numBytes);
+	 //read numBytes from file into the pre-allocated mem block
+	char* getLine(int* linelen=NULL);
+	char* getUntil(const char ch, int* rlen=NULL);
+	/*
+	int64_t skip(int numChars); //skip numChars in the file stream, returns new file position
+	GMemBlock getLine(); //caller has to deallocate the resulting GMemBlock
 	GMemBlock getUntil(const char c); //caller has to mem-manage the resulting GMemBlock
 	GMemBlock getUntil(const char* delim); //caller has to mem-manage the resulting GMemBlock
+	*/
 	~GFileReader();
 };
-
-
 
 //--------------------------------------------------------
 // ************** simple line reading class for text files
