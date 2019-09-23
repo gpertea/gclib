@@ -197,9 +197,6 @@ template<class T> void Gswap(T& lhs, T& rhs) {
 }
 
 
-
-
-
 /**************** Memory management ***************************/
 
 bool GMalloc(pointer* ptr, unsigned long size); // Allocate memory
