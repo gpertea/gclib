@@ -650,16 +650,7 @@ class GffExon : public GSeg {
 		    else { start=e; end=s; }
 
   } //constructor
-
-  GffExon& operator=(const GffExon& o) { // copy operator : shallow!
-    sharedAttrs=o.sharedAttrs;
-    attrs=o.attrs;
-    score=o.score;
-    exontype=o.exontype;
-    phase=o.phase;
-    uptr=o.uptr;
-    return *this;
-  }
+  
   
   GffExon(const GffExon& ex):GSeg(ex.start, ex.end) { //copy constructor
       (*this)=ex; //use the default (shallow!) copy operator
@@ -668,6 +659,10 @@ class GffExon : public GSeg {
         attrs->copyAttrs(ex.attrs);
       }
   }
+  
+  GffExon& operator=(const GffExon& o) = default; //prevent gcc 9 warnings:
+                                           //yes, I want a shallow copy here
+  
   ~GffExon() { //destructor
      if (attrs!=NULL && !sharedAttrs) delete attrs;
   }
@@ -1025,6 +1020,8 @@ public:
          printGxf(fout, showCDS ? pgffBoth : pgffExon, tlabel, gfparent, cvtChars);
       }
    void printExonList(FILE* fout); //print comma delimited list of exon intervals
+   void printCDSList(FILE* fout); //print comma delimited list of CDS intervals
+
    void printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len);
        //print a BED-12 line + GFF3 attributes in 13th field
    void printSummary(FILE* fout=NULL);
