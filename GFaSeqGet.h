@@ -3,7 +3,7 @@
 #include "GFastaIndex.h"
 
 #define MAX_FASUBSEQ 0x20000000
-//max 512MB sequence data held in memory at a time
+//max 512MB sequence data held in memory at a time!
 
 class GSubSeq {
  public:

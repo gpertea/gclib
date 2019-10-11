@@ -2721,6 +2721,24 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst) {
     return unspliced;
 }
 
+ void GffObj::addPadding(int padLeft, int padRight) {
+	 this->start-=padLeft;
+	 this->end+=padRight;
+	 if (exons.Count()>0) {
+		 exons[0]->start-=padLeft;
+		 exons.Last()->end+=padRight;
+	 }
+ }
+
+ void GffObj::removePadding(int padLeft, int padRight) {
+	 this->start+=padLeft;
+	 this->end-=padRight;
+	 if (exons.Count()>0) {
+		 exons[0]->start+=padLeft;
+		 exons.Last()->end-=padRight;
+	 }
+ }
+
 char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_start, uint* cds_end,
           GMapSegments* seglst, bool cds_open) {
 	//cds_open only makes sense when CDSonly is true by overriding CDS 3'end such that the end of

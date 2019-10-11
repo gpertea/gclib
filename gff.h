@@ -1030,6 +1030,10 @@ public:
            uint* cds_start=NULL, uint* cds_end=NULL, GMapSegments* seglst=NULL,
 		   bool cds_open=false);
     char* getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst=NULL);
+
+    void addPadding(int padLeft, int padRight); //change exons to include this padding on the sides
+    void removePadding(int padLeft, int padRight);
+
    //bool validCDS(GFaSeqGet* faseq); //has In-Frame Stop Codon ?
    bool empty() { return (start==0); }
 };
