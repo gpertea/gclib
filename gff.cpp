@@ -2728,6 +2728,7 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst) {
 		 exons[0]->start-=padLeft;
 		 exons.Last()->end+=padRight;
 	 }
+	 covlen+=padLeft+padRight;
  }
 
  void GffObj::removePadding(int padLeft, int padRight) {
@@ -2737,6 +2738,7 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst) {
 		 exons[0]->start+=padLeft;
 		 exons.Last()->end-=padRight;
 	 }
+	 covlen-=padLeft+padRight;
  }
 
 char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_start, uint* cds_end,
@@ -2760,7 +2762,8 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
   if (gsubseq==NULL) {
         GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);
   }
-  if (fspan<(int)(end-start+1)) { //special case: stop coordinate was extended past the gseq length, must adjust
+  if (fspan<(int)(end-start+1)) {
+	  //special case: stop coordinate was extended past the gseq length, must adjust
      int endadj=end-start+1-fspan;
      uint prevend=end;
      end-=endadj;
@@ -2775,7 +2778,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
      }
   }
   char* spliced=NULL;
-  GMALLOC(spliced, covlen+1); //allocate more here
+  GMALLOC(spliced, covlen+1); //IMPORTANT: covlen must be correct here!
   uint g_start=0, g_end=0;
   int cdsadj=0;
   if (CDphase=='1' || CDphase=='2') {
