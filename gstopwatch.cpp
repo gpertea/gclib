@@ -1,6 +1,6 @@
 #include "gstopwatch.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 double GStopWatch::LIToSecs( LARGE_INTEGER & L) {
   return ((double)L.QuadPart /(double)frequency.QuadPart);
 }

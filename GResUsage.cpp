@@ -35,7 +35,7 @@
     #define G_gettime(s) mach_gettime(&s)
   #endif
 #else
- #if defined(_WIN32_)
+ #if defined(_WIN32)
     //Windows implementation:
 	LARGE_INTEGER
 	getFILETIMEoffset() {
@@ -96,7 +96,7 @@
 // Returns the peak (maximum so far) resident set size (physical
 // memory use) measured in bytes
 size_t getPeakMemUse() {
-#if defined(_WIN32_)
+#if defined(_WIN32)
 	// -- Windows
 	PROCESS_MEMORY_COUNTERS info;
 	GetProcessMemoryInfo( GetCurrentProcess( ), &info, sizeof(info) );
@@ -118,7 +118,7 @@ size_t getPeakMemUse() {
  * in bytes, or zero if the value cannot be determined on this OS.
  */
 size_t getCurrentMemUse() {
-#if defined(_WIN32_)
+#if defined(_WIN32)
 	// -- Windows
 	PROCESS_MEMORY_COUNTERS info;
 	GetProcessMemoryInfo( GetCurrentProcess( ), &info, sizeof(info) );

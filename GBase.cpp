@@ -25,7 +25,7 @@ void GAssert(const char* expression, const char* filename, unsigned int lineno){
 
 // Error routine (prints error message and exits!)
 void GError(const char* format,...){
-  #ifdef __WIN32__
+  #ifdef _WIN32
     char msg[4096];
     va_list arguments;
     va_start(arguments,format);
@@ -50,7 +50,7 @@ void GError(const char* format,...){
 
 // Warning routine (just print message without exiting)
 void GMessage(const char* format,...){
-  #ifdef __WIN32__
+  #ifdef _WIN32
     char msg[4096];
     va_list arguments;
     va_start(arguments,format);
@@ -151,7 +151,7 @@ int Gstrcmp(const char* a, const char* b, int n) {
 
 int G_mkdir(const char* path, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) ) {
    //int perms=(S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) ) {
- #ifdef __WIN32__
+ #ifdef _WIN32
      return _mkdir(path);
  #else
      return  mkdir(path, perms);
@@ -160,7 +160,7 @@ int G_mkdir(const char* path, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH
 
 
 void Gmktempdir(char* templ) {
-#ifdef __WIN32__
+#ifdef _WIN32
   int blen=strlen(templ);
   if (_mktemp_s(templ, blen)!=0)
 	  GError("Error creating temp dir %s!\n", templ);
@@ -902,7 +902,7 @@ int fileExists(const char* fname) {
 }
 
 int64 fileSize(const char* fpath) {
-#ifdef __WIN32__
+#ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA fad;
     if (!GetFileAttributesEx(name, GetFileExInfoStandard, &fad))
         return -1; // error condition, could call GetLastError to find out more

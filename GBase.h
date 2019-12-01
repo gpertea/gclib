@@ -15,9 +15,12 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#if defined __WIN32 || defined __WIN32__ || defined _WIN32 || defined _WIN32_ || defined _WINDOWS
-  #ifndef __WIN32__
-    #define __WIN32__
+#if defined(__WIN32) || defined(__WIN32__) || defined(_WIN32) || defined(_WIN64) || defined(__MINGW64__) || defined(__WINDOWS__)
+  #ifndef _WIN32
+    #define _WIN32
+  #endif
+  #ifndef _WIN64
+    #define _WIN64
   #endif
   #include <windows.h>
   #include <direct.h>
