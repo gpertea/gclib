@@ -10,6 +10,10 @@
 #define S_ISREG(mode)  (((mode) & S_IFMT) == S_IFREG)
 #endif
 
+//#ifdef _WIN32
+// int (WINAPIV * __vsnprintf)(char *, size_t, const char*, va_list) = _vsnprintf;
+//#endif
+
 //************************* Debug helpers **************************
 // Assert failed routine
 void GAssert(const char* expression, const char* filename, unsigned int lineno){
@@ -152,23 +156,26 @@ int Gstrcmp(const char* a, const char* b, int n) {
 int G_mkdir(const char* path, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) ) {
    //int perms=(S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) ) {
  #ifdef _WIN32
-     return _mkdir(path);
+     //return _mkdir(path);
+	 return CreateDirectoryA(path, NULL);
  #else
-     return  mkdir(path, perms);
+     return mkdir(path, perms);
  #endif
 }
 
 
 void Gmktempdir(char* templ) {
+	/*
 #ifdef _WIN32
   int blen=strlen(templ);
   if (_mktemp_s(templ, blen)!=0)
 	  GError("Error creating temp dir %s!\n", templ);
 #else
+*/
   char* cdir=mkdtemp(templ);
   if (cdir==NULL)
 	  GError("Error creating temp dir %s!(%s)\n", templ, strerror(errno));
-#endif
+//#endif
 }
 
 int Gmkdir(const char *path, bool recursive, int perms) {
@@ -904,7 +911,7 @@ int fileExists(const char* fname) {
 int64 fileSize(const char* fpath) {
 #ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA fad;
-    if (!GetFileAttributesEx(name, GetFileExInfoStandard, &fad))
+    if (!GetFileAttributesEx(fpath, GetFileExInfoStandard, &fad))
         return -1; // error condition, could call GetLastError to find out more
     LARGE_INTEGER size;
     size.HighPart = fad.nFileSizeHigh;

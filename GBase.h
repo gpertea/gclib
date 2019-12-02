@@ -5,6 +5,18 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+#if defined(__WIN32) || defined(__WIN32__) || defined(_WIN32) || defined(_WIN64) || defined(__MINGW64__) || defined(__WINDOWS__)
+  #ifndef _WIN32
+    #define _WIN32
+  #endif
+  #ifndef _WIN64
+    #define _WIN64
+  #endif
+  #define __USE_MINGW_ANSI_STDIO 1
+  //#define __ISO_C_VISIBLE 1999
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,22 +27,16 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#if defined(__WIN32) || defined(__WIN32__) || defined(_WIN32) || defined(_WIN64) || defined(__MINGW64__) || defined(__WINDOWS__)
-  #ifndef _WIN32
-    #define _WIN32
-  #endif
-  #ifndef _WIN64
-    #define _WIN64
-  #endif
+#ifdef _WIN32
   #include <windows.h>
-  #include <direct.h>
+  //#include <direct.h>
   #include <io.h>
-  #ifndef strcasecmp
-      #define strcasecmp _stricmp
-  #endif
-  #ifndef strncasecmp
-      #define strncasecmp _strnicmp
-  #endif
+  //#ifndef strcasecmp
+  //  #define strcasecmp _stricmp
+  //#endif
+  //#ifndef strncasecmp
+  //    #define strncasecmp _strnicmp
+  //#endif
   #define CHPATHSEP '\\'
   #undef off_t
   #define off_t int64_t
