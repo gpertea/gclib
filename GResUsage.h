@@ -1,7 +1,9 @@
 #ifndef _GRESUSAGE_
 #define _GRESUSAGE_
 #include "GBase.h"
-#include <sys/resource.h>
+#ifndef _WIN32
+ #include <sys/resource.h>
+#endif
 #include <time.h>
 
 // report the memory usage of the current process, rounded to kilobytes
