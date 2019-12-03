@@ -35,8 +35,9 @@
     #define G_gettime(s) mach_gettime(&s)
   #endif
 #else
- #if defined(_WIN32)
+ #ifdef _WIN32
     //Windows implementation:
+    #include <psapi.h>
 	LARGE_INTEGER
 	getFILETIMEoffset() {
 	    SYSTEMTIME s;
@@ -51,6 +52,54 @@
 	    t.QuadPart |= f.dwLowDateTime;
 	    return (t);
 	}
+
+	static void	usage_to_timeval(FILETIME *ft, struct timeval *tv) {
+	    ULARGE_INTEGER time;
+	    time.LowPart = ft->dwLowDateTime;
+	    time.HighPart = ft->dwHighDateTime;
+
+	    tv->tv_sec = time.QuadPart / 10000000;
+	    tv->tv_usec = (time.QuadPart % 10000000) / 10;
+	}
+
+    //implementation of getrusage for Windows
+	int	getrusage(int who, rusage *usage) {
+	    FILETIME creation_time, exit_time, kernel_time, user_time;
+	    PROCESS_MEMORY_COUNTERS pmc;
+
+	    memset(usage, 0, sizeof(rusage));
+
+	    if (who == RUSAGE_SELF) {
+	        if (!GetProcessTimes(GetCurrentProcess(), &creation_time, &exit_time,
+	                             &kernel_time, &user_time)) {
+	            GMessage("Error: GetProcessTimes() failed!\n");
+	            return -1;
+	        }
+
+	        if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+	            GMessage("Error: GetProcessMemoryInfo() failed!\n");
+	            return -1;
+	        }
+
+	        usage_to_timeval(&kernel_time, &usage->ru_stime);
+	        usage_to_timeval(&user_time, &usage->ru_utime);
+	        usage->ru_majflt = pmc.PageFaultCount;
+	        usage->ru_maxrss = pmc.PeakWorkingSetSize / 1024;
+	        return 0;
+	    } else if (who == RUSAGE_THREAD) {
+	        if (!GetThreadTimes(GetCurrentThread(), &creation_time, &exit_time,
+	                            &kernel_time, &user_time)) {
+	            GMessage("Error: GetThreadTimes() failed!\n");
+	            return -1;
+	        }
+	        usage_to_timeval(&kernel_time, &usage->ru_stime);
+	        usage_to_timeval(&user_time, &usage->ru_utime);
+	        return 0;
+	    } else {
+	        return -1;
+	    }
+	}
+
 
 	void win_gettime(struct timespec* ts) {
 	    LARGE_INTEGER           t;

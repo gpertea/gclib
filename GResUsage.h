@@ -1,7 +1,18 @@
 #ifndef _GRESUSAGE_
 #define _GRESUSAGE_
 #include "GBase.h"
-#ifndef _WIN32
+#if defined _WIN32 && ! defined __CYGWIN__
+  #define	RUSAGE_SELF	0		/* calling process */
+  #define	RUSAGE_CHILDREN	-1		/* terminated child processes */
+  #define	RUSAGE_THREAD	1
+
+  struct rusage {
+	struct timeval ru_utime;	/* user time used */
+	struct timeval ru_stime;	/* system time used */
+	long ru_maxrss;
+	long ru_majflt;
+  };
+#else
  #include <sys/resource.h>
 #endif
 #include <time.h>

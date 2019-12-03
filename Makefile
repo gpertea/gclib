@@ -48,11 +48,14 @@ ifdef WIN64
   #  LDFLAGS += -static-libstdc++ -static-libgcc
   #endif
   DMACH := windows
+  # needed on Windows for GetProcessMemoryInfo etc.:
+  LIBS += -lpsapi
 endif
 
 # Misc. system commands
 ifdef WINDOWS
- RM = del /Q
+ #RM = del /Q
+ RM = rm -f
  EXE = .exe
 else
  #non-Windows systems
