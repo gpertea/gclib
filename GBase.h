@@ -356,6 +356,13 @@ class GSeg {
 	  return (s->start<=start && s->end>=end);
   }
 
+  bool equals(GSeg& d){
+      return (start==d.start && end==d.end);
+  }
+  bool equals(GSeg* d){
+      return (start==d->start && end==d->end);
+  }
+
   //fuzzy coordinate matching:
   bool coordMatch(GSeg* s, uint fuzz=0) { //caller must check for s!=NULL
     if (fuzz==0) return (start==s->start && end==s->end);
