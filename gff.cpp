@@ -3332,12 +3332,12 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 			i++; j++;
 			continue;
 		}
-		//intron overlapping but with at least a junction mismatch
+		//intron overlapping but not fully matching
 		intron_conflict=true;
 		ichain_match=false;
 		if (mend>rend) j++; else i++;
 	} //while checking intron overlaps
-	/*** not needed -- do this while checking the intron poking overhangs below **
+	/*** additional checking needed for intron retention when there is no ichain_match or overlap ?
     if (!intron_retention && r_last_iovl<jmax) {
 	   //-- check the remaining ref introns not checked yet for retention
        int i=q_last_iovl;
@@ -3368,7 +3368,7 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 	int l_jovh=0;   // overhang of q left boundary beyond the end of ref intron to the left
 	int r_jovh=0;   // same type of overhang through the ref intron on the right
 	int ref_intron_poking=0;
-	if (ichain_match) { //intron (sub-)chain match (but there could still be conflicts)
+	if (ichain_match) { //intron (sub-)chain compatible so far (but there could still be conflicts)
 		if (imfirst==1 && imlast==imax) { // qry full intron chain match
 			if (jmfirst==1 && jmlast==jmax) {//identical intron chains
 				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
@@ -3376,29 +3376,49 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 				else return '=';
 			}
 			// -- a partial intron chain match
-			if (jmfirst>1 && m.start<r.exons[jmfirst-1]->start) {
-				if (m.start>r.exons[jmfirst-2]->end) //m.start within that ref intron
-					l_iovh = r.exons[jmfirst-1]->start - m.start;
-				else { intron_retention=true; ichain_match=false; }
+			if (jmfirst>1) {
+				//find if m.start falls within any ref intron before jmfirst
+				for (int j=jmfirst-1;j>0;--j)
+					if (m.start<r.exons[j]->start) {
+						if (m.start>r.exons[j-1]->end) { //m.start within this ref intron
+							l_iovh = r.exons[j]->start - m.start;
+							break;
+						}
+						else { intron_retention=true; ichain_match=false; }
+					}
 			}
-			if (jmlast<jmax && m.end > r.exons[jmlast]->end) {
-				if (m.end < r.exons[jmlast+1]->start)
-					r_iovh = m.end - r.exons[jmlast]->end;
-				else { intron_retention=true; ichain_match=false; }
+			if (jmlast<jmax) {
+				for (int j=jmlast;j<jmax;++j)
+					if (m.end > r.exons[j]->end) {
+						if (m.end < r.exons[j+1]->start) { //m.end within this ref intron
+							r_iovh = m.end - r.exons[j]->end;
+						    break;
+						}
+						else { intron_retention=true; ichain_match=false; }
+					}
 			}
 			if (ichain_match && l_iovh<4 && r_iovh<4) return 'c';
 			qry_intron_poking=GMAX(l_iovh, r_iovh);
-		} else if ((jmfirst==1 && jmlast==jmax)) {//ref full intron chain match
+		} else if ((jmfirst==1 && jmlast==jmax)) {//ref intron chain match
 			//check if the reference j-chain is contained in qry i-chain
-			if (imfirst>1 && m.exons[imfirst-1]->start>r.start) {
-				if (r.start>m.exons[imfirst-2]->end)
-					l_jovh = m.exons[imfirst-1]->start - r.start;
-				else { ichain_match = false; }
+			//check for ref ends poking into qry introns
+			if (imfirst>1)  {
+				for (int i=imfirst-1;i>0;--i)
+					if (m.exons[i]->start>r.start) {
+						if (r.start>m.exons[i-1]->end) {
+							l_jovh = m.exons[i]->start - r.start;
+							break;
+						}
+						else { ichain_match = false; }
+					}
 			}
-			if (imlast<imax && r.end > m.exons[imlast]->end) {
-				if (r.end < m.exons[imlast+1]->start)
-					r_jovh = r.end - m.exons[imlast]->end;
-				else { ichain_match = false; }
+			if (imlast<imax) {
+				for (int i=imlast;i<imax;++i)
+					if (r.end > m.exons[i]->end) {
+						if (r.end < m.exons[i+1]->start)
+							 { r_jovh = r.end - m.exons[i]->end; break; }
+						else { ichain_match = false; }
+					}
 			}
 			if (ichain_match && l_jovh<4 && r_jovh<4) return 'k'; //reverse containment
 			ref_intron_poking=GMAX(l_jovh, r_jovh);
@@ -3406,7 +3426,6 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 	}
 	//'=', 'c' and 'k' were checked and assigned, check for 'm' and 'n' before falling back to 'j'
 	if (intron_retention) {
-			//&& (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)) {
 			//ref is boundary contained with qry intron chain ? that's not required for 'm'
 		    //GMessage("r_jovh=%d, r_iovh=%d, l_jovh=%d, l_iovh=%d\n", r_jovh, r_iovh, l_jovh, l_iovh);
 		    //GMessage("m.start=%d, r.exons[0]->end=%d, m.end=%d, r.exons[jmax]->start=%d\n",
