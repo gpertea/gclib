@@ -3201,7 +3201,6 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 		}
 		//-- single-exon qry overlaping multi-exon ref
 		//check full pre-mRNA case (all introns retained): code 'm'
-
 		if (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)
 			return 'm';
 
@@ -3272,7 +3271,7 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 	//check intron chain overlap (match, containment, intron retention etc.)
 	int i=1; //index of exon to the right of current qry intron
 	int j=1; //index of exon to the right of current ref intron
-	bool intron_conflict=false; //used for checking for retained introns
+	bool intron_conflict=false; //overlapping introns have at least a mismatching splice site
 	//from here on we check all qry introns against ref introns
 	bool junct_match=false; //true if at least a junction match is found
 	bool ichain_match=true; //if there is intron (sub-)chain match, to be updated by any mismatch
@@ -3328,7 +3327,18 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 		ichain_match=false;
 		if (mend>rend) j++; else i++;
 	} //while checking intron overlaps
-	if (ichain_match) { //intron sub-chain match
+
+	// --- when qry intron chain is contained within ref intron chain
+	//     qry terminal exons may poke (overhang) into ref's other introns
+	int l_iovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
+	int r_iovh=0;   // same type of overhang through the ref intron on the right
+	int qry_intron_poking=0;
+	// --- when ref intron chain is contained within qry intron chain,
+	//     terminal exons of ref may poke (overhang) into qry other introns
+	int l_jovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
+	int r_jovh=0;   // same type of overhang through the ref intron on the right
+	int ref_intron_poking=0;
+	if (ichain_match) { //intron (sub-)chain match
 		if (imfirst==1 && imlast==imax) { // qry full intron chain match
 			if (jmfirst==1 && jmlast==jmax) {//identical intron chains
 				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
@@ -3336,29 +3346,34 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 				else return '=';
 			}
 			// -- qry intron chain is shorter than ref intron chain --
-			int l_iovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
-			int r_iovh=0;   // same type of overhang through the ref intron on the right
 			if (jmfirst>1 && r.exons[jmfirst-1]->start>m.start)
 				l_iovh = r.exons[jmfirst-1]->start - m.start;
 			if (jmlast<jmax && m.end > r.exons[jmlast]->end)
 				r_iovh = m.end - r.exons[jmlast]->end;
 			if (l_iovh<4 && r_iovh<4) return 'c';
+			qry_intron_poking=GMAX(l_iovh, r_iovh);
 		} else if ((jmfirst==1 && jmlast==jmax)) {//ref full intron chain match
-			//check if the reference i-chain is contained in qry i-chain
-			int l_jovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
-			int r_jovh=0;   // same type of overhang through the ref intron on the right
+			//check if the reference j-chain is contained in qry i-chain
 			if (imfirst>1 && m.exons[imfirst-1]->start>r.start)
 				l_jovh = m.exons[imfirst-1]->start - r.start;
 			if (imlast<imax && r.end > m.exons[imlast]->end)
 				r_jovh = r.end - m.exons[imlast]->end;
 			if (l_jovh<4 && r_jovh<4) return 'k'; //reverse containment
+			ref_intron_poking=GMAX(l_jovh, r_jovh);
 		}
 	}
 	//'=', 'c' and 'k' were checked and assigned, check for 'm' and 'n' before falling back to 'j'
-	if (!intron_conflict && (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)) {
-			return 'm';
+	if (intron_retention) {
+			//&& (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)) {
+			//ref is boundary contained with qry intron chain ? that's not required for 'm'
+		    //GMessage("r_jovh=%d, r_iovh=%d, l_jovh=%d, l_iovh=%d\n", r_jovh, r_iovh, l_jovh, l_iovh);
+		    //GMessage("m.start=%d, r.exons[0]->end=%d, m.end=%d, r.exons[jmax]->start=%d\n",
+		    //		m.start, r.exons[0]->end, m.end, r.exons[jmax]->start);
+		    //if (ref_intron_poking>0 && )
+		//we just need to have no intron poking going on
+		if (!intron_conflict && ref_intron_poking<4 && qry_intron_poking<4) return 'm';
+		else return 'n';
 	}
-	if (intron_retention) return 'n';
 	if (junct_match) return 'j';
 	//we could have 'o' or 'y' here
 	//any real exon overlaps?
