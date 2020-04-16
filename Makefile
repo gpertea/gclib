@@ -95,7 +95,8 @@ endif
 
 
 .PHONY : all
-all:    mdtest
+all:    htest
+#mdtest
 nodebug: all
 release: all
 debug: all
@@ -104,11 +105,13 @@ OBJS := GBase.o GStr.o GArgs.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
+htest:  $(OBJS) htest.o GHash.hh
+	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 # target for removing all object files
 
 .PHONY : clean
 clean:: 
-	@${RM} $(OBJS) *.o mdtest$(EXE)
+	@${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
 	@${RM} core.*
