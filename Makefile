@@ -101,7 +101,7 @@ nodebug: all
 release: all
 debug: all
 
-OBJS := GBase.o GStr.o GArgs.o
+OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
