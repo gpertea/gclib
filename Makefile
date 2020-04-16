@@ -116,13 +116,15 @@ endif
 	${CXX} ${CXXFLAGS} -c $< -o $@
 
 .PHONY : all
-#all:    mdtest
-all:     rusage
+all:    htest
+#all:     rusage
 nodebug: all
 release: all
 debug: all
 
 OBJS := GBase.o GStr.o GArgs.o GResUsage.o
+htest:  $(OBJS) htest.o GHash.hh
+	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 ver : env
 env: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "BASEFLAGS = "$(BASEFLAGS)
@@ -136,5 +138,5 @@ mdtest: $(OBJS) mdtest.o
 
 .PHONY : clean
 clean:: 
-	@${RM} $(OBJS) *.o mdtest$(EXE) rusage$(EXE)
+	@${RM} $(OBJS) *.o mdtest$(EXE) rusage$(EXE) htest$(EXE)
 	@${RM} core.*
