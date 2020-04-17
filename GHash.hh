@@ -265,11 +265,11 @@ template <class OBJ> OBJ* GHash<OBJ>::fAdd(const char* ky, OBJ* pdata) {
 	GASSERT(1<=x && x<fCapacity);
 	i=-1;
 	n=fCapacity;
-#ifdef HASH_DBG_PRINT
+//#ifdef HASH_DBG_PRINT
 	int iterations=0;
 	int init_p=p;
 	int init_x=x;
-#endif
+//#endif
 	while(n && hash[p].hash!=-1) {
 		if ((i==-1)&&(hash[p].hash==-2)) i=p;
 		if (hash[p].hash==h && strcmp(hash[p].key,ky)==0) {
@@ -284,16 +284,16 @@ template <class OBJ> OBJ* GHash<OBJ>::fAdd(const char* ky, OBJ* pdata) {
 			return pdata;
 		}
 		p=(p+x)%fCapacity;
-#ifdef HASH_DBG_PRINT
+//#ifdef HASH_DBG_PRINT
 		++iterations;
-#endif
+//#endif
 		n--;
 	}
 	if(i==-1) i=p;
-#ifdef HASH_DBG_PRINT
+//#ifdef HASH_DBG_PRINT
 	GMessage("Add.N\t%s\t%d,%d,%d\t%d\t%d\t%d\n",
 			ky, h,init_p,init_x, iterations,  fCount, fCapacity);
-#endif
+//#endif
 	GTRACE(("GHash::insert: key=\"%s\"\n",ky));
 	//GMessage("GHash::insert: key=\"%s\"\n",ky);
 	GASSERT(0<=i && i<fCapacity);
