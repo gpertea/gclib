@@ -1,14 +1,14 @@
 #include "gcdb.h"
 #include <errno.h>
 
-#ifdef __WIN32__
-/*   m m a p           ===      from imagick sources
+#ifdef _WIN32
+/*   mmap on Windows (from imagick sources)
 %  Method mmap emulates the Unix method of the same name.
 %  The format of the mmap method is:
 %    void *mmap(char *address,size_t length,int protection,
 %      int access,int file,off_t offset)
 */
-void *mmap(char *address,size_t length,int protection,int access,
+void *mmap(char *address, size_t length, int protection, int access,
   int file, off_t offset) {
   void *map;
   HANDLE handle;
@@ -65,7 +65,7 @@ void *mmap(char *address,size_t length,int protection,int access,
 %    > length: The length of the binary large object.
 %
 */
-int munmap(void *map,size_t length) {
+int munmap(void *map, size_t length) {
   if (!UnmapViewOfFile(map))
     return(-1);
   return(0);
@@ -580,7 +580,7 @@ GCdbWrite::GCdbWrite(int afd) {
 }
 
 GCdbWrite::GCdbWrite(char* afname) {
-#ifdef __WIN32__
+#ifdef _WIN32
    fd = open(afname,O_WRONLY | O_TRUNC | O_BINARY | O_CREAT, S_IREAD|S_IWRITE);
 #else
    fd = open(afname,O_WRONLY | O_NDELAY | O_TRUNC | O_CREAT, 0664);
@@ -604,7 +604,7 @@ GCdbWrite::GCdbWrite(char* afname) {
 
 GCdbWrite::~GCdbWrite() {
   cdbuf->flush();
-  #ifndef __WIN32__
+  #ifndef _WIN32
    /* NFS silliness  */
    if (fsync(fd) == -1)
       GError("GCdbWrite: Error at fsync() for file '%s'\n",
@@ -828,7 +828,7 @@ GCdbRead::GCdbRead(char* afname):map(NULL) {
   gcvt_endian_setup();
 
   findstart();
-  #ifdef __WIN32__
+  #ifdef _WIN32
     fd = open(afname, O_RDONLY|O_BINARY);
   #else
     fd = open(afname, O_RDONLY);

@@ -1,7 +1,7 @@
 #include "gsocket.h"
 #include <errno.h>             // For errno
 
-#ifdef WIN32
+#ifdef _WIN32
 static bool initialized = false;
 #endif
 
@@ -33,7 +33,7 @@ static void fillAddr(const GStr &address, unsigned short port,
 // GSocket Code
 
 GSocket::GSocket(int type, int protocol) {
-  #ifdef WIN32
+  #ifdef _WIN32
     if (!initialized) {
       WORD wVersionRequested;
       WSADATA wsaData;
@@ -53,7 +53,7 @@ GSocket::GSocket(int type, int protocol) {
 }
 
 GSocket::~GSocket() {
-  #ifdef WIN32
+  #ifdef _WIN32
     ::closesocket(sockDesc);
   #else
     ::close(sockDesc);
@@ -106,7 +106,7 @@ void GSocket::setLocalAddressAndPort(const GStr &localAddress,
 }
 
 void GSocket::cleanUp() {
-  #ifdef WIN32
+  #ifdef _WIN32
     if (WSACleanup() != 0) {
       GSocketErr("WSACleanup() failed");
     }
@@ -125,7 +125,7 @@ unsigned short GSocket::resolveService(const GStr &service,
 
 // GCommSocket Code
 void GCommSocket::setTimeout(int microsecs) {
- #ifdef WIN32
+ #ifdef _WIN32
    DWORD timeout = microsecs;
    setsockopt(sockDesc, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
  #else
@@ -241,7 +241,7 @@ void GUDPSocket::disconnect() {
 
   // Try to disconnect
   if (::connect(sockDesc, (sockaddr *) &nullAddr, sizeof(nullAddr)) < 0) {
-   #ifdef WIN32
+   #ifdef _WIN32
     if (errno != WSAEAFNOSUPPORT) {
    #else
     if (errno != EAFNOSUPPORT) {

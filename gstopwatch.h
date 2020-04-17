@@ -2,7 +2,7 @@
 #define __GSTOPWATCH_H
 #include "GBase.h"
 
-#ifdef __WIN32__
+#ifdef _WIN32
 typedef struct {
     LARGE_INTEGER start;
     LARGE_INTEGER stop;

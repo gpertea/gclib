@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <fcntl.h>
 
-#ifdef __WIN32__
+#ifdef _WIN32
   #define PROT_READ  1
   #define PROT_WRITE  2
   #define PROT_READWRITE  3
@@ -99,9 +99,10 @@ class GCDBuffer {
 //=====================================================
 //-------------     cdb utils       -------------------
 //=====================================================
-#ifndef __WIN32__
+#ifndef _WIN32
  extern int errno;
 #endif
+
 extern int error_intr;
 extern int error_nomem;
 extern int error_proto;
