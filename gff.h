@@ -22,7 +22,7 @@ extern int gff_fid_exon;
 extern const uint GFF_MAX_LOCUS;
 extern const uint GFF_MAX_EXON;
 extern const uint GFF_MAX_INTRON;
-
+extern const int CLASSCODE_OVL_RANK;
 //extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
 //extern const byte gfo_flagShift_LEVEL;
 
@@ -60,7 +60,9 @@ int classcode_rank(char c); //returns priority value for class codes
 
 char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch=false); //returns: class code
 
-bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen); //single-exon fuzzy transcript match
+char transcriptMatch(GffObj& a, GffObj& b, int& ovlen); //generic transcript match test
+// -- return '=', '~'  or 0
+char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen); //single-exon transcript match test
 
 //---
 // -- tracking exon/CDS segments from local mRNA to genome coordinates
@@ -650,8 +652,8 @@ class GffExon : public GSeg {
 		    else { start=e; end=s; }
 
   } //constructor
-  
-  
+
+
   GffExon(const GffExon& ex):GSeg(ex.start, ex.end) { //copy constructor
       (*this)=ex; //use the default (shallow!) copy operator
       if (ex.attrs!=NULL) { //make a deep copy here
@@ -659,10 +661,10 @@ class GffExon : public GSeg {
         attrs->copyAttrs(ex.attrs);
       }
   }
-  
+
   GffExon& operator=(const GffExon& o) = default; //prevent gcc 9 warnings:
                                            //yes, I want a shallow copy here
-  
+
   ~GffExon() { //destructor
      if (attrs!=NULL && !sharedAttrs) delete attrs;
   }
@@ -1030,6 +1032,10 @@ public:
            uint* cds_start=NULL, uint* cds_end=NULL, GMapSegments* seglst=NULL,
 		   bool cds_open=false);
     char* getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst=NULL);
+
+    void addPadding(int padLeft, int padRight); //change exons to include this padding on the sides
+    void removePadding(int padLeft, int padRight);
+
    //bool validCDS(GFaSeqGet* faseq); //has In-Frame Stop Codon ?
    bool empty() { return (start==0); }
 };
@@ -1314,5 +1320,146 @@ class GffReader {
 #endif
 
 }; // end of GffReader
+
+// ----------------------------------------------------------
+// -- auxiliary classes for GffObj::processGeneSegments() --
+class GSegMatch { //keep track of "matching" overlaps of a GeneCDSChain with multiple GeneSegment containers
+  public:
+   int child_idx; //index of matching _gene_segment GffObj in gene->children[] list
+   int noncov; //number of "non-covered" bases in the GeneSegment
+   int gsegidx; //index of _gene_segment in GVec<int> geneSegs
+     // (i.e. UTRs + implied introns if exons are missing)
+   bool operator<(GSegMatch& o) { return (noncov<o.noncov); }
+   bool operator==(GSegMatch& o) { return (noncov==o.noncov); }
+   GSegMatch(int cidx=-1, int ncov=-1, int gsidx=-1):child_idx(cidx),
+    	   noncov(ncov), gsegidx(gsidx) { }
+};
+
+class GeneCDS: public GSeg {
+  public:
+	int idx; //index of this CDS entry in this gene->cdss[] list
+	GeneCDS(int i=-1, uint cstart=0, uint cend=0):GSeg(cstart, cend), idx(i) {
+	}
+};
+
+class GeneCDSChain: public GSeg { //keep track of CDS chains of the gene and their boundaries
+  public:
+	GVec<GeneCDS> cdsList; //all CDSs in this chain
+	GArray<GSegMatch> mxs; //list of "matching" container X_gene_segment transcripts;
+	GeneCDSChain():cdsList(),mxs() { }
+	GeneCDSChain(int idx, uint cstart, uint cend):GSeg(cstart, cend),
+	    	cdsList(),mxs(true) {
+	    addCDS(idx, cstart, cend);
+
+	}
+	void addCDS(int idx, uint cstart, uint cend) {
+	    GeneCDS cds(idx, cstart, cend);
+	    cdsList.Add(cds);
+	    expandInclude(cstart, cend);
+	}
+	void addMatch(int childidx, int ncov, int gsegidx) {
+	    GSegMatch segmatch(childidx, ncov, gsegidx);
+	    mxs.Add(segmatch);
+	}
+	bool singleExonCDSMatch(uint tstart, uint tend, int& ncov) {
+	    if (start>=tstart && end<=tend) {
+	    	ncov=start-tstart + tend-end;
+	    	//add all CDS-"introns"
+	    	if (cdsList.Count()>1)
+	    		//shouldn't really consider this a valid "match"
+	    		for (int i=1;i<cdsList.Count();i++)
+	    			ncov+=cdsList[i].start-cdsList[i-1].end-1;
+	    	return true;
+	    }
+	    return false;
+	}
+	bool singleCDStoExon(GffObj&t, int& ncov) {
+	    //cdsList[0] must be contained in a single exon of t
+	    int nc=0;
+	    bool match=false;
+	    for (int i=0;i<t.exons.Count();i++) {
+	    	if (t.exons[i]->overlap(cdsList[0])) {
+	    	   if (cdsList[0].start>=t.exons[i]->start &&
+	    			cdsList[0].end<=t.exons[i]->end) {
+	    		  match=true;
+	    		  nc+=cdsList[0].start-t.exons[i]->start+t.exons[i]->end+cdsList[0].end;
+	    	   } //contained in this exon
+	    	   else return false; //overlap, but not contained
+	    	   continue;
+	    	}
+	    	nc+=t.exons[i]->len();
+	    }
+	    if (!match) return false;
+	    ncov=nc;
+	    return true;
+	}
+
+	bool multiCDStoExon(GffObj &t, int& ncov) {
+	    //multi-CDS vs multi-exon t
+	    int nc=0;
+	    int e=0, c=0;
+	    int emax=t.exons.Count()-1;
+	    int cmax=cdsList.Count()-1;
+	    int mintrons=0; //matched introns
+	    while (e<emax && c<cmax) {
+	    	if (mintrons>0 &&
+	    			(cdsList[c].end!=t.exons[e]->end ||
+	    					cdsList[c+1].start!=t.exons[e+1]->start))
+	    		return false;
+	    	GSeg cintron(cdsList[c].end+1, cdsList[c+1].start-1);
+	    	GSeg eintron(t.exons[e]->end+1, t.exons[e+1]->start-1);
+	    	if (cintron.start>eintron.end) {
+	    		nc+=t.exons[e]->len();
+	    		e++;
+	    		continue;
+	    	}
+	    	if (eintron.start<=cintron.end) {
+	    		//intron overlap
+	    		if (cintron.start==eintron.start &&
+	    				cintron.end==eintron.end) {
+	    			//intron match
+	    			if (mintrons==0) {
+	    				if (cdsList[c].start<t.exons[e]->start) return false;
+	    				nc+=cdsList[c].start-t.exons[e]->start;
+	    			}
+	    			mintrons++;
+	    			c++;e++;
+	    			continue;
+	    		}
+	    		else return false;
+	    	}
+	    	c++; //should never get here, CDS shouldn't be have to catch up with e
+	    }
+	    if (mintrons<cdsList.Count()-1) return false;
+        //c should be cmax, e should be the last exon with CDS
+	    nc+=t.exons[e]->end-cdsList[c].end;
+	    for(int i=e+1;i<t.exons.Count();i++)
+	    	nc+=t.exons[i]->len();
+	    ncov=nc;
+	    return true;
+	}
+
+	bool containedBy(GffObj& t, int& ncov) {
+
+	    // (Warning: t may have no defined exons!)
+	    //if yes: ncov will be set to the number of non-CDS-covered bases in t
+	    if (t.exons.Count()<2) {
+           if (t.exons.Count()==0)
+               //no exons defined, just check boundaries
+               return singleExonCDSMatch(t.start, t.end, ncov);
+           else //single-exon
+               return singleExonCDSMatch(t.exons[0]->start, t.exons[0]->end, ncov);
+	    } //single or no exon
+	    else { //multi-exon transcript
+	    	if (start<t.exons.First()->start || end>t.exons.Last()->end)
+	    		return false; //no containment possible;
+	    	if (cdsList.Count()==1)
+	    		return singleCDStoExon(t, ncov);
+            //check intron compatibility!
+	    }
+	    return true;
+	}
+};
+
 
 #endif

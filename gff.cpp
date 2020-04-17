@@ -31,6 +31,7 @@ void gffnames_unref(GffNames* &n) {
   if (n->numrefs==0) { delete n; n=NULL; }
 }
 
+const int CLASSCODE_OVL_RANK = 15;
 int classcode_rank(char c) {
 	switch (c) {
 		case '=': return 0; //intron chain match or full exon chain match if strict matching is enabled
@@ -42,6 +43,7 @@ int classcode_rank(char c) {
 		case 'j': return 6; // multi-exon transfrag with at least one junction match
 		case 'e': return 12; // single exon transfrag partially overlapping an intron of reference (possible pre-mRNA fragment)
 		case 'o': return 14; // other generic exon overlap
+	//****  >15 = no-overlaps (not on the same strand) from here on *****
 		case 's': return 16; //"shadow" - an intron overlaps with a ref intron on the opposite strand (wrong strand mapping?)
 		case 'x': return 18; // generic overlap on opposite strand (usually wrong strand mapping)
 		case 'i': return 20; // intra-intron (transfrag fully contained within a reference intron)
@@ -1966,141 +1968,6 @@ bool GffObj::processGeneSegments(GffReader* gfr) {
      3)for each GeneCDSChain, collect _gene_segments having a containment-relationship and rank them by lowest noncov
      4)for each GeneCDSChain, pick best _gene_segment match (if any) and transfer CDSs to it
 	*/
-	class GSegMatch { //keep track of "matching" overlaps of a GeneCDSChain with multiple GeneSegment containers
-	  public:
-       int child_idx; //index of matching _gene_segment GffObj in gene->children[] list
-       int noncov; //number of "non-covered" bases in the GeneSegment
-       int gsegidx; //index of _gene_segment in GVec<int> geneSegs
-         // (i.e. UTRs + implied introns if exons are missing)
-       bool operator<(GSegMatch& o) { return (noncov<o.noncov); }
-       bool operator==(GSegMatch& o) { return (noncov==o.noncov); }
-       GSegMatch(int cidx=-1, int ncov=-1, int gsidx=-1):child_idx(cidx),
-    		   noncov(ncov), gsegidx(gsidx) { }
-	};
-    class GeneCDS: public GSeg {
-	  public:
-		int idx; //index of this CDS entry in this gene->cdss[] list
-		GeneCDS(int i=-1, uint cstart=0, uint cend=0):GSeg(cstart, cend), idx(i) {
-		}
-	};
-	class GeneCDSChain: public GSeg { //keep track of CDS chains of the gene and their boundaries
-	  public:
-		GVec<GeneCDS> cdsList; //all CDSs in this chain
-		GArray<GSegMatch> mxs; //list of "matching" container X_gene_segment transcripts;
-	    GeneCDSChain():cdsList(),mxs() { }
-	    GeneCDSChain(int idx, uint cstart, uint cend):GSeg(cstart, cend),
-	    		cdsList(),mxs(true) {
-	    	addCDS(idx, cstart, cend);
-
-	    }
-	    void addCDS(int idx, uint cstart, uint cend) {
-	    	GeneCDS cds(idx, cstart, cend);
-	    	cdsList.Add(cds);
-	    	expandInclude(cstart, cend);
-	    }
-	    void addMatch(int childidx, int ncov, int gsegidx) {
-	    	GSegMatch segmatch(childidx, ncov, gsegidx);
-	    	mxs.Add(segmatch);
-	    }
-	    bool singleExonCDSMatch(uint tstart, uint tend, int& ncov) {
-	    	if (start>=tstart && end<=tend) {
-	    		ncov=start-tstart + tend-end;
-	    		//add all CDS-"introns"
-	    		if (cdsList.Count()>1)
-	    			//shouldn't really consider this a valid "match"
-	    			for (int i=1;i<cdsList.Count();i++)
-	    				ncov+=cdsList[i].start-cdsList[i-1].end-1;
-	    		return true;
-	    	}
-	    	return false;
-	    }
-	    bool singleCDStoExon(GffObj&t, int& ncov) {
-	    	//cdsList[0] must be contained in a single exon of t
-	    	int nc=0;
-	    	bool match=false;
-	    	for (int i=0;i<t.exons.Count();i++) {
-	    		if (t.exons[i]->overlap(cdsList[0])) {
-	    		   if (cdsList[0].start>=t.exons[i]->start &&
-	    				cdsList[0].end<=t.exons[i]->end) {
-	    			  match=true;
-	    			  nc+=cdsList[0].start-t.exons[i]->start+t.exons[i]->end+cdsList[0].end;
-	    		   } //contained in this exon
-	    		   else return false; //overlap, but not contained
-	    		   continue;
-	    		}
-	    		nc+=t.exons[i]->len();
-	    	}
-	    	if (!match) return false;
-	    	ncov=nc;
-	    	return true;
-	    }
-
-	    bool multiCDStoExon(GffObj &t, int& ncov) {
-	    	//multi-CDS vs multi-exon t
-	    	int nc=0;
-	    	int e=0, c=0;
-	    	int emax=t.exons.Count()-1;
-	    	int cmax=cdsList.Count()-1;
-	    	int mintrons=0; //matched introns
-	    	while (e<emax && c<cmax) {
-	    		if (mintrons>0 &&
-	    				(cdsList[c].end!=t.exons[e]->end ||
-	    						cdsList[c+1].start!=t.exons[e+1]->start))
-	    			return false;
-	    		GSeg cintron(cdsList[c].end+1, cdsList[c+1].start-1);
-	    		GSeg eintron(t.exons[e]->end+1, t.exons[e+1]->start-1);
-	    		if (cintron.start>eintron.end) {
-	    			nc+=t.exons[e]->len();
-	    			e++;
-	    			continue;
-	    		}
-	    		if (eintron.start<=cintron.end) {
-	    			//intron overlap
-	    			if (cintron.start==eintron.start &&
-	    					cintron.end==eintron.end) {
-	    				//intron match
-	    				if (mintrons==0) {
-	    					if (cdsList[c].start<t.exons[e]->start) return false;
-	    					nc+=cdsList[c].start-t.exons[e]->start;
-	    				}
-	    				mintrons++;
-	    				c++;e++;
-	    				continue;
-	    			}
-	    			else return false;
-	    		}
-	    		c++; //should never get here, CDS shouldn't be have to catch up with e
-	    	}
-	    	if (mintrons<cdsList.Count()-1) return false;
-            //c should be cmax, e should be the last exon with CDS
-	    	nc+=t.exons[e]->end-cdsList[c].end;
-	    	for(int i=e+1;i<t.exons.Count();i++)
-	    		nc+=t.exons[i]->len();
-	    	ncov=nc;
-	    	return true;
-	    }
-
-	    bool containedBy(GffObj& t, int& ncov) {
-
-	    	// (Warning: t may have no defined exons!)
-	    	//if yes: ncov will be set to the number of non-CDS-covered bases in t
-	    	if (t.exons.Count()<2) {
-               if (t.exons.Count()==0)
-            	   //no exons defined, just check boundaries
-            	   return singleExonCDSMatch(t.start, t.end, ncov);
-               else //single-exon
-            	   return singleExonCDSMatch(t.exons[0]->start, t.exons[0]->end, ncov);
-	    	} //single or no exon
-	    	else { //multi-exon transcript
-	    		if (start<t.exons.First()->start || end>t.exons.Last()->end)
-	    			return false; //no containment possible;
-	    		if (cdsList.Count()==1)
-	    			return singleCDStoExon(t, ncov);
-                //check intron compatibility!
-	    	}
-	    	return true;
-	    }
-	};
     GVec<int> geneSegs; //X_gene_segment features (children transcripts of this gene)
     GHash<GeneCDSChain> cdsChainById(false); // hash of CDS chains: CDS feature grouped by ID
     GPVec<GeneCDSChain> cdsChains; // CDS chains storage
@@ -2257,13 +2124,16 @@ GffObj* GffObj::finalize(GffReader* gfr) {
 	if (reduceAttributes) {
 		//for each attribute of the 1st exon, if it has the
 		//same value for all other exons, move it to transcript level
-		if (reduceExonAttrs(exons) && gfr->showWarnings()) {
-			GMessage("Info: duplicate exon attributes reduced for %s\n", gffID);
-		}
+		//bool reduced=reduceExonAttrs(exons);
+		reduceExonAttrs(exons);
+		//if (gfr->showWarnings() && reduced)
+		//	GMessage("Info: duplicate exon attributes reduced for %s\n", gffID);
 		//do the same for CDS segments, if any
 		if (cdss!=NULL && cdss->Count()>0 && (*cdss)[0]->attrs!=NULL) {
-			if (reduceExonAttrs(*cdss) && gfr->showWarnings())
-				GMessage("Info: duplicate CDS attributes reduced for %s\n", gffID);
+			//reduced=
+			reduceExonAttrs(*cdss);
+			//if (gfr->showWarnings() && reduced)
+			//	GMessage("Info: duplicate CDS attributes reduced for %s\n", gffID);
 		}
 	}
 	//merge close exons if requested
@@ -2719,6 +2589,26 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst) {
     return unspliced;
 }
 
+ void GffObj::addPadding(int padLeft, int padRight) {
+	 this->start-=padLeft;
+	 this->end+=padRight;
+	 if (exons.Count()>0) {
+		 exons[0]->start-=padLeft;
+		 exons.Last()->end+=padRight;
+	 }
+	 covlen+=padLeft+padRight;
+ }
+
+ void GffObj::removePadding(int padLeft, int padRight) {
+	 this->start+=padLeft;
+	 this->end-=padRight;
+	 if (exons.Count()>0) {
+		 exons[0]->start+=padLeft;
+		 exons.Last()->end-=padRight;
+	 }
+	 covlen-=padLeft+padRight;
+ }
+
 char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_start, uint* cds_end,
           GMapSegments* seglst, bool cds_open) {
 	//cds_open only makes sense when CDSonly is true by overriding CDS 3'end such that the end of
@@ -2740,7 +2630,8 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
   if (gsubseq==NULL) {
         GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);
   }
-  if (fspan<(int)(end-start+1)) { //special case: stop coordinate was extended past the gseq length, must adjust
+  if (fspan<(int)(end-start+1)) {
+	  //special case: stop coordinate was extended past the gseq length, must adjust
      int endadj=end-start+1-fspan;
      uint prevend=end;
      end-=endadj;
@@ -2755,7 +2646,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
      }
   }
   char* spliced=NULL;
-  GMALLOC(spliced, covlen+1); //allocate more here
+  GMALLOC(spliced, covlen+1); //IMPORTANT: covlen must be correct here!
   uint g_start=0, g_end=0;
   int cdsadj=0;
   if (CDphase=='1' || CDphase=='2') {
@@ -3230,23 +3121,60 @@ void GffObj::getCDSegs(GVec<GffExon>& cds) {
 
 }
 
-//-- transcript overlap classification functions
+//-- transcript match/overlap classification functions
 
-bool singleExonTMatch(GffObj& m, GffObj& r, int& ovlen) {
- //if (m.exons.Count()>1 || r.exons.Count()>1..)
+
+char transcriptMatch(GffObj& a, GffObj& b, int& ovlen) {
+	//return '=' if exact exon match, '~' if intron-chain match (or 80% overlap for single-exon)
+	// or 0 otherwise
+	int imax=a.exons.Count()-1;
+	int jmax=b.exons.Count()-1;
+	ovlen=0;
+	if (imax!=jmax) return false; //different number of exons, cannot match
+	if (imax==0) //single-exon mRNAs
+	    return (singleExonTMatch(a,b,ovlen));
+	if ( a.exons[imax]->start<b.exons[0]->end ||
+		b.exons[jmax]->start<a.exons[0]->end )
+		return 0; //intron chains do not overlap at all
+	//check intron overlaps
+	ovlen=a.exons[0]->end-(GMAX(a.start,b.start))+1;
+	ovlen+=(GMIN(a.end,b.end))-a.exons.Last()->start;
+	for (int i=1;i<=imax;i++) {
+		if (i<imax) ovlen+=a.exons[i]->len();
+		if ((a.exons[i-1]->end!=b.exons[i-1]->end) ||
+			(a.exons[i]->start!=b.exons[i]->start)) {
+			return 0; //intron mismatch
+		}
+	}
+	//--- full intron chain match:
+	if (a.exons[0]->start==b.exons[0]->start &&
+		a.exons.Last()->end==b.exons.Last()->end)
+		   return '=';
+	return '~';
+}
+
+
+char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen) {
+ //return '=' if exact match, '~' if the overlap is >=80% of the longer sequence length
+ // return 0 if there is no overlap
  GSeg mseg(m.start, m.end);
  ovlen=mseg.overlapLen(r.start,r.end);
+ if (ovlen<=0) return 0;
  // fuzzy matching for single-exon transcripts:
  // matching = overlap is at least 80% of the length of the longer transcript
  // *OR* in case of reverse containment (reference contained in m)
  //   it's also considered "matching" if the overlap is at least 80% of
  //   the reference len AND at least 70% of the query len
+ if (m.start==r.start && m.end==r.end) return '=';
  if (m.covlen>r.covlen) {
-   return ( (ovlen >= m.covlen*0.8) ||
-		   (ovlen >= r.covlen*0.8 && ovlen >= m.covlen* 0.7 ));
+   if ( (ovlen >= m.covlen*0.8) ||
+		   (ovlen >= r.covlen*0.8 && ovlen >= m.covlen* 0.7 ) )
 		   //allow also some fuzzy reverse containment
- } else
-   return (ovlen >= r.covlen*0.8);
+           return '~';
+ } else {
+   if (ovlen >= r.covlen*0.8) return '~';
+ }
+ return 0;
 }
 
 //formerly in gffcompare
@@ -3260,10 +3188,10 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 		GSeg mseg(m.start, m.end);
 		if (jmax==0) { //also single-exon ref
 			//ovlen=mseg.overlapLen(r.start,r.end);
-			if (singleExonTMatch(m, r, ovlen)) {
-				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
-						r.exons[0]->end==m.exons[0]->end) ? '=' : '~';
-				else return '=';
+			char eqcode=0;
+			if ((eqcode=singleExonTMatch(m, r, ovlen))>0) {
+				if (strictMatch) return eqcode;
+				            else return '=';
 			}
 			if (m.covlen<r.covlen)
 			   { if (ovlen >= m.covlen*0.8) return 'c'; } // fuzzy containment
@@ -3273,7 +3201,6 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 		}
 		//-- single-exon qry overlaping multi-exon ref
 		//check full pre-mRNA case (all introns retained): code 'm'
-
 		if (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)
 			return 'm';
 
@@ -3344,27 +3271,32 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 	//check intron chain overlap (match, containment, intron retention etc.)
 	int i=1; //index of exon to the right of current qry intron
 	int j=1; //index of exon to the right of current ref intron
-	bool intron_conflict=false; //used for checking for retained introns
+	bool intron_conflict=false; //overlapping introns have at least a mismatching splice site
 	//from here on we check all qry introns against ref introns
 	bool junct_match=false; //true if at least a junction match is found
-	bool ichain_match=true; //if there is intron (sub-)chain match, to be updated by any mismatch
+	bool ichain_match=false; //if there is intron (sub-)chain match, to be updated by any mismatch
 	bool intron_ovl=false; //if any intron overlap is found
 	bool intron_retention=false; //if any ref intron is covered by a qry exon
-	int imfirst=0; //index of first intron match in query (valid>0)
-	int jmfirst=0; //index of first intron match in reference (valid>0)
-	int imlast=0;  //index of first intron match in query
-	int jmlast=0;  //index of first intron match in reference
+	//intron chain (partial) match exon-index boundaries:
+	int imfirst=0; //index of exon after first intron match in query (valid>0)
+	int jmfirst=0; //index of exon after first intron match in reference (valid>0)
+	int imlast=0;  //index of exon after last intron match in query
+	int jmlast=0;  //index of  exon after last intron match in reference
+	//--keep track of the last overlapping introns in both qry and ref:
+	//int q_last_iovl=0;
+	//int r_last_iovl=0;
+
 	//check for intron matches
 	while (i<=imax && j<=jmax) {
-		uint mstart=m.exons[i-1]->end;
+		uint mstart=m.exons[i-1]->end; //qry intron start-end
 		uint mend=m.exons[i]->start;
-		uint rstart=r.exons[j-1]->end;
+		uint rstart=r.exons[j-1]->end; //ref intron start-end
 		uint rend=r.exons[j]->start;
 		if (rend<mstart) { //qry intron starts after ref intron ends
 			if (!intron_conflict && r.exons[j]->overlap(mstart+1, mend-1))
-				intron_conflict=true;
-			if (!intron_retention && rstart>=m.exons[i-1]->start)
-				intron_retention=true;
+				intron_conflict=true; //next ref exon overlaps this qry intron
+			if (!intron_retention && rstart>=m.exons[i-1]->start && rend<=m.exons[i-1]->end)
+				intron_retention=true; //this ref intron is covered by previous qry exons[i-1]
 			if (intron_ovl) ichain_match=false;
 			j++;
 			continue;
@@ -3373,64 +3305,136 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch) {
 			//if qry intron overlaps the exon on the left, we have an intron conflict
 			if (!intron_conflict && r.exons[j-1]->overlap(mstart+1, mend-1))
 				intron_conflict=true;
-			if (!intron_retention && rend<=m.exons[i]->end)
+			if (!intron_retention && rstart>=m.exons[i]->start && rend<=m.exons[i]->end)
 				intron_retention=true;
 			if (intron_ovl) ichain_match=false;
 			i++;
 			continue;
 		} //no intron overlap, skipping qry intron
 		intron_ovl=true;
+		//q_last_iovl=i; //keep track of the last overlapping introns in both qry and ref
+		//r_last_iovl=j;
 		//overlapping introns, test junction matching
 		bool smatch=(mstart==rstart);
 		bool ematch=(mend==rend);
 		if (smatch || ematch) junct_match=true;
 		if (smatch && ematch) {
 			//perfect match for this intron
-			if (ichain_match) { //chain matching still possible
-			  if (jmfirst==0) jmfirst=j;
-			  if (imfirst==0) imfirst=i;
-			  imlast=i;
-			  jmlast=j;
+			if (jmfirst==0) {
+				ichain_match=true;
+				jmfirst=j;
+				imfirst=i;
+			}
+			if (ichain_match) {
+  		       imlast=i;
+			   jmlast=j;
 			}
 			i++; j++;
 			continue;
 		}
-		//intron overlapping but with at least a junction mismatch
+		//intron overlapping but not fully matching
 		intron_conflict=true;
 		ichain_match=false;
 		if (mend>rend) j++; else i++;
 	} //while checking intron overlaps
-	if (ichain_match) { //intron sub-chain match
+	/*** additional checking needed for intron retention when there is no ichain_match or overlap ?
+    if (!intron_retention && r_last_iovl<jmax) {
+	   //-- check the remaining ref introns not checked yet for retention
+       int i=q_last_iovl;
+       for (int j=r_last_iovl+1;j<=jmax && i<=imax;++j) {
+   		uint rstart=r.exons[j-1]->end; //ref intron start-end
+   		uint rend=r.exons[j]->start;
+   		if (rend<m.exons[i]->start) {
+   			i++;
+   			continue;
+   		}
+   		if (rstart>m.exons[i]->end)
+   			continue;
+   		//overlap between ref intron and m.exons[i]
+   		if (rstart>=m.exons[i]->start && rend<=m.exons[i]->end) {
+   			intron_retention=true;
+   			break;
+   		}
+       }
+    }
+    ***/
+	// --- when qry intron chain is contained within ref intron chain
+	//     qry terminal exons may poke (overhang) into ref's other introns
+	int l_iovh=0;   // overhang of q left boundary beyond the end of ref intron on the left
+	int r_iovh=0;   // same type of overhang through the ref intron on the right
+	int qry_intron_poking=0;
+	// --- when ref intron chain is contained within qry intron chain,
+	//     terminal exons of ref may poke (overhang) into qry other introns
+	int l_jovh=0;   // overhang of q left boundary beyond the end of ref intron to the left
+	int r_jovh=0;   // same type of overhang through the ref intron on the right
+	int ref_intron_poking=0;
+	if (ichain_match) { //intron (sub-)chain compatible so far (but there could still be conflicts)
 		if (imfirst==1 && imlast==imax) { // qry full intron chain match
 			if (jmfirst==1 && jmlast==jmax) {//identical intron chains
 				if (strictMatch) return (r.exons[0]->start==m.exons[0]->start &&
 						              r.exons.Last()->end && m.exons.Last()->end) ? '=' : '~';
 				else return '=';
 			}
-			// -- qry intron chain is shorter than ref intron chain --
-			int l_iovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
-			int r_iovh=0;   // same type of overhang through the ref intron on the right
-			if (jmfirst>1 && r.exons[jmfirst-1]->start>m.start)
-				l_iovh = r.exons[jmfirst-1]->start - m.start;
-			if (jmlast<jmax && m.end > r.exons[jmlast]->end)
-				r_iovh = m.end - r.exons[jmlast]->end;
-			if (l_iovh<4 && r_iovh<4) return 'c';
-		} else if ((jmfirst==1 && jmlast==jmax)) {//ref full intron chain match
-			//check if the reference i-chain is contained in qry i-chain
-			int l_jovh=0;   // overhang of leftmost q exon left boundary beyond the end of ref intron to the left
-			int r_jovh=0;   // same type of overhang through the ref intron on the right
-			if (imfirst>1 && m.exons[imfirst-1]->start>r.start)
-				l_jovh = m.exons[imfirst-1]->start - r.start;
-			if (imlast<imax && r.end > m.exons[imlast]->end)
-				r_jovh = r.end - m.exons[imlast]->end;
-			if (l_jovh<4 && r_jovh<4) return 'k'; //reverse containment
+			// -- a partial intron chain match
+			if (jmfirst>1) {
+				//find if m.start falls within any ref intron before jmfirst
+				for (int j=jmfirst-1;j>0;--j)
+					if (m.start<r.exons[j]->start) {
+						if (m.start>r.exons[j-1]->end) { //m.start within this ref intron
+							l_iovh = r.exons[j]->start - m.start;
+							break;
+						}
+						else { intron_retention=true; ichain_match=false; }
+					}
+			}
+			if (jmlast<jmax) {
+				for (int j=jmlast;j<jmax;++j)
+					if (m.end > r.exons[j]->end) {
+						if (m.end < r.exons[j+1]->start) { //m.end within this ref intron
+							r_iovh = m.end - r.exons[j]->end;
+						    break;
+						}
+						else { intron_retention=true; ichain_match=false; }
+					}
+			}
+			if (ichain_match && l_iovh<4 && r_iovh<4) return 'c';
+			qry_intron_poking=GMAX(l_iovh, r_iovh);
+		} else if ((jmfirst==1 && jmlast==jmax)) {//ref intron chain match
+			//check if the reference j-chain is contained in qry i-chain
+			//check for ref ends poking into qry introns
+			if (imfirst>1)  {
+				for (int i=imfirst-1;i>0;--i)
+					if (m.exons[i]->start>r.start) {
+						if (r.start>m.exons[i-1]->end) {
+							l_jovh = m.exons[i]->start - r.start;
+							break;
+						}
+						else { ichain_match = false; }
+					}
+			}
+			if (imlast<imax) {
+				for (int i=imlast;i<imax;++i)
+					if (r.end > m.exons[i]->end) {
+						if (r.end < m.exons[i+1]->start)
+							 { r_jovh = r.end - m.exons[i]->end; break; }
+						else { ichain_match = false; }
+					}
+			}
+			if (ichain_match && l_jovh<4 && r_jovh<4) return 'k'; //reverse containment
+			ref_intron_poking=GMAX(l_jovh, r_jovh);
 		}
 	}
 	//'=', 'c' and 'k' were checked and assigned, check for 'm' and 'n' before falling back to 'j'
-	if (!intron_conflict && (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)) {
-			return 'm';
+	if (intron_retention) {
+			//ref is boundary contained with qry intron chain ? that's not required for 'm'
+		    //GMessage("r_jovh=%d, r_iovh=%d, l_jovh=%d, l_iovh=%d\n", r_jovh, r_iovh, l_jovh, l_iovh);
+		    //GMessage("m.start=%d, r.exons[0]->end=%d, m.end=%d, r.exons[jmax]->start=%d\n",
+		    //		m.start, r.exons[0]->end, m.end, r.exons[jmax]->start);
+		    //if (ref_intron_poking>0 && )
+		//we just need to have no intron poking going on
+		if (!intron_conflict && ref_intron_poking<4 && qry_intron_poking<4) return 'm';
+		else return 'n';
 	}
-	if (intron_retention) return 'n';
 	if (junct_match) return 'j';
 	//we could have 'o' or 'y' here
 	//any real exon overlaps?

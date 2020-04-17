@@ -1,6 +1,6 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.11.2"
+#define GCLIB_VERSION "0.11.8"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -29,14 +29,7 @@
 
 #ifdef _WIN32
   #include <windows.h>
-  //#include <direct.h>
   #include <io.h>
-  //#ifndef strcasecmp
-  //  #define strcasecmp _stricmp
-  //#endif
-  //#ifndef strncasecmp
-  //    #define strncasecmp _strnicmp
-  //#endif
   #define CHPATHSEP '\\'
   #undef off_t
   #define off_t int64_t
@@ -241,18 +234,6 @@ char* loCase(const char* str);
 char* strlower(char * str);
 char* strupper(char * str);
 
-// generic memory block (pointer with associated length)
-struct GMemBlock {
-	char* data; //pointer to memory block
-	int64_t len; //length of interest
-	bool is_new; //freshly allocated
-	GMemBlock(void* ptr=NULL, int64_t blockLen=0):data((char*)ptr),
-		  len(blockLen),is_new(false) {  }
-	GMemBlock(int64_t newSize):data(NULL), len(newSize), is_new(true) {
-		GMALLOC(data, newSize);
-	}
-	void free() { if (is_new) GFREE(data); }
-};
 
 //strstr but for memory zones: scans a memory region
 //for a substring:
@@ -375,6 +356,13 @@ class GSeg {
   }
   bool contained(GSeg* s) {
 	  return (s->start<=start && s->end>=end);
+  }
+
+  bool equals(GSeg& d){
+      return (start==d.start && end==d.end);
+  }
+  bool equals(GSeg* d){
+      return (start==d->start && end==d->end);
   }
 
   //fuzzy coordinate matching:
