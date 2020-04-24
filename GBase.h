@@ -110,21 +110,32 @@ typedef uint64_t uint64;
 
 //-------------------
 
+#define GEXIT(a) { \
+fprintf(stderr, "Error: "); fprintf(stderr, a); \
+GError("Exiting from line %i in file %s\n",__LINE__,__FILE__); \
+}
+
 // Debug helpers
 #ifndef NDEBUG
  #define GASSERT(exp) ((exp)?((void)0):(void)GAssert(#exp,__FILE__,__LINE__))
+ #define GVERIFY(condition) \
+if (!(condition)) { \
+fprintf(stderr, "Assumption \"%s\"\nFailed in file %s: at line:%i\n", \
+#condition,__FILE__,__LINE__); \
+GEXIT(#condition);}
  #ifdef TRACE
-  #define GTRACE(exp)  (GMessage exp)
+  #define GTRACE(exp)  (GMessage(exp))
  #else
-  #define GTRACE(exp)  ((void)0)
+  #define GTRACE(exp)
  #endif
 #else
- #define GASSERT(exp) ((void)0)
- #define GTRACE(exp)  ((void)0)
+ #define GASSERT(exp)
+ #define GTRACE(exp)
+ #define GVERIFY(condition)
 #endif
 
-#define GERROR(exp) (GError exp)
-/**********************************  Macros  ***********************************/
+#define GERROR(exp) (GError(exp))
+
 // Abolute value
 #define GABS(val) (((val)>=0)?(val):-(val))
 
