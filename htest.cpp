@@ -19,7 +19,7 @@ struct HStrData {
 	HStrData(char* s=NULL, int c=0):cmd(c), str(s) { }
 };
 
-int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs) {
+int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int toLoad=0) {
   int num=0;
   GLineReader lr(f);
   char* line=NULL;
@@ -41,6 +41,7 @@ int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs) {
       line[len-3]=0;
       strgs.Add(new HStrData(line));
 	  num++;
+	  if (toLoad && num>=toLoad) break;
   } //while line
   return num;
 }
@@ -59,46 +60,65 @@ int main(int argc, char* argv[]) {
  args.printError(USAGE, true);
  if (args.getOpt('h') || args.getOpt("help")) GMessage(USAGE);
  int numargs=args.startNonOpt();
- if (numargs>0) {
-   char* a=NULL;
-   FILE* f=NULL;
-   int total=0;
-   while ((a=args.nextNonOpt())) {
-	   f=fopen(a, "r");
-	   if (f==NULL) GError("Error: could not open file %s !\n", a);
-	   int num=loadStrings(f, sufstrs, strs);
-	   total+=num;
-   }
+ const char* a=NULL;
+ FILE* f=NULL;
+ int total=0;
+
+ if (numargs==0) {
+	 a="htest_data.lst";
+	 f=fopen(a, "r");
+	 if (f==NULL) GError("Error: could not open file %s !\n", a);
+	 int num=loadStrings(f, sufstrs, strs, 600000);
+	 total+=num;
+ }
+ else {
+	   while ((a=args.nextNonOpt())) {
+		   f=fopen(a, "r");
+		   if (f==NULL) GError("Error: could not open file %s !\n", a);
+		   int num=loadStrings(f, sufstrs, strs, 600000);
+		   total+=num;
+	   }
+  }
    GResUsage swatch;
    //timing starts here
-   GMessage("----------------- loading no-suffix strings ----------------\n");
-   swatch.start();
-   for (int i=0;i<strs.Count();i++) {
-	  switch (strs[i]->cmd) {
-	    case 0:thash.fAdd(strs[i]->str.chars(), new int(1)); break;
-	    case 1:thash.Remove(strs[i]->str.chars()); break;
-	    case 2:thash.Clear(); break;
-	  }
-   }
-   swatch.stop();
-   GMessage("Elapsed time (microseconds): %.0f us\n", swatch.elapsed());
-   GMessage("                  user time: %.0f us\n", swatch.u_elapsed());
-   GMessage("                system time: %.0f us\n", swatch.s_elapsed());
-   // timing here
-
+   int num_clr=0, num_rm=0, num_add=0;
    GMessage("----------------- loading suffix strings ----------------\n");
    swatch.start();
    for (int i=0;i<sufstrs.Count();i++) {
 		  switch (sufstrs[i]->cmd) {
-		    case 0:sufthash.fAdd(sufstrs[i]->str.chars(), new int(1)); break;
-		    case 1:sufthash.Remove(sufstrs[i]->str.chars()); break;
-		    case 2:sufthash.Clear(); break;
+		    case 0:sufthash.fAdd(sufstrs[i]->str.chars(), new int(1)); num_add++; break;
+		    case 1:sufthash.Remove(sufstrs[i]->str.chars()); num_rm++; break;
+		    case 2:sufthash.Clear(); num_clr++; break;
 		  }
    }
    swatch.stop();
-   GMessage("Elapsed time (microseconds): %.0f us\n", swatch.elapsed());
-   GMessage("                  user time: %.0f us\n", swatch.u_elapsed());
-   GMessage("                system time: %.0f us\n", swatch.s_elapsed());
+   char *wtime=commaprintnum((uint64_t)swatch.elapsed());
+   char *utime=commaprintnum((uint64_t)swatch.u_elapsed());
+   char *stime=commaprintnum((uint64_t)swatch.s_elapsed());
+   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
+   GMessage("                  user time: %12s us\n", utime);
+   GMessage("                system time: %12s us\n", stime);
+   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
+   GFREE(wtime);GFREE(utime);GFREE(stime);
+   num_clr=0, num_rm=0, num_add=0;
+   GMessage("----------------- loading no-suffix strings ----------------\n");
+   swatch.start();
+   for (int i=0;i<strs.Count();i++) {
+	  switch (strs[i]->cmd) {
+	    case 0:thash.fAdd(strs[i]->str.chars(), new int(1)); num_add++; break;
+	    case 1:thash.Remove(strs[i]->str.chars()); num_rm++; break;
+	    case 2:thash.Clear(); num_clr++; break;
+	  }
+   }
+   swatch.stop();
+   wtime=commaprintnum((uint64_t)swatch.elapsed());
+   utime=commaprintnum((uint64_t)swatch.u_elapsed());
+   stime=commaprintnum((uint64_t)swatch.s_elapsed());
+   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
+   GMessage("                  user time: %12s us\n", utime);
+   GMessage("                system time: %12s us\n", stime);
+   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
+   GFREE(wtime);GFREE(utime);GFREE(stime);
 
- }
+
 }
