@@ -51,11 +51,55 @@ int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int t
   return num;
 }
 
+void showTimings(GResUsage swatch) {
+ char *wtime=commaprintnum((uint64_t)swatch.elapsed());
+ char *utime=commaprintnum((uint64_t)swatch.u_elapsed());
+ char *stime=commaprintnum((uint64_t)swatch.s_elapsed());
+ GMessage("Elapsed time (microseconds): %12s us\n", wtime);
+ GMessage("                  user time: %12s us\n", utime);
+ GMessage("                system time: %12s us\n", stime);
+ GFREE(wtime);GFREE(utime);GFREE(stime);
+}
+
+
+void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+	GHash<int> ghash;
+	int num_add=0, num_rm=0, num_clr=0;
+	GMessage("----------------- %s ----------------\n", label);
+	ghash.Clear();
+	swatch.start();
+	for (int i=0;i<hstrs.Count();i++) {
+			  switch (hstrs[i]->cmd) {
+				case 0:ghash.fAdd(hstrs[i]->str.chars(), new int(1)); num_add++; break;
+				case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
+				case 2:ghash.Clear(); num_clr++; break;
+			  }
+	}
+	ghash.Clear();
+	swatch.stop();
+	GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  tsl::hopscotch_map<std::string, int> hsmap;
+  GMessage("----------------- %s ----------------\n", label);
+  swatch.start();
+  for (int i=0;i<hstrs.Count();i++) {
+	  switch (hstrs[i]->cmd) {
+		case 0:hsmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
+		case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:hsmap.clear(); num_clr++; break;
+	  }
+  }
+  hsmap.clear();
+  swatch.stop();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
 int main(int argc, char* argv[]) {
  GPVec<HStrData> strs;
  GPVec<HStrData> sufstrs;
- GHash<int> thash;
- GHash<int> sufthash;
  strs.setFreeItem(strFreeProc);
  sufstrs.setFreeItem(strFreeProc);
  //GArgs args(argc, argv, "hg:c:s:t:o:p:help;genomic-fasta=COV=PID=seq=out=disable-flag;test=");
@@ -69,104 +113,36 @@ int main(int argc, char* argv[]) {
  FILE* f=NULL;
  int total=0;
 
- tsl::hopscotch_map<std::string, int> hsmap;
 
  if (numargs==0) {
 	 a="htest_data.lst";
 	 f=fopen(a, "r");
 	 if (f==NULL) GError("Error: could not open file %s !\n", a);
-	 int num=loadStrings(f, sufstrs, strs);
+	 int num=loadStrings(f, sufstrs, strs, 600000);
 	 total+=num;
+	 GMessage("..loaded %d strings from file %s\n", total, a);
  }
  else {
 	   while ((a=args.nextNonOpt())) {
 		   f=fopen(a, "r");
 		   if (f==NULL) GError("Error: could not open file %s !\n", a);
-		   int num=loadStrings(f, sufstrs, strs);
+		   int num=loadStrings(f, sufstrs, strs, 600000);
 		   total+=num;
 	   }
   }
    GResUsage swatch;
-   //timing starts here
-   int num_clr=0, num_rm=0, num_add=0;
-   GMessage("----------------- loading suffix strings ----------------\n");
-   swatch.start();
-   for (int i=0;i<sufstrs.Count();i++) {
-		  switch (sufstrs[i]->cmd) {
-		    case 0:sufthash.fAdd(sufstrs[i]->str.chars(), new int(1)); num_add++; break;
-		    case 1:sufthash.Remove(sufstrs[i]->str.chars()); num_rm++; break;
-		    case 2:sufthash.Clear(); num_clr++; break;
-		  }
-   }
-   swatch.stop();
-   char *wtime=commaprintnum((uint64_t)swatch.elapsed());
-   char *utime=commaprintnum((uint64_t)swatch.u_elapsed());
-   char *stime=commaprintnum((uint64_t)swatch.s_elapsed());
-   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
-   GMessage("                  user time: %12s us\n", utime);
-   GMessage("                system time: %12s us\n", stime);
-   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
-   GFREE(wtime);GFREE(utime);GFREE(stime);
 
-   num_clr=0, num_rm=0, num_add=0;
-   GMessage("----------------- loading no-suffix strings ----------------\n");
-   swatch.start();
-   for (int i=0;i<strs.Count();i++) {
-	  switch (strs[i]->cmd) {
-	    case 0:thash.fAdd(strs[i]->str.chars(), new int(1)); num_add++; break;
-	    case 1:thash.Remove(strs[i]->str.chars()); num_rm++; break;
-	    case 2:thash.Clear(); num_clr++; break;
-	  }
-   }
-   swatch.stop();
-   wtime=commaprintnum((uint64_t)swatch.elapsed());
-   utime=commaprintnum((uint64_t)swatch.u_elapsed());
-   stime=commaprintnum((uint64_t)swatch.s_elapsed());
-   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
-   GMessage("                  user time: %12s us\n", utime);
-   GMessage("                system time: %12s us\n", stime);
-   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
-   GFREE(wtime);GFREE(utime);GFREE(stime);
 
-   num_clr=0, num_rm=0, num_add=0;
-   GMessage("----------------- hopscotch w-suffix ----------------\n");
-   swatch.start();
-   for (int i=0;i<sufstrs.Count();i++) {
-	  switch (sufstrs[i]->cmd) {
-	    case 0:hsmap.insert({sufstrs[i]->str.chars(), 1}); num_add++; break;
-	    case 1:hsmap.erase(sufstrs[i]->str.chars()); num_rm++; break;
-	    case 2:hsmap.clear(); num_clr++; break;
-	  }
-   }
-   swatch.stop();
-   wtime=commaprintnum((uint64_t)swatch.elapsed());
-   utime=commaprintnum((uint64_t)swatch.u_elapsed());
-   stime=commaprintnum((uint64_t)swatch.s_elapsed());
-   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
-   GMessage("                  user time: %12s us\n", utime);
-   GMessage("                system time: %12s us\n", stime);
-   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
-   GFREE(wtime);GFREE(utime);GFREE(stime);
+   //run_GHash(swatch, strs, "GHash no suffix");
+   //showTimings(swatch);
 
-   hsmap.clear();
-   num_clr=0, num_rm=0, num_add=0;
-   GMessage("----------------- hopscotch no-suffix ----------------\n");
-   swatch.start();
-   for (int i=0;i<strs.Count();i++) {
-	  switch (strs[i]->cmd) {
-	    case 0:hsmap.insert({strs[i]->str.chars(), 1}); num_add++; break;
-	    case 1:hsmap.erase(strs[i]->str.chars()); num_rm++; break;
-	    case 2:hsmap.clear(); num_clr++; break;
-	  }
-   }
-   swatch.stop();
-   wtime=commaprintnum((uint64_t)swatch.elapsed());
-   utime=commaprintnum((uint64_t)swatch.u_elapsed());
-   stime=commaprintnum((uint64_t)swatch.s_elapsed());
-   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
-   GMessage("                  user time: %12s us\n", utime);
-   GMessage("                system time: %12s us\n", stime);
-   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
-   GFREE(wtime);GFREE(utime);GFREE(stime);
+   run_GHash(swatch, sufstrs, "GHash w/ suffix");
+   showTimings(swatch);
+
+   run_Hopscotch(swatch, strs, "hopscotch no suffix");
+   showTimings(swatch);
+
+   run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
+   showTimings(swatch);
 
 }
