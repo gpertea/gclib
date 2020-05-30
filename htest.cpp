@@ -4,6 +4,11 @@
 #include "GVec.hh"
 #include "GHash.hh"
 #include "GResUsage.h"
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <tsl/hopscotch_map.h>
+#include <tsl/hopscotch_set.h>
 
 #define USAGE "Usage:\n\
   htest textfile.. \n\
@@ -64,18 +69,20 @@ int main(int argc, char* argv[]) {
  FILE* f=NULL;
  int total=0;
 
+ tsl::hopscotch_map<std::string, int> hsmap;
+
  if (numargs==0) {
 	 a="htest_data.lst";
 	 f=fopen(a, "r");
 	 if (f==NULL) GError("Error: could not open file %s !\n", a);
-	 int num=loadStrings(f, sufstrs, strs, 600000);
+	 int num=loadStrings(f, sufstrs, strs);
 	 total+=num;
  }
  else {
 	   while ((a=args.nextNonOpt())) {
 		   f=fopen(a, "r");
 		   if (f==NULL) GError("Error: could not open file %s !\n", a);
-		   int num=loadStrings(f, sufstrs, strs, 600000);
+		   int num=loadStrings(f, sufstrs, strs);
 		   total+=num;
 	   }
   }
@@ -100,6 +107,7 @@ int main(int argc, char* argv[]) {
    GMessage("                system time: %12s us\n", stime);
    GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
    GFREE(wtime);GFREE(utime);GFREE(stime);
+
    num_clr=0, num_rm=0, num_add=0;
    GMessage("----------------- loading no-suffix strings ----------------\n");
    swatch.start();
@@ -120,5 +128,45 @@ int main(int argc, char* argv[]) {
    GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
    GFREE(wtime);GFREE(utime);GFREE(stime);
 
+   num_clr=0, num_rm=0, num_add=0;
+   GMessage("----------------- hopscotch w-suffix ----------------\n");
+   swatch.start();
+   for (int i=0;i<sufstrs.Count();i++) {
+	  switch (sufstrs[i]->cmd) {
+	    case 0:hsmap.insert({sufstrs[i]->str.chars(), 1}); num_add++; break;
+	    case 1:hsmap.erase(sufstrs[i]->str.chars()); num_rm++; break;
+	    case 2:hsmap.clear(); num_clr++; break;
+	  }
+   }
+   swatch.stop();
+   wtime=commaprintnum((uint64_t)swatch.elapsed());
+   utime=commaprintnum((uint64_t)swatch.u_elapsed());
+   stime=commaprintnum((uint64_t)swatch.s_elapsed());
+   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
+   GMessage("                  user time: %12s us\n", utime);
+   GMessage("                system time: %12s us\n", stime);
+   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
+   GFREE(wtime);GFREE(utime);GFREE(stime);
+
+   hsmap.clear();
+   num_clr=0, num_rm=0, num_add=0;
+   GMessage("----------------- hopscotch no-suffix ----------------\n");
+   swatch.start();
+   for (int i=0;i<strs.Count();i++) {
+	  switch (strs[i]->cmd) {
+	    case 0:hsmap.insert({strs[i]->str.chars(), 1}); num_add++; break;
+	    case 1:hsmap.erase(strs[i]->str.chars()); num_rm++; break;
+	    case 2:hsmap.clear(); num_clr++; break;
+	  }
+   }
+   swatch.stop();
+   wtime=commaprintnum((uint64_t)swatch.elapsed());
+   utime=commaprintnum((uint64_t)swatch.u_elapsed());
+   stime=commaprintnum((uint64_t)swatch.s_elapsed());
+   GMessage("Elapsed time (microseconds): %12s us\n", wtime);
+   GMessage("                  user time: %12s us\n", utime);
+   GMessage("                system time: %12s us\n", stime);
+   GMessage("[ %d additions, %d deletions, %d clears ]\n", num_add, num_rm, num_clr);
+   GFREE(wtime);GFREE(utime);GFREE(stime);
 
 }
