@@ -9,6 +9,8 @@
 #include <string>
 #include <tsl/hopscotch_map.h>
 #include <tsl/hopscotch_set.h>
+#include "khashl.hpp"
+#include "city.h"
 
 #define USAGE "Usage:\n\
   htest textfile.. \n\
@@ -55,11 +57,41 @@ void showTimings(GResUsage swatch) {
  char *wtime=commaprintnum((uint64_t)swatch.elapsed());
  char *utime=commaprintnum((uint64_t)swatch.u_elapsed());
  char *stime=commaprintnum((uint64_t)swatch.s_elapsed());
+ char *smem=commaprintnum((uint64_t)swatch.memoryUsed());
  GMessage("Elapsed time (microseconds): %12s us\n", wtime);
  GMessage("                  user time: %12s us\n", utime);
  GMessage("                system time: %12s us\n", stime);
- GFREE(wtime);GFREE(utime);GFREE(stime);
+ GMessage("                  mem usage: %12s KB\n", smem);
+
+ GFREE(wtime);GFREE(utime);GFREE(stime); GFREE(smem);
 }
+
+
+// default values recommended by http://isthe.com/chongo/tech/comp/fnv/
+const uint32_t Prime = 0x01000193; // 16777619
+const uint32_t Seed  = 0x811C9DC5; // 2166136261
+/// hash a single byte
+inline uint32_t fnv1a(unsigned char b, uint32_t h = Seed) {   return (b ^ h) * Prime; }
+
+/// hash a C-style string
+uint32_t fnv1a(const char* text, uint32_t hash = Seed) {
+	while (*text)
+		hash = fnv1a((unsigned char)*text++, hash);
+	return hash;
+}
+
+struct cstr_eq {
+    inline bool operator()(const char* x, const char* y) const {
+        return (strcmp(x, y) == 0);
+    }
+};
+
+struct cstr_hash {
+	inline uint32_t operator()(const char* s) const {
+		return CityHash32(s, std::strlen(s));
+		//return fnv1a(s);
+	}
+};
 
 
 void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
@@ -71,29 +103,47 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	for (int i=0;i<hstrs.Count();i++) {
 			  switch (hstrs[i]->cmd) {
 				case 0:ghash.fAdd(hstrs[i]->str.chars(), new int(1)); num_add++; break;
-				case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
-				case 2:ghash.Clear(); num_clr++; break;
+				//case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
+				//case 2:ghash.Clear(); num_clr++; break;
 			  }
 	}
-	ghash.Clear();
 	swatch.stop();
+	ghash.Clear();
 	GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
 void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  tsl::hopscotch_map<std::string, int> hsmap;
+  tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq> hsmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
   for (int i=0;i<hstrs.Count();i++) {
 	  switch (hstrs[i]->cmd) {
 		case 0:hsmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
-		case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
-		case 2:hsmap.clear(); num_clr++; break;
+		//case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		//case 2:hsmap.clear(); num_clr++; break;
 	  }
   }
-  hsmap.clear();
   swatch.stop();
+  hsmap.clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  klib::KHashMap<const char*, int, cstr_hash, cstr_eq > khmap;
+  GMessage("----------------- %s ----------------\n", label);
+  swatch.start();
+  for (int i=0;i<hstrs.Count();i++) {
+	  std::string s;
+	  switch (hstrs[i]->cmd) {
+		case 0:khmap[hstrs[i]->str.chars()]=1; num_add++; break;
+		//case 1:khmap.del(khmap.get(hstrs[i]->str.chars())); num_rm++; break;
+		//case 2:khmap.clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  khmap.clear();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
@@ -112,7 +162,6 @@ int main(int argc, char* argv[]) {
  const char* a=NULL;
  FILE* f=NULL;
  int total=0;
-
 
  if (numargs==0) {
 	 a="htest_data.lst";
@@ -139,10 +188,14 @@ int main(int argc, char* argv[]) {
    run_GHash(swatch, sufstrs, "GHash w/ suffix");
    showTimings(swatch);
 
-   run_Hopscotch(swatch, strs, "hopscotch no suffix");
+   run_Khashl(swatch, sufstrs, "khashl w/ suffix");
+   showTimings(swatch);
+   run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 
    run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
+   showTimings(swatch);
+   run_Hopscotch(swatch, strs, "hopscotch no suffix");
    showTimings(swatch);
 
 }

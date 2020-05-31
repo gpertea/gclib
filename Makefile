@@ -8,8 +8,6 @@ LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
 
 LIBS    := 
 
-
-# A simple hack to check if we are on Windows or not (i.e. are we using mingw32-make?)
 ifeq ($(findstring mingw32, $(MAKE)), mingw32)
 WINDOWS=1
 endif
@@ -21,9 +19,11 @@ ifndef WINDOWS
 TLIBS += -lpthread
 endif
 
-
-
 DMACH := $(shell ${CXX} -dumpmachine)
+
+ifeq (, $(findstring darwin, $(DMACH)))
+ LIBS+= -lrt
+endif
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
@@ -49,7 +49,7 @@ endif
 
 CC      := g++
 
-BASEFLAGS  := -Wall -Wextra ${INCDIRS} $(MARCH) \
+BASEFLAGS  := -std=c++11 -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
 GCCVER5 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 5)
@@ -105,7 +105,7 @@ OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
-htest:  $(OBJS) htest.o GHash.hh
+htest:  $(OBJS) htest.o city.o
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
