@@ -6,7 +6,7 @@ LINKER  := $(if $(LINKER),$(LINKER),g++)
 
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
 
-LIBS    := 
+LIBS    := -lrt
 
 
 # A simple hack to check if we are on Windows or not (i.e. are we using mingw32-make?)
@@ -49,7 +49,7 @@ endif
 
 CC      := g++
 
-BASEFLAGS  := -Wall -Wextra ${INCDIRS} $(MARCH) \
+BASEFLAGS  := -std=c++11 -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
 GCCVER5 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 5)
