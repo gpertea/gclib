@@ -6,9 +6,11 @@
 #include "GResUsage.h"
 #include <cstdint>
 #include <iostream>
-#include <string>
-#include <tsl/hopscotch_map.h>
-#include <tsl/hopscotch_set.h>
+#include "tsl/hopscotch_map.h"
+#include "tsl/robin_map.h"
+#include "ska/bytell_hash_map.hpp"
+#include "tsl/robin_map.h"
+
 #include "khashl.hpp"
 #include "city.h"
 
@@ -103,8 +105,8 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	for (int i=0;i<hstrs.Count();i++) {
 			  switch (hstrs[i]->cmd) {
 				case 0:ghash.fAdd(hstrs[i]->str.chars(), new int(1)); num_add++; break;
-				//case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
-				//case 2:ghash.Clear(); num_clr++; break;
+				case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
+				case 2:ghash.Clear(); num_clr++; break;
 			  }
 	}
 	swatch.stop();
@@ -114,14 +116,16 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 
 void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq> hsmap;
+  //tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq> hsmap;
+  tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq,
+      std::allocator<std::pair<const char*, int>>,  30, true> hsmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
   for (int i=0;i<hstrs.Count();i++) {
 	  switch (hstrs[i]->cmd) {
 		case 0:hsmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
-		//case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
-		//case 2:hsmap.clear(); num_clr++; break;
+		case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:hsmap.clear(); num_clr++; break;
 	  }
   }
   swatch.stop();
@@ -129,17 +133,53 @@ void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
+void run_Robin(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  //tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq> hsmap;
+  tsl::robin_map<const char*, int, cstr_hash, cstr_eq,
+      std::allocator<std::pair<const char*, int>>,  true> rmap;
+  GMessage("----------------- %s ----------------\n", label);
+  swatch.start();
+  for (int i=0;i<hstrs.Count();i++) {
+	  switch (hstrs[i]->cmd) {
+		case 0:rmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
+		case 1:rmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:rmap.clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  rmap.clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  ska::bytell_hash_map<const char*, int, cstr_hash, cstr_eq> bmap;
+  GMessage("----------------- %s ----------------\n", label);
+  swatch.start();
+  for (int i=0;i<hstrs.Count();i++) {
+	  switch (hstrs[i]->cmd) {
+		case 0:bmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
+		case 1:bmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:bmap.clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  bmap.clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
 void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  klib::KHashMap<const char*, int, cstr_hash, cstr_eq > khmap;
+  klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
   for (int i=0;i<hstrs.Count();i++) {
 	  std::string s;
 	  switch (hstrs[i]->cmd) {
 		case 0:khmap[hstrs[i]->str.chars()]=1; num_add++; break;
-		//case 1:khmap.del(khmap.get(hstrs[i]->str.chars())); num_rm++; break;
-		//case 2:khmap.clear(); num_clr++; break;
+		case 1:khmap.del(khmap.get(hstrs[i]->str.chars())); num_rm++; break;
+		case 2:khmap.clear(); num_clr++; break;
 	  }
   }
   swatch.stop();
@@ -197,5 +237,16 @@ int main(int argc, char* argv[]) {
    showTimings(swatch);
    run_Hopscotch(swatch, strs, "hopscotch no suffix");
    showTimings(swatch);
+
+   run_Robin(swatch, sufstrs, "robin w/ suffix");
+   showTimings(swatch);
+   run_Robin(swatch, strs, "robin no suffix");
+   showTimings(swatch);
+
+   run_Bytell(swatch, sufstrs, "bytell w/ suffix");
+   showTimings(swatch);
+   run_Bytell(swatch, strs, "bytell no suffix");
+   showTimings(swatch);
+
 
 }
