@@ -167,6 +167,7 @@ typedef void GFreeProc(pointer item); //usually just delete,
 
 #define GMALLOC(ptr,size)  if (!GMalloc((pointer*)(&ptr),size)) \
                                      GError(ERR_ALLOC)
+
 #define GCALLOC(ptr,size)  if (!GCalloc((pointer*)(&ptr),size)) \
                                      GError(ERR_ALLOC)
 #define GREALLOC(ptr,size) if (!GRealloc((pointer*)(&ptr),size)) \
@@ -209,12 +210,20 @@ template<class T> void Gswap(T& lhs, T& rhs) {
  rhs=tmp;
 }
 
+template<class T> T* GDupAlloc(T& data) {
+	T* tmp=NULL;
+	if (!GMalloc((pointer*) tmp, sizeof(T)))
+			GError(ERR_ALLOC);
+	memcpy((void*)tmp, (void*)&data, sizeof(T));
+	return tmp;
+}
 
 /**************** Memory management ***************************/
 
 bool GMalloc(pointer* ptr, unsigned long size); // Allocate memory
 bool GCalloc(pointer* ptr, unsigned long size); // Allocate and initialize memory
 bool GRealloc(pointer* ptr,unsigned long size); // Resize memory
+
 void GFree(pointer* ptr); // Free memory, resets ptr to NULL
 
 //int saprintf(char **retp, const char *fmt, ...);

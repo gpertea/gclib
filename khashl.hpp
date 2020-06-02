@@ -52,7 +52,7 @@ public:
 	inline khint_t size() const { return count; }
 	inline T &key(khint_t x) { return keys[x]; };
 	inline bool occupied(khint_t x) const { return (__kh_used(used, x) != 0); }
-	void clear(void) { 
+	void clear(void) {
 		if (!used) return;
 		memset(used, 0, __kh_fsize(n_buckets()) * sizeof(uint32_t));
 		count = 0;
@@ -115,20 +115,20 @@ public:
 		khint_t nb, i, last, mask;
 		int absent = -1;
 		nb = n_buckets();
-		if (count >= (nb>>1) + (nb>>2)) { /* rehashing */
+		if (count >= (nb>>1) + (nb>>2)) { // rehashing
 			if (resize(nb + khint_t(1)) < 0) {
 				if (absent_) *absent_ = -1;
 				return nb;
 			}
 			nb = n_buckets();
-		} /* TODO: to implement automatically shrinking; resize() already support shrinking */
+		} // TODO: to implement automatically shrinking; resize() already support shrinking
 		mask = nb - 1;
 		i = last = __kh_h2b(Hash()(key), bits);
 		while (__kh_used(used, i) && !Eq()(keys[i], key)) {
 			i = (i + 1U) & mask;
 			if (i == last) break;
 		}
-		if (!__kh_used(used, i)) { /* not present at all */
+		if (!__kh_used(used, i)) { // not present at all
 			keys[i] = key;
 			__kh_set_used(used, i);
 			++count, absent = 1;
@@ -142,7 +142,7 @@ public:
 		mask = nb - khint_t(1);
 		while (1) {
 			j = (j + khint_t(1)) & mask;
-			if (j == i || !__kh_used(used, j)) break; /* j==i only when the table is completely full */
+			if (j == i || !__kh_used(used, j)) break; // j==i only when the table is completely full
 			k = __kh_h2b(Hash()(keys[j]), bits);
 			if ((j > i && (k <= i || k > j)) || (j < i && (k <= i && k > j)))
 				keys[i] = keys[j], i = j;
