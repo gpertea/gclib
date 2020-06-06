@@ -35,6 +35,7 @@ namespace klib {
 
 template<class T, class Hash, class Eq = std::equal_to<T>, typename khint_t = uint32_t>
 class KHashSet {
+protected:
 	khint_t bits, count;
 	uint32_t *used;
 	T *keys;
@@ -76,7 +77,7 @@ public:
 		if (new_nb & (new_nb - 1)) ++j;
 		new_bits = j > 2? j : 2;
 		new_nb = khint_t(1) << new_bits;
-		if (count > (new_nb>>1) + (new_nb>>2)) return 0; /* requested size is too small */
+		if (count > (new_nb>>1) + (new_nb>>2)) return 0; // requested size is too small
 		new_used = (uint32_t*)std::malloc(__kh_fsize(new_nb) * sizeof(uint32_t));
 		memset(new_used, 0, __kh_fsize(new_nb) * sizeof(uint32_t));
 		if (!new_used) return -1; /* not enough memory */

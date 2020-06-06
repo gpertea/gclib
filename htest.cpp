@@ -8,16 +8,22 @@
 #include <iostream>
 #include "tsl/hopscotch_map.h"
 #include "tsl/robin_map.h"
-#include "ska/bytell_hash_map.hpp"
-#include "tsl/robin_map.h"
+//#include "ska/bytell_hash_map.hpp"
 
-#include "khashl.hpp"
+#include "khashl.hh"
 #include "city.h"
 
+#include "GKHash.hh"
+
 #define USAGE "Usage:\n\
-  htest textfile.. \n\
+  htest [-Q] [-n num_clusters] textfile.. \n\
   \n\
  "
+
+bool qryMode=false;
+int numClusters=500;
+
+
 static void strFreeProc(pointer item) {
       GFREE(item);
 }
@@ -28,13 +34,21 @@ struct HStrData {
 	HStrData(char* s=NULL, int c=0):cmd(c), str(s) { }
 };
 
-int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int toLoad=0) {
+int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int toLoad) {
   int num=0;
   GLineReader lr(f);
   char* line=NULL;
+  int numcl=0;
   while ((line=lr.nextLine())!=NULL) {
 	  int len=strlen(line);
-	  if (len<4) continue;
+	  if (len<3) continue;
+	  if (line[0]=='>') {
+		  numcl++;
+		  if (toLoad && numcl>toLoad) {
+			  break;
+		  }
+		  continue;
+	  }
 	  if (strcmp(line, "HCLR")==0) {
 		  strgs.Add(new HStrData(NULL, 2));
 		  strgsuf.Add(new HStrData(NULL, 2));
@@ -50,7 +64,6 @@ int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int t
       line[len-3]=0;
       strgs.Add(new HStrData(line));
 	  num++;
-	  if (toLoad && num>=toLoad) break;
   } //while line
   return num;
 }
@@ -102,11 +115,41 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	GMessage("----------------- %s ----------------\n", label);
 	ghash.Clear();
 	swatch.start();
+	int cl_i=0;
+	int prevcmd=2;
 	for (int i=0;i<hstrs.Count();i++) {
+			  if (hstrs[i]->cmd==prevcmd) {
+				  if (prevcmd==2) continue;
+			  } else prevcmd=hstrs[i]->cmd;
 			  switch (hstrs[i]->cmd) {
-				case 0:ghash.fAdd(hstrs[i]->str.chars(), new int(1)); num_add++; break;
-				case 1:ghash.Remove(hstrs[i]->str.chars()); num_rm++; break;
-				case 2:ghash.Clear(); num_clr++; break;
+				case 0:
+					if (cl_i==0) cl_i=i;
+					ghash.fAdd(hstrs[i]->str.chars(), new int(i));
+					num_add++;
+					break;
+				case 1:
+					if (qryMode) break;
+					ghash.Remove(hstrs[i]->str.chars());
+					num_rm++;
+					break;
+				case 2:
+					//run tests here
+					if (qryMode) {
+						//run some query tests here
+						for(int j=cl_i;j<i;j+=3) {
+							if (hstrs[j]->cmd) continue;
+							int* v=ghash[hstrs[j]->str.chars()];
+							if (v==NULL)
+								GError("Error at <%s>, key %s not found (count:%d, cl_i=%d, i=%d)!\n",label, hstrs[j]->str.chars(),
+										ghash.Count(), cl_i, i );
+							if (*v!=j)
+								GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+						}
+					}
+					cl_i=0;
+					ghash.Clear();
+					num_clr++;
+					break;
 			  }
 	}
 	swatch.stop();
@@ -121,11 +164,38 @@ void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
       std::allocator<std::pair<const char*, int>>,  30, true> hsmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
+  int cl_i=0;
+  int prevcmd=2;
   for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
-		case 0:hsmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
-		case 1:hsmap.erase(hstrs[i]->str.chars()); num_rm++; break;
-		case 2:hsmap.clear(); num_clr++; break;
+		case 0:
+			if (cl_i==0) cl_i=i;
+			hsmap.insert({hstrs[i]->str.chars(), i});
+			num_add++;
+			break;
+		case 1:
+			if (qryMode) break;
+			hsmap.erase(hstrs[i]->str.chars());
+			num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				//with strings from hstrs[cl_i .. i-1] range
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					int v=hsmap[hstrs[j]->str.chars()];
+					if (v!=j)
+						GError("Error at <%s>, invalid value for key %s! (got %d, expected %d)\n",label,
+								hstrs[j]->str.chars(), v, j );
+				}
+			}
+			cl_i=0;
+			hsmap.clear();
+			num_clr++;
+			break;
 	  }
   }
   swatch.stop();
@@ -140,18 +210,40 @@ void run_Robin(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
       std::allocator<std::pair<const char*, int>>,  true> rmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
+  int cl_i=0;
+  int prevcmd=2;
   for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
-		case 0:rmap.insert({hstrs[i]->str.chars(), 1}); num_add++; break;
-		case 1:rmap.erase(hstrs[i]->str.chars()); num_rm++; break;
-		case 2:rmap.clear(); num_clr++; break;
+		case 0:
+			if (cl_i==0) cl_i=i;
+			rmap.insert({hstrs[i]->str.chars(), i});
+			num_add++;
+			break;
+		case 1: if (qryMode) break;
+			rmap.erase(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				//with strings from hstrs[cl_i .. i-1] range
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					int v=rmap[hstrs[j]->str.chars()];
+					if (v!=j)
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			rmap.clear(); num_clr++; break;
 	  }
   }
   swatch.stop();
   rmap.clear();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-
+/*
 void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   ska::bytell_hash_map<const char*, int, cstr_hash, cstr_eq> bmap;
@@ -168,18 +260,35 @@ void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   bmap.clear();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-
+*/
 void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
   GMessage("----------------- %s ----------------\n", label);
   swatch.start();
+  int cl_i=0;
+  int prevcmd=2;
   for (int i=0;i<hstrs.Count();i++) {
-	  std::string s;
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
-		case 0:khmap[hstrs[i]->str.chars()]=1; num_add++; break;
-		case 1:khmap.del(khmap.get(hstrs[i]->str.chars())); num_rm++; break;
-		case 2:khmap.clear(); num_clr++; break;
+		case 0:if (cl_i==0) cl_i=i;
+			khmap[hstrs[i]->str.chars()]=i; num_add++; break;
+		case 1:if (qryMode) break;
+			khmap.del(khmap.get(hstrs[i]->str.chars())); num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					int v=khmap[hstrs[j]->str.chars()];
+					if (v!=j)
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			khmap.clear(); num_clr++; break;
 	  }
   }
   swatch.stop();
@@ -187,35 +296,79 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
+void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  GKHashSet<char> khset;
+  GMessage("----------------- %s ----------------\n", label);
+  int cl_i=0;
+  swatch.start();
+  int prevcmd=2;
+  for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
+	  switch (hstrs[i]->cmd) {
+		case 0: if (cl_i==0) cl_i=i;
+			khset.Add(hstrs[i]->str.chars()); num_add++; break;
+		case 1:if (qryMode) break;
+			khset.Remove(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				//with strings from hstrs[cl_i .. i-1] range
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					if (!khset[hstrs[j]->str.chars()])
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			khset.Clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  khset.Clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+
 int main(int argc, char* argv[]) {
  GPVec<HStrData> strs;
  GPVec<HStrData> sufstrs;
  strs.setFreeItem(strFreeProc);
  sufstrs.setFreeItem(strFreeProc);
  //GArgs args(argc, argv, "hg:c:s:t:o:p:help;genomic-fasta=COV=PID=seq=out=disable-flag;test=");
- GArgs args(argc, argv, "h");
+ GArgs args(argc, argv, "hQn:");
  //fprintf(stderr, "Command line was:\n");
  //args.printCmdLine(stderr);
  args.printError(USAGE, true);
  if (args.getOpt('h') || args.getOpt("help")) GMessage(USAGE);
+ GStr s=args.getOpt('n');
+ if (!s.is_empty()) {
+	 numClusters=s.asInt();
+	 if (numClusters<=0)
+		 GError("%s\nError: invalid value for -n !\n", USAGE);
+ }
+ qryMode=(args.getOpt('Q'));
  int numargs=args.startNonOpt();
  const char* a=NULL;
  FILE* f=NULL;
  int total=0;
 
  if (numargs==0) {
-	 a="htest_data.lst";
+	 //a="htest_data.lst";
+	 a="htest_over500.lst";
 	 f=fopen(a, "r");
 	 if (f==NULL) GError("Error: could not open file %s !\n", a);
-	 int num=loadStrings(f, sufstrs, strs, 600000);
+	 GMessage("loading %d clusters from file..\n", numClusters);
+	 int num=loadStrings(f, sufstrs, strs, numClusters);
 	 total+=num;
-	 GMessage("..loaded %d strings from file %s\n", total, a);
  }
  else {
 	   while ((a=args.nextNonOpt())) {
 		   f=fopen(a, "r");
 		   if (f==NULL) GError("Error: could not open file %s !\n", a);
-		   int num=loadStrings(f, sufstrs, strs, 600000);
+		   int num=loadStrings(f, sufstrs, strs, numClusters);
 		   total+=num;
 	   }
   }
@@ -228,25 +381,33 @@ int main(int argc, char* argv[]) {
    run_GHash(swatch, sufstrs, "GHash w/ suffix");
    showTimings(swatch);
 
+
+      run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
+      showTimings(swatch);
+      run_Hopscotch(swatch, strs, "hopscotch no suffix");
+      showTimings(swatch);
+
+
+      run_Robin(swatch, sufstrs, "robin w/ suffix");
+      showTimings(swatch);
+      run_Robin(swatch, strs, "robin no suffix");
+      showTimings(swatch);
+
+
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 
-   run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
+   run_GKHashSet(swatch, sufstrs, "GKHashSet w/ suffix");
    showTimings(swatch);
-   run_Hopscotch(swatch, strs, "hopscotch no suffix");
+   run_GKHashSet(swatch, strs, "GKHashSet no suffix");
    showTimings(swatch);
-
-   run_Robin(swatch, sufstrs, "robin w/ suffix");
-   showTimings(swatch);
-   run_Robin(swatch, strs, "robin no suffix");
-   showTimings(swatch);
-
+/*
    run_Bytell(swatch, sufstrs, "bytell w/ suffix");
    showTimings(swatch);
    run_Bytell(swatch, strs, "bytell no suffix");
    showTimings(swatch);
-
+*/
 
 }

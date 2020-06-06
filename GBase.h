@@ -210,14 +210,6 @@ template<class T> void Gswap(T& lhs, T& rhs) {
  rhs=tmp;
 }
 
-template<class T> T* GDupAlloc(T& data) {
-	T* tmp=NULL;
-	if (!GMalloc((pointer*) tmp, sizeof(T)))
-			GError(ERR_ALLOC);
-	memcpy((void*)tmp, (void*)&data, sizeof(T));
-	return tmp;
-}
-
 /**************** Memory management ***************************/
 
 bool GMalloc(pointer* ptr, unsigned long size); // Allocate memory
@@ -232,6 +224,15 @@ void GError(const char* format,...); // Error routine (aborts program)
 void GMessage(const char* format,...);// Log message to stderr
 // Assert failed routine:- usually not called directly but through GASSERT
 void GAssert(const char* expression, const char* filename, unsigned int lineno);
+
+
+template<class T> T* GDupAlloc(T& data) {
+	T* tmp=NULL;
+	if (!GMalloc((pointer*) tmp, sizeof(T)))
+			GError(ERR_ALLOC);
+	memcpy((void*)tmp, (void*)&data, sizeof(T));
+	return tmp;
+}
 
 // ****************** basic string manipulation *************************
 char *Gstrdup(const char* str, int xtracap=0); //string duplication with extra capacity added
