@@ -298,7 +298,7 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 
 void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GKHashSet<char> khset;
+  GKHashPtrSet<char> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -310,6 +310,41 @@ void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
 	  switch (hstrs[i]->cmd) {
 		case 0: if (cl_i==0) cl_i=i;
 			khset.Add(hstrs[i]->str.chars()); num_add++; break;
+		case 1:if (qryMode) break;
+			khset.Remove(hstrs[i]->str.chars()); num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				//with strings from hstrs[cl_i .. i-1] range
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					if (!khset[hstrs[j]->str.chars()])
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			khset.Clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  khset.Clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+void run_GKHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  GKHashPtrSet<char> khset;
+  GMessage("----------------- %s ----------------\n", label);
+  int cl_i=0;
+  swatch.start();
+  int prevcmd=2;
+  for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
+	  switch (hstrs[i]->cmd) {
+		case 0: if (cl_i==0) cl_i=i;
+			khset.shkAdd(hstrs[i]->str.chars()); num_add++; break;
 		case 1:if (qryMode) break;
 			khset.Remove(hstrs[i]->str.chars()); num_rm++; break;
 		case 2:
@@ -375,6 +410,7 @@ int main(int argc, char* argv[]) {
    GResUsage swatch;
 
 
+   GMessage("size of std::string = %d, of GStr = %d\n", sizeof(std::string), sizeof(GStr));
    //run_GHash(swatch, strs, "GHash no suffix");
    //showTimings(swatch);
 
@@ -382,17 +418,16 @@ int main(int argc, char* argv[]) {
    showTimings(swatch);
 
 
-      run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
-      showTimings(swatch);
-      run_Hopscotch(swatch, strs, "hopscotch no suffix");
-      showTimings(swatch);
+   run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
+   showTimings(swatch);
+   run_Hopscotch(swatch, strs, "hopscotch no suffix");
+   showTimings(swatch);
 
 
-      run_Robin(swatch, sufstrs, "robin w/ suffix");
-      showTimings(swatch);
-      run_Robin(swatch, strs, "robin no suffix");
-      showTimings(swatch);
-
+   run_Robin(swatch, sufstrs, "robin w/ suffix");
+   showTimings(swatch);
+   run_Robin(swatch, strs, "robin no suffix");
+   showTimings(swatch);
 
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
@@ -403,6 +438,12 @@ int main(int argc, char* argv[]) {
    showTimings(swatch);
    run_GKHashSet(swatch, strs, "GKHashSet no suffix");
    showTimings(swatch);
+
+   run_GKHashSetShk(swatch, sufstrs, "GKHashSetShk w/ suffix");
+   showTimings(swatch);
+   run_GKHashSetShk(swatch, strs, "GKHashSetShk no suffix");
+   showTimings(swatch);
+
 /*
    run_Bytell(swatch, sufstrs, "bytell w/ suffix");
    showTimings(swatch);

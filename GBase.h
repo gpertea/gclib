@@ -210,6 +210,14 @@ template<class T> void Gswap(T& lhs, T& rhs) {
  rhs=tmp;
 }
 
+
+// better yet, use std::is_pointer from <type_traits> in C++11
+template<typename T>
+  struct isPointer { static const bool value = false; };
+
+template<typename T>
+  struct isPointer<T*> { static const bool value = true; };
+
 /**************** Memory management ***************************/
 
 bool GMalloc(pointer* ptr, unsigned long size); // Allocate memory

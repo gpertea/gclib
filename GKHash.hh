@@ -90,9 +90,10 @@ template <> struct GHashKey_Hash<char> {
 };
 
 
-//generic set where keys are stored as pointer (to a complex data structure K)
+//generic set where keys are stored as pointers (to a complex data structure K)
+//with dedicated specialization for char*
 template <class K, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
-  class GKHashSet:public klib::KHashSetCached< GHashKey<K>, Hash,  Eq >  {
+  class GKHashPtrSet:public klib::KHashSetCached< GHashKey<K>, Hash,  Eq >  {
 	//typedef klib::KHashSetCached< GHashKey<K>*, Hash,  Eq > kset_t;
 protected:
 	uint32_t i_iter=0;
@@ -112,9 +113,9 @@ public:
 	int shkAdd(const K* ky){ //return -1 if the key already exists
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
-		uint32_t i=put(hk, &absent);
+		uint32_t i=this->put(hk, &absent);
 		if (absent==1) //key was actually added
-			return 1;
+			return i;
 		return -1;
 	}
 
@@ -172,8 +173,177 @@ public:
 	}
 
 	inline uint32_t Count() { return this->count; }
-	inline void Clear() { this->clear(); }
-	/// Destructor
+
+	inline void Clear() {
+		int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+			GHashKey<K> hk=this->key(i);
+			if (!hk.shared) {
+				GFREE(hk.key);
+			}
+		}
+		this->clear(); //does not shrink !
+	}
+	inline void Reset() {
+		int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+			GHashKey<K> hk=this->key(i);
+			if (!hk.shared) {
+				GFREE(hk.key);
+			}
+		}
+		GFREE(this->used); GFREE(this->keys);
+		this->bits=0; this->count=0;
+	}
+
+    ~GKHashPtrSet() {
+    	this->Reset();
+    }
 };
+
+//generic set where keys are stored as pointers (to a complex data structure K)
+//with dedicated specialization for char*
+template <class K, class V, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
+  class GHashMap:public klib::KHashMapCached< GHashKey<K>, V*, Hash,  Eq >  {
+	//typedef klib::KHashSetCached< GHashKey<K>*, Hash,  Eq > kset_t;
+protected:
+	uint32_t i_iter=0;
+	bool freeItems;
+public:
+	GHashMap(bool doFree=true):freeItems(doFree) { };
+	int Add(const K* ky, V* val) { // if a key does not exist allocate a copy of the key
+                           // return -1 if the key already exists
+		GHashKey<K> hk(ky, true);
+		int absent=-1;
+		uint32_t i=this->put(hk, &absent);
+		if (absent==1) { //key was actually added
+			this->key(i).own(); //make a copy of the key data
+			this->value(i)=val;
+			return i;
+		}
+		return -1;
+	}
+
+	int shkAdd(const K* ky, V* val) { //return -1 if the key already exists
+		GHashKey<K> hk(ky, true);
+		int absent=-1;
+		uint32_t i=this->put(hk, &absent);
+		if (absent==1) {//key was actually added
+			this->value(i)=val; //pointer copy
+			return i;
+		}
+		return -1;
+	}
+
+	int Remove(const K* ky) { //return index being removed
+		//or -1 if key not found
+		  GHashKey<K> hk(ky, true);
+		  uint32_t i=this->get(hk);
+	      if (i!=this->end()) {
+	    	  hk=this->key(i);
+	    	  if (freeItems) {
+	    		  delete (this->value(i));
+	    	  }
+	    	  if (this->del(i) && !hk.shared) GFREE(hk.key);
+	    	  return i;
+	      }
+	      return -1;
+	}
+
+	V* Find(const K* ky) {//return internal slot location if found,
+	                       // or -1 if not found
+	  GHashKey<K> hk(ky, true);
+      uint32_t r=this->get(hk);
+      if (r==this->end()) return NULL;
+      return this->value(r);
+	}
+
+	inline bool hasKey(const K* ky) {
+		GHashKey<K> hk(ky, true);
+		return (this->get(hk)!=this->end());
+	}
+
+
+	inline V* & operator[](const K* ky) {
+		GHashKey<K> hk(ky, true);
+		int absent=-1;
+		uint32_t i=this->put(hk, &absent);
+		if (absent==1) { //key was not there before
+			this->key(i).own(); //make a copy of the key data
+			value(i)=NULL;
+		}
+        return value(i);
+	}
+
+	void startIterate() { //iterator-like initialization
+	  i_iter=0;
+	}
+
+	const K* Next() {
+		//returns next valid key in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		int nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) return NULL;
+		return this->key(i_iter).key;
+	}
+
+	const K* Next(V*& val) {
+		//returns next valid key in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		int nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) { val=NULL; return NULL;}
+		val=this->value(i_iter);
+		return this->key(i_iter).key;
+	}
+
+
+	const K* Next(uint32_t& idx) {
+		//returns next valid key in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		int nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) return NULL;
+		idx=i_iter;
+		return this->key(i_iter).key;
+	}
+
+	inline uint32_t Count() { return this->count; }
+
+	inline void Clear() {
+		int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+			GHashKey<K> hk=this->key(i);
+			if (freeItems) delete this->value(i);
+			if (!hk.shared) {
+				GFREE(hk.key);
+			}
+
+		}
+		this->clear(); //does not shrink !
+	}
+	inline void Reset() {
+		int nb=this->n_buckets();
+		for (int i = 0; i < nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+			GHashKey<K> hk=this->key(i);
+			if (freeItems) delete this->value(i);
+			if (!hk.shared) {
+				GFREE(hk.key);
+			}
+		}
+		GFREE(this->used); GFREE(this->keys);
+		this->bits=0; this->count=0;
+	}
+
+    ~GHashMap() {
+    	this->Reset();
+    }};
+
+
 
 #endif

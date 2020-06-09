@@ -172,6 +172,7 @@ class KHashMap : public KHashSet<KHashMapBucket<KType, VType>,
 		KHashMapHash<KHashMapBucket<KType, VType>, Hash, khint_t>,
 		KHashMapEq<KHashMapBucket<KType, VType>, Eq>, khint_t>
 {
+protected:
 	typedef KHashMapBucket<KType, VType> bucket_t;
 	typedef KHashSet<bucket_t, KHashMapHash<bucket_t, Hash, khint_t>, KHashMapEq<bucket_t, Eq>, khint_t> hashset_t;
 public:
@@ -235,6 +236,7 @@ class KHashMapCached : public KHashSet<KHashMapCachedBucket<KType, VType, khint_
 		KHashCachedHash<KHashMapCachedBucket<KType, VType, khint_t>, khint_t>,
 		KHashCachedEq<KHashMapCachedBucket<KType, VType, khint_t>, Eq>, khint_t>
 {
+protected:
 	typedef KHashMapCachedBucket<KType, VType, khint_t> bucket_t;
 	typedef KHashSet<bucket_t, KHashCachedHash<bucket_t, khint_t>, KHashCachedEq<bucket_t, Eq>, khint_t> hashset_t;
 public:
