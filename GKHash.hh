@@ -272,28 +272,28 @@ public:
     }
 };
 
+template<typename T>
+ using GHashValT = typename std::conditional< std::is_pointer<T>::value,
+		 T, T* > ::type ;
+
+
 //generic set where keys are stored as pointers (to a complex data structure K)
 //with dedicated specialization for char*
 template <class K, class V, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
-  class GHashMap:public klib::KHashMapCached< GHashKey<K>, V*, Hash,  Eq >  {
-
+  class GHashMap:public std::conditional< std::is_pointer<K>::value,
+    klib::KHashMapCached< GHashKeyT<K>, V, Hash,  Eq >,
+    klib::KHashMap< GHashKeyT<K>, V, Hash,  Eq > >::type  {
 
 protected:
 	uint32_t i_iter=0;
 	bool freeItems;
-	template<typename> struct v_ret;
-	template<V> struct v_ret<V> {
-		if (std::is_pointer<V>::value) {
-			using type = V;
-		}
-		else { using type = V*; }
-	}
 public:
 	GHashMap(bool doFree=true):freeItems(doFree) {
 		if (! std::is_pointer<V>::value) freeItems=false;
 	};
-	int Add(const K* ky, V val) { // if a key does not exist allocate a copy of the key
+	int Add(const K ky, V val) { // if a key does not exist allocate a copy of the key
                            // return -1 if the key already exists
+		//TODO generalize here using GKHashSet
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
 		uint32_t i=this->put(hk, &absent);
