@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <stdint.h>
 #include <stdarg.h>
-
+#include <type_traits>
 #ifdef _WIN32
   #include <windows.h>
   #include <io.h>
@@ -210,13 +210,21 @@ template<class T> void Gswap(T& lhs, T& rhs) {
  rhs=tmp;
 }
 
-
-// better yet, use std::is_pointer from <type_traits> in C++11
+// use std::is_pointer from <type_traits> in C++11 instead
+/*
 template<typename T>
   struct isPointer { static const bool value = false; };
 
 template<typename T>
   struct isPointer<T*> { static const bool value = true; };
+*/
+//check if type T is resolved as a pointer to char
+template<class T>
+  struct is_char_ptr : std::integral_constant <
+      bool,
+      std::is_same<char const *, typename std::decay<T>::type>::value ||
+        std::is_same<char *, typename std::decay<T>::type>::value
+  > {};
 
 /**************** Memory management ***************************/
 

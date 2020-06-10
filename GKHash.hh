@@ -7,6 +7,8 @@
 #include "GBase.h"
 #include "city.h"
 #include "khashl.hh"
+#include <type_traits>
+#include <typeinfo>
 //#include <type_traits> //for std::is_trivial
 
 /*
@@ -28,125 +30,184 @@ struct cstr_hash {
 //#define GSTR_HASH(s) fnv1a_hash(s)
 //#define GSTR_HASH(s) murmur3(s)
 
-template <class K> struct GHashKey {
-	const K* key; //WARNING: key must be allocated with malloc not new!
+template<typename T>
+ using T_Ptr = typename std::conditional< std::is_pointer<T>::value, T, T* >::type;
+
+template< typename T >
+ struct is_char_ptr
+  : std::enable_if< std::is_same< T, char* >::value ||
+                    std::is_same< T, const char* >::value >
+  {};
+
+
+template <typename K, typename=void> struct GHashKey { //K must be a pointer type!
+	static_assert(std::is_pointer<K>::value, "GHashKey only takes pointer types");
+	const K key; //WARNING: K must be a pointer type and must be malloced
 	bool shared;
-	GHashKey(const K* k=NULL, bool sh=true):key(k),shared(sh) {}
+	GHashKey(const K k=NULL, bool sh=true):key(k),shared(sh) {}
 	void own() {
 		 shared=false;
 		 key=GDupAlloc(*key);
 	}
-	/*
-	~GHashKey() {
-		//FIXME: this breaks if K is a class allocated with new!
-		if (!shared) {
-			//if (std::is_trivial<K>::value)
-			  GFREE(key);
-			//else delete key;
-		}
-	}
-	*/
 };
 
-template <> struct GHashKey<char> {
-	const char* key; //WARNING: key must be allocated with malloc not new!
+template <typename K>  struct GHashKey<K, typename std::enable_if<
+   is_char_ptr<K>::value >::type > {
+	const char* key;
 	bool shared;
 	GHashKey(const char* k=NULL, bool sh=true):key(k),shared(sh) {}
 	void own() {
 		shared=false;
-		char*tmp=Gstrdup(key);
+		char* tmp=Gstrdup(key);
 		key=tmp;
 	}
 
 };
 
+template<typename T>
+ using GHashKeyT = typename std::conditional< std::is_pointer<T>::value,
+		 GHashKey<T>, T > ::type ;
 
-
-template <class K> struct GHashKey_Eq {
+template <typename K, typename=void> struct GHashKey_Eq { //K is a pointer type
     inline bool operator()(const GHashKey<K>& x, const GHashKey<K>& y) const {
-      return (*x.key == *y.key); //requires == operator to be defined
+      return (*x.key == *y.key); //requires == operator to be defined for key type
     }
 };
 
-template <class K> struct GHashKey_Hash {
-   inline uint32_t operator()(const GHashKey<K>& s) const {
-	  K sp;
-	  memset((void*)&sp, 0, sizeof(sp)); //make sure the padding is 0
-	  sp=*s.key;
-      return CityHash32(sp, sizeof(K)); //when K is a generic structure
-   }
-};
-
-template <> struct GHashKey_Eq<char> {
-    inline bool operator()(const GHashKey<char>& x, const GHashKey<char>& y) const {
+template <typename K> struct GHashKey_Eq<K, typename std::enable_if<
+		   is_char_ptr<K>::value >::type> {
+    inline bool operator()(const GHashKey<const char*>& x, const GHashKey<const char*>& y) const {
       return (strcmp(x.key, y.key) == 0);
     }
 };
 
-template <> struct GHashKey_Hash<char> {
-   inline uint32_t operator()(const GHashKey<char>& s) const {
+template <typename K> struct GHashKey_Eq<K, typename std::enable_if<
+  !std::is_pointer<K>::value >::type> { //K is not a pointer type
+    inline bool operator()(const K& x, const K& y) const {
+      return (x == y); //requires == operator to be defined for key type
+    }
+};
+
+template <class K, typename=void> struct GHashKey_Hash { //K is a pointer type!
+   inline uint32_t operator()(const GHashKey<K>& s) const {
+	  std::remove_pointer<K> sp;
+	  memset((void*)&sp, 0, sizeof(sp)); //make sure the padding is 0
+	  sp=*(s.key); //copy key members; key is always a pointer!
+      return CityHash32(sp, sizeof(sp)); //when K is a generic structure
+   }
+};
+
+template <class K> struct GHashKey_Hash<K, typename std::enable_if<
+!std::is_pointer<K>::value >::type> { //K not a pointer type
+   inline uint32_t operator()(const K& s) const {
+	  K sp;
+	  memset((void*)&sp, 0, sizeof(K)); //make sure the padding is 0
+	  sp=s;
+      return CityHash32(sp, sizeof(K)); //when K is a generic non pointer
+   }
+};
+
+template <typename K> struct GHashKey_Hash<K, typename std::enable_if<
+ is_char_ptr<K*>::value >::type> {
+   inline uint32_t operator()(const GHashKey<const char*>& s) const {
       return CityHash32(s.key, strlen(s.key)); //when K is a generic structure
    }
 };
 
+template<typename T>
+  using GHashKeyT_Eq = typename std::conditional< std::is_pointer<T>::value,
+		 GHashKey_Eq<std::remove_pointer<T>>, GHashKey_Eq<T> > ::type;
+template<typename T>
+  using GHashKeyT_Hash = typename std::conditional< std::is_pointer<T>::value,
+		  GHashKey_Hash<std::remove_pointer<T>>, GHashKey_Hash<T> > ::type;
 
 //generic set where keys are stored as pointers (to a complex data structure K)
 //with dedicated specialization for char*
-template <class K, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
-  class GKHashPtrSet:public klib::KHashSetCached< GHashKey<K>, Hash,  Eq >  {
+template <class K, class Hash=GHashKeyT_Hash<K>, class Eq=GHashKeyT_Eq<K> >
+  class GKHashSet:public std::conditional< std::is_pointer<K>::value,
+    klib::KHashSetCached< GHashKeyT<K>, Hash,  Eq >, klib::KHashSet< GHashKeyT<K>, Hash,  Eq > >::type  {
 	//typedef klib::KHashSetCached< GHashKey<K>*, Hash,  Eq > kset_t;
 protected:
 	uint32_t i_iter=0;
 public:
-	int Add(const K* ky) { // if a key does not exist allocate a copy of the key
-                           // return -1 if the key already exists
-		GHashKey<K> hk(ky, true);
+	int Add(const K ky) { // if a key does not exist allocate a copy of the key
+                          // return -1 if the key already exists
 		int absent=-1;
-		uint32_t i=this->put(hk, &absent);
-		if (absent==1) { //key was actually added
-			this->key(i).own(); //make a copy of the key data
-			return i;
+		if (std::is_pointer<K>::value) {
+			GHashKey<K> hk(ky);
+			uint32_t i=this->put(hk, &absent);
+			if (absent==1) { //key was actually added
+			   this->key(i).own(); //make a copy of the key data
+			   return i;
+			}
+			return -1;
 		}
+		uint32_t i=this->put(ky, &absent);
+		if (absent==1) //key was actually added
+		   return i;
 		return -1;
 	}
 
-	int shkAdd(const K* ky){ //return -1 if the key already exists
-		GHashKey<K> hk(ky, true);
+	int shkAdd(const K ky){ //return -1 if the key already exists
 		int absent=-1;
-		uint32_t i=this->put(hk, &absent);
+		uint32_t i;
+		if (std::is_pointer<K>::value) {
+		  GHashKey<K> hk(ky);
+		  i=this->put(hk, &absent);
+		} else {
+		  i=this->put(ky, &absent);
+		}
 		if (absent==1) //key was actually added
 			return i;
 		return -1;
 	}
 
-	int Remove(const K* ky) { //return index being removed
+	int Remove(const K ky) { //return index being removed
 		//or -1 if key not found
-		  GHashKey<K> hk(ky, true);
-		  uint32_t i=this->get(hk);
-	      if (i!=this->end()) {
-	    	  hk=this->key(i);
-	    	  if (this->del(i) && !hk.shared) GFREE(hk.key);
+		  GHashKey<K> hk(ky);
+		  uint32_t i;
+		  if (std::is_pointer<K>::value) {
+			  i=this->get(hk);
+		      if (i!=this->end()) {
+		    	  hk=this->key(i);
+		    	  if (this->del(i) && !hk.shared) GFREE(hk.key);
+		    	  return i;
+		      }
+		      return -1;
+		  }
+		  i=this->get(ky);
+	      if (i!=this->end())
 	    	  return i;
-	      }
 	      return -1;
 	}
 
-	int Find(const K* ky) {//return internal slot location if found,
+	int Find(const K ky) {//return internal slot location if found,
 	                       // or -1 if not found
-	  GHashKey<K> hk(ky, true);
-      uint32_t r=this->get(hk);
+  	 uint32_t r;
+     if (std::is_pointer<K>::value) {
+	    GHashKey<K> hk(ky, true);
+        r=this->get(hk);
+     } else {
+    	 r=this->get(ky);
+     }
       if (r==this->end()) return -1;
       return (int)r;
 	}
 
-	inline bool hasKey(const K* ky) {
-		GHashKey<K> hk(ky, true);
-		return (this->get(hk)!=this->end());
+	inline bool hasKey(const K ky) {
+		if (std::is_pointer<K>::value) {
+		  GHashKey<K> hk(ky, true);
+		  return (this->get(hk)!=this->end());
+		}
+		return (this->get(ky)!=this->end());
 	}
 
-	inline bool operator[](const K* ky) {
-		GHashKey<K> hk(ky, true);
-		return (this->get(hk)!=this->end());
+	inline bool operator[](const K ky) {
+		if (std::is_pointer<K>::value) {
+		  GHashKey<K> hk(ky, true);
+		  return (this->get(hk)!=this->end());
+		}
+		return (this->get(ky)!=this->end());
 	}
 
 	void startIterate() { //iterator-like initialization
@@ -154,12 +215,14 @@ public:
 	}
 
 	const K* Next() {
-		//returns next valid key in the table (NULL if no more)
+		//returns a pointer to next valid key in the table (NULL if no more)
 		if (this->count==0) return NULL;
 		int nb=this->n_buckets();
 		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
 		if (i_iter==nb) return NULL;
-		return this->key(i_iter).key;
+		if (std::is_pointer<K>::value)
+  		  return this->key(i_iter).key;
+		return &(this->key(i_iter));
 	}
 
 	const K* Next(uint32_t& idx) {
@@ -169,7 +232,9 @@ public:
 		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
 		if (i_iter==nb) return NULL;
 		idx=i_iter;
-		return this->key(i_iter).key;
+		if (std::is_pointer<K>::value)
+  		  return this->key(i_iter).key;
+		return &(this->key(i_iter));
 	}
 
 	inline uint32_t Count() { return this->count; }
@@ -178,9 +243,11 @@ public:
 		int nb=this->n_buckets();
 		for (int i = 0; i != nb; ++i) {
 			if (!this->__kh_used(this->used, i)) continue;
-			GHashKey<K> hk=this->key(i);
-			if (!hk.shared) {
-				GFREE(hk.key);
+			if (std::is_pointer<K>::value) {
+				GHashKey<K> hk=this->key(i);
+				if (!hk.shared) {
+					GFREE(hk.key);
+				}
 			}
 		}
 		this->clear(); //does not shrink !
@@ -189,16 +256,18 @@ public:
 		int nb=this->n_buckets();
 		for (int i = 0; i != nb; ++i) {
 			if (!this->__kh_used(this->used, i)) continue;
-			GHashKey<K> hk=this->key(i);
-			if (!hk.shared) {
-				GFREE(hk.key);
+			if (std::is_pointer<K>::value) {
+				GHashKey<K> hk=this->key(i);
+				if (!hk.shared) {
+					GFREE(hk.key);
+				}
 			}
 		}
 		GFREE(this->used); GFREE(this->keys);
 		this->bits=0; this->count=0;
 	}
 
-    ~GKHashPtrSet() {
+    ~GKHashSet() {
     	this->Reset();
     }
 };
@@ -207,13 +276,23 @@ public:
 //with dedicated specialization for char*
 template <class K, class V, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
   class GHashMap:public klib::KHashMapCached< GHashKey<K>, V*, Hash,  Eq >  {
-	//typedef klib::KHashSetCached< GHashKey<K>*, Hash,  Eq > kset_t;
+
+
 protected:
 	uint32_t i_iter=0;
 	bool freeItems;
+	template<typename> struct v_ret;
+	template<V> struct v_ret<V> {
+		if (std::is_pointer<V>::value) {
+			using type = V;
+		}
+		else { using type = V*; }
+	}
 public:
-	GHashMap(bool doFree=true):freeItems(doFree) { };
-	int Add(const K* ky, V* val) { // if a key does not exist allocate a copy of the key
+	GHashMap(bool doFree=true):freeItems(doFree) {
+		if (! std::is_pointer<V>::value) freeItems=false;
+	};
+	int Add(const K* ky, V val) { // if a key does not exist allocate a copy of the key
                            // return -1 if the key already exists
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
@@ -226,12 +305,14 @@ public:
 		return -1;
 	}
 
-	int shkAdd(const K* ky, V* val) { //return -1 if the key already exists
+
+
+	int shkAdd(const K* ky, V val) { //return -1 if the key already exists
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
 		uint32_t i=this->put(hk, &absent);
 		if (absent==1) {//key was actually added
-			this->value(i)=val; //pointer copy
+			this->value(i)=val; //pointer copy if V is a pointer
 			return i;
 		}
 		return -1;
@@ -252,12 +333,13 @@ public:
 	      return -1;
 	}
 
-	V* Find(const K* ky) {//return internal slot location if found,
-	                       // or -1 if not found
+	void* Find(const K* ky) {//return pointer to internal slot index if found
 	  GHashKey<K> hk(ky, true);
       uint32_t r=this->get(hk);
-      if (r==this->end()) return NULL;
-      return this->value(r);
+      if (r==this->end()) return NULL; //typecast needed here for non-primitive types
+      //if (isPointer<V>::value)
+      //   return this->value(r);
+      return &(this->value(r));
 	}
 
 	inline bool hasKey(const K* ky) {
@@ -266,15 +348,19 @@ public:
 	}
 
 
-	inline V* & operator[](const K* ky) {
+	inline V& operator[](const K* ky) {
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
 		uint32_t i=this->put(hk, &absent);
 		if (absent==1) { //key was not there before
 			this->key(i).own(); //make a copy of the key data
-			value(i)=NULL;
+			//value(i)=NULL;
 		}
         return value(i);
+	}
+
+	const inline V& operator[](const K* ky) {
+
 	}
 
 	void startIterate() { //iterator-like initialization
