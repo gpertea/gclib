@@ -47,17 +47,17 @@ else
 EXE =
 endif
 
-CC      := g++
+CC      := ${CXX}
 
 BASEFLAGS  := -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
-GCCVER5 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 5)
+GCCVER5 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 5)
 ifeq "$(GCCVER5)" "1"
  BASEFLAGS += -Wno-implicit-fallthrough
 endif
 
-GCCVER8 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 8)
+GCCVER8 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 8)
 ifeq "$(GCCVER8)" "1"
   BASEFLAGS += -Wno-class-memaccess
 endif
