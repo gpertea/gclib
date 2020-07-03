@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
-#include <tsl/hopscotch_map.h>
-#include <tsl/hopscotch_set.h>
+//#include <tsl/hopscotch_map.h>
+//#include <tsl/hopscotch_set.h>
 
 #define USAGE "Usage:\n\
   htest textfile.. \n\
@@ -79,7 +79,7 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	swatch.stop();
 	GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-
+/*
 void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   tsl::hopscotch_map<std::string, int> hsmap;
@@ -96,7 +96,7 @@ void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
   swatch.stop();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-
+*/
 int main(int argc, char* argv[]) {
  GPVec<HStrData> strs;
  GPVec<HStrData> sufstrs;
@@ -133,16 +133,16 @@ int main(int argc, char* argv[]) {
    GResUsage swatch;
 
 
-   //run_GHash(swatch, strs, "GHash no suffix");
-   //showTimings(swatch);
+   run_GHash(swatch, strs, "GHash no suffix");
+   showTimings(swatch);
 
    run_GHash(swatch, sufstrs, "GHash w/ suffix");
    showTimings(swatch);
-
+   /*
    run_Hopscotch(swatch, strs, "hopscotch no suffix");
    showTimings(swatch);
 
    run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
    showTimings(swatch);
-
+   */
 }
