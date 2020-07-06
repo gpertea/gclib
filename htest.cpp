@@ -113,7 +113,6 @@ int main(int argc, char* argv[]) {
  FILE* f=NULL;
  int total=0;
 
-
  if (numargs==0) {
 	 a="htest_data.lst";
 	 f=fopen(a, "r");
