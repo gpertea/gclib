@@ -10,9 +10,8 @@
 #include "tsl/robin_map.h"
 //#include "ska/bytell_hash_map.hpp"
 
-#include "khashl.hh"
-#include "city.h"
-
+//#include "khashl.hh"
+//#include "city.h"
 #include "GKHash.hh"
 
 #define USAGE "Usage:\n\
