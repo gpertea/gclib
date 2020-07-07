@@ -33,12 +33,13 @@ struct cstr_hash {
 template<typename T>
  using T_Ptr = typename std::conditional< std::is_pointer<T>::value, T, T* >::type;
 
+/* defined it in GBase.h
 template< typename T >
  struct is_char_ptr
   : std::enable_if< std::is_same< T, char* >::value ||
                     std::is_same< T, const char* >::value >
   {};
-
+*/
 
 template <typename K, typename=void> struct GHashKey { //K must be a pointer type!
 	static_assert(std::is_pointer<K>::value, "GHashKey only takes pointer types");
@@ -61,7 +62,6 @@ template <typename K>  struct GHashKey<K, typename std::enable_if<
 		char* tmp=Gstrdup(key);
 		key=tmp;
 	}
-
 };
 
 template<typename T>
@@ -88,7 +88,7 @@ template <typename K> struct GHashKey_Eq<K, typename std::enable_if<
     }
 };
 
-template <class K, typename=void> struct GHashKey_Hash { //K is a pointer type!
+template <typename K, typename=void> struct GHashKey_Hash { //K is a pointer type!
    inline uint32_t operator()(const GHashKey<K>& s) const {
 	  std::remove_pointer<K> sp;
 	  memset((void*)&sp, 0, sizeof(sp)); //make sure the padding is 0
@@ -97,7 +97,7 @@ template <class K, typename=void> struct GHashKey_Hash { //K is a pointer type!
    }
 };
 
-template <class K> struct GHashKey_Hash<K, typename std::enable_if<
+template <typename K> struct GHashKey_Hash<K, typename std::enable_if<
 !std::is_pointer<K>::value >::type> { //K not a pointer type
    inline uint32_t operator()(const K& s) const {
 	  K sp;
@@ -108,22 +108,22 @@ template <class K> struct GHashKey_Hash<K, typename std::enable_if<
 };
 
 template <typename K> struct GHashKey_Hash<K, typename std::enable_if<
- is_char_ptr<K*>::value >::type> {
+ is_char_ptr<K>::value >::type> {
    inline uint32_t operator()(const GHashKey<const char*>& s) const {
       return CityHash32(s.key, strlen(s.key)); //when K is a generic structure
    }
 };
-
+/*
 template<typename T>
   using GHashKeyT_Eq = typename std::conditional< std::is_pointer<T>::value,
 		 GHashKey_Eq<std::remove_pointer<T>>, GHashKey_Eq<T> > ::type;
 template<typename T>
   using GHashKeyT_Hash = typename std::conditional< std::is_pointer<T>::value,
 		  GHashKey_Hash<std::remove_pointer<T>>, GHashKey_Hash<T> > ::type;
-
+*/
 //generic set where keys are stored as pointers (to a complex data structure K)
 //with dedicated specialization for char*
-template <class K, class Hash=GHashKeyT_Hash<K>, class Eq=GHashKeyT_Eq<K> >
+template <typename K, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >
   class GKHashSet:public std::conditional< std::is_pointer<K>::value,
     klib::KHashSetCached< GHashKeyT<K>, Hash,  Eq >, klib::KHashSet< GHashKeyT<K>, Hash,  Eq > >::type  {
 	//typedef klib::KHashSetCached< GHashKey<K>*, Hash,  Eq > kset_t;
@@ -148,7 +148,7 @@ public:
 		return -1;
 	}
 
-	int shkAdd(const K ky){ //return -1 if the key already exists
+	int shkAdd(K ky){ //return -1 if the key already exists
 		int absent=-1;
 		uint32_t i;
 		if (std::is_pointer<K>::value) {
@@ -162,7 +162,7 @@ public:
 		return -1;
 	}
 
-	int Remove(const K ky) { //return index being removed
+	int Remove(K ky) { //return index being removed
 		//or -1 if key not found
 		  GHashKey<K> hk(ky);
 		  uint32_t i;
@@ -181,7 +181,7 @@ public:
 	      return -1;
 	}
 
-	int Find(const K ky) {//return internal slot location if found,
+	int Find(K ky) {//return internal slot location if found,
 	                       // or -1 if not found
   	 uint32_t r;
      if (std::is_pointer<K>::value) {
@@ -194,7 +194,7 @@ public:
       return (int)r;
 	}
 
-	inline bool hasKey(const K ky) {
+	inline bool hasKey(K ky) {
 		if (std::is_pointer<K>::value) {
 		  GHashKey<K> hk(ky, true);
 		  return (this->get(hk)!=this->end());
@@ -202,7 +202,7 @@ public:
 		return (this->get(ky)!=this->end());
 	}
 
-	inline bool operator[](const K ky) {
+	inline bool operator[](K ky) { //RH only (read-only)
 		if (std::is_pointer<K>::value) {
 		  GHashKey<K> hk(ky, true);
 		  return (this->get(hk)!=this->end());
@@ -347,7 +347,7 @@ public:
 		return (this->get(hk)!=this->end());
 	}
 
-
+/*
 	inline V& operator[](const K* ky) {
 		GHashKey<K> hk(ky, true);
 		int absent=-1;
@@ -358,11 +358,7 @@ public:
 		}
         return value(i);
 	}
-
-	const inline V& operator[](const K* ky) {
-
-	}
-
+*/
 	void startIterate() { //iterator-like initialization
 	  i_iter=0;
 	}

@@ -297,7 +297,7 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 
 void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GKHashPtrSet<char> khset;
+  GKHashSet<const char*> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -332,7 +332,7 @@ void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
 
 void run_GKHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GKHashPtrSet<char> khset;
+  GKHashSet<const char*> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
