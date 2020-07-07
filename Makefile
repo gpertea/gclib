@@ -8,7 +8,9 @@ LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
 
 LIBS    := 
 
-ifeq ($(findstring mingw32, $(MAKE)), mingw32)
+
+
+ifneq (, $(findstring mingw32, $(DMACH)))
 WINDOWS=1
 endif
 
@@ -21,9 +23,11 @@ endif
 
 DMACH := $(shell ${CXX} -dumpmachine)
 
-ifeq (, $(findstring darwin, $(DMACH)))
+ifneq (, $(findstring linux, $(DMACH)))
+ # -lrt only needed for Linux systems
  LIBS+= -lrt
 endif
+
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
