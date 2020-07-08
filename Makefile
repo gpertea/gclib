@@ -69,18 +69,10 @@ GCC_MINOR:=$(word 2,$(GCC_VERSION))
 #GCC_SUB:=$(word 3,$(GCC_VERSION))
 GCC_SUB:=x
 
-GCC45OPTS :=
-GCC45OPTMAIN :=
-
 ifneq (,$(filter %release %nodebug, $(MAKECMDGOALS)))
   # -- release build
   CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O3)
   CXXFLAGS += -DNDEBUG $(BASEFLAGS)
-  ifeq ($(shell expr $(GCC_MAJOR).$(GCC_MINOR) '>=' 4.5),1)
-    CXXFLAGS += -flto
-    GCC45OPTS := -flto
-    GCC45OPTMAIN := -fwhole-program
-  endif
 else
   # -- debug build
   CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
@@ -103,11 +95,10 @@ debug: all
 OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
-	@echo "> GCC Opt. string is: "$(GCC45OPTS)
 htest:  $(OBJS) htest.o city.o
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
+	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
+	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 # target for removing all object files
 
 .PHONY : clean
