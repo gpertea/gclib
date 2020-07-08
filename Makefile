@@ -28,7 +28,7 @@ endif
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
 DMACH := windows
-ifeq ($(findstring 4.5.,$(shell g++ -dumpversion)), 4.5.)
+ifeq ($(findstring 4.5.,$(shell ${CXX} -dumpversion)), 4.5.)
 LDFLAGS += -static-libstdc++ -static-libgcc
 endif
 endif
@@ -47,17 +47,15 @@ else
 EXE =
 endif
 
-CC      := g++
-
 BASEFLAGS  := -std=c++11 -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
-GCCVER5 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 5)
+GCCVER5 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 5)
 ifeq "$(GCCVER5)" "1"
  BASEFLAGS += -Wno-implicit-fallthrough
 endif
 
-GCCVER8 := $(shell expr `g++ -dumpversion | cut -f1 -d.` \>= 8)
+GCCVER8 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 8)
 ifeq "$(GCCVER8)" "1"
   BASEFLAGS += -Wno-class-memaccess
 endif
