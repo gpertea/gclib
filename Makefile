@@ -1,14 +1,12 @@
-INCDIRS := -I. -I${GDIR} -I${BAM}
+INCDIRS := -I${GDIR}
+#-I${BAM}
 
 CXX   := $(if $(CXX),$(CXX),g++)
-
 LINKER  := $(if $(LINKER),$(LINKER),g++)
-
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
-
 LIBS    := 
 
-
+DMACH := $(shell ${CXX} -dumpmachine)
 
 ifneq (, $(findstring mingw32, $(DMACH)))
 WINDOWS=1
@@ -20,8 +18,6 @@ TLIBS =
 ifndef WINDOWS
 TLIBS += -lpthread
 endif
-
-DMACH := $(shell ${CXX} -dumpmachine)
 
 ifneq (, $(findstring linux, $(DMACH)))
  # -lrt only needed for Linux systems
