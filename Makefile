@@ -34,11 +34,12 @@ endif
 endif
 
 # Misc. system commands
-ifdef WINDOWS
-RM = del /Q
-else
+# assuming on Windows this is run under MSYS or cygwin
+#ifdef WINDOWS
+#RM = del /Q
+#else
 RM = rm -f
-endif
+#endif
 
 # File endings
 ifdef WINDOWS
@@ -101,5 +102,5 @@ mdtest: $(OBJS) mdtest.o
 
 .PHONY : clean
 clean:: 
-	@${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
-	@${RM} core.*
+	${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
+	${RM} core.*
