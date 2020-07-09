@@ -1,4 +1,4 @@
-INCDIRS := -I${GDIR}
+INCDIRS := 
 #-I${BAM}
 
 CXX   := $(if $(CXX),$(CXX),g++)
