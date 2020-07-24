@@ -58,11 +58,12 @@ class GffObj;
 //---transcript overlapping - utility functions:
 int classcode_rank(char c); //returns priority value for class codes
 
-char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool strictMatch=false); //returns: class code
+char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool stricterMatch=false, int trange=0); //returns: class code
 
-char transcriptMatch(GffObj& a, GffObj& b, int& ovlen); //generic transcript match test
+char transcriptMatch(GffObj& a, GffObj& b, int& ovlen, int trange=0); //generic transcript match test
 // -- return '=', '~'  or 0
-char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen); //single-exon transcript match test
+char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen, int trange=0);
+//single-exon transcript match test - returning '=', '~'  or 0
 
 //---
 // -- tracking exon/CDS segments from local mRNA to genome coordinates
