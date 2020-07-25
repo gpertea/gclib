@@ -2912,12 +2912,12 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
  }
  const char* gseqname=names->gseqs.Get(gseq_id)->name;
  bool gff3 = (gffp>=pgffAny && gffp<=pgffTLF);
- bool showCDS = (gffp==pgtfAny || gffp==pgtfCDS || gffp==pgffCDS || gffp==pgffAny || gffp==pgffBoth);
- bool showExon = (gffp<=pgtfExon || gffp==pgffAny || gffp==pgffExon || gffp==pgffBoth);
+ bool showCDS = (gffp==pgtfAny || gffp==pgtfCDS || gffp==pgtfBoth || gffp==pgffCDS || gffp==pgffAny || gffp==pgffBoth);
+ bool showExon = (gffp<=pgtfExon || gffp==pgtfBoth ||  gffp==pgffAny || gffp==pgffExon || gffp==pgffBoth);
  //if (gscore>0.0) sprintf(dbuf,"%.2f", gscore);
  //       else strcpy(dbuf,".");
  gscore.sprint(dbuf);
- if (gffp<=pgtfCDS && gffp>=pgtfAny) { //GTF output
+ if (gffp<=pgtfBoth && gffp>=pgtfAny) { //GTF output
 	   fprintf(fout,
 	     "%s\t%s\ttranscript\t%d\t%d\t%s\t%c\t.\ttranscript_id \"%s\"",
 	     gseqname, tlabel, start, end, dbuf, strand, gffID);
@@ -3026,7 +3026,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
    fprintf(fout,"\n");
  }// gff3 transcript line
  if (gffp==pgffTLF) return;
- bool is_cds_only = (gffp==pgffBoth) ? false : isCDSOnly();
+ bool is_cds_only = (gffp==pgffBoth || gffp==pgtfBoth) ? false : isCDSOnly();
  if (showExon) {
     //print exons
     for (int i=0;i<exons.Count();i++) {
@@ -3039,7 +3039,7 @@ void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
 	for (int i=0;i<cds.Count();i++) {
 		printGxfExon(fout, tlabel, gseqname, true, &(cds[i]), gff3, cvtChars, dbuf, DBUF_LEN);
 	}
-  } //showCDS
+  } //printing CDSs
 }
 
 void GffObj::updateCDSPhase(GList<GffExon>& segs) {

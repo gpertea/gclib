@@ -484,8 +484,9 @@ void gffnames_unref(GffNames* &n);
 
 enum GffPrintMode {
   pgtfAny, //print record as read, if GTF
-  pgtfExon, //print exon only features
-  pgtfCDS,  //print CDS and exon features
+  pgtfExon, //print only exon features (CDS converted to exon if exons are missing)
+  pgtfCDS,  //print only CDS features
+  pgtfBoth,  //print both CDS and exon features
   pgffAny, //print record as read (if isCDSonly() prints only CDS)
   pgffExon,
   pgffCDS,
