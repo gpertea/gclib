@@ -95,7 +95,8 @@ endif
 
 
 .PHONY : all
-all:    htest
+#all:    htest
+all: umap
 #mdtest
 nodebug: all
 release: all
@@ -106,6 +107,8 @@ OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
 	@echo "> GCC Opt. string is: "$(GCC45OPTS)
 htest:  $(OBJS) htest.o GHash.hh
+	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
+umap:  $(OBJS) umap.o GHash.hh
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o
 	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
