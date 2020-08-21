@@ -1,6 +1,7 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.11.9"
+#define GCLIB_VERSION "0.12.1"
+#include <utility> //for city hash
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -68,13 +69,19 @@
 #define _DEBUG_ 1
 #endif
 
+typedef int64_t int64;
+typedef uint64_t uint64;
 typedef int32_t int32;
 typedef uint32_t uint32;
 typedef int16_t int16;
 typedef uint16_t uint16;
 
 typedef unsigned char uchar;
-typedef unsigned char byte;
+typedef uint8_t byte;
+typedef unsigned int uint;
+
+typedef void* pointer;
+
 
 #ifndef MAXUINT
 #define MAXUINT ((unsigned int)-1)
@@ -91,9 +98,6 @@ typedef unsigned char byte;
 #ifndef MAX_INT
 #define MAX_INT INT_MAX
 #endif
-
-typedef int64_t int64;
-typedef uint64_t uint64;
 
 /****************************************************************************/
 
@@ -154,9 +158,6 @@ GEXIT(#condition);}
 
 // Clamp value x to range [lo..hi]
 #define GCLAMP(lo,x,hi) ((x)<(lo)?(lo):((x)>(hi)?(hi):(x)))
-
-typedef void* pointer;
-typedef unsigned int uint;
 
 typedef int GCompareProc(const pointer item1, const pointer item2);
 typedef long GFStoreProc(const pointer item1, FILE* fstorage); //for serialization

@@ -15,11 +15,12 @@
 #include "GKHash.hh"
 
 #define USAGE "Usage:\n\
-  htest [-Q] [-n num_clusters] textfile.. \n\
+  htest [-Q] [-C] [-n num_clusters] textfile.. \n\
   \n\
  "
 
 bool qryMode=false;
+bool checkRM=false;
 int numClusters=500;
 
 
@@ -295,9 +296,10 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
-void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+void run_GHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GKHashSet<const char*> khset;
+  //GKHashSet<const char*> khset;
+  GHashSet<> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -310,7 +312,10 @@ void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
 		case 0: if (cl_i==0) cl_i=i;
 			khset.Add(hstrs[i]->str.chars()); num_add++; break;
 		case 1:if (qryMode) break;
-			khset.Remove(hstrs[i]->str.chars()); num_rm++; break;
+			if (khset.Remove(hstrs[i]->str.chars())<0)
+				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
+			num_rm++;
+			break;
 		case 2:
 			if (qryMode) {
 				//run some query tests here
@@ -330,9 +335,9 @@ void run_GKHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
-void run_GKHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GKHashSet<const char*> khset;
+  GHashSet<const char*> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -345,7 +350,10 @@ void run_GKHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* la
 		case 0: if (cl_i==0) cl_i=i;
 			khset.shkAdd(hstrs[i]->str.chars()); num_add++; break;
 		case 1:if (qryMode) break;
-			khset.Remove(hstrs[i]->str.chars()); num_rm++; break;
+			if (khset.Remove(hstrs[i]->str.chars())<0)
+				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
+			num_rm++;
+			break;
 		case 2:
 			if (qryMode) {
 				//run some query tests here
@@ -372,7 +380,7 @@ int main(int argc, char* argv[]) {
  strs.setFreeItem(strFreeProc);
  sufstrs.setFreeItem(strFreeProc);
  //GArgs args(argc, argv, "hg:c:s:t:o:p:help;genomic-fasta=COV=PID=seq=out=disable-flag;test=");
- GArgs args(argc, argv, "hQn:");
+ GArgs args(argc, argv, "hQCn:");
  //fprintf(stderr, "Command line was:\n");
  //args.printCmdLine(stderr);
  args.printError(USAGE, true);
@@ -384,6 +392,7 @@ int main(int argc, char* argv[]) {
 		 GError("%s\nError: invalid value for -n !\n", USAGE);
  }
  qryMode=(args.getOpt('Q'));
+ checkRM=(args.getOpt('C'));
  int numargs=args.startNonOpt();
  const char* a=NULL;
  FILE* f=NULL;
@@ -410,19 +419,19 @@ int main(int argc, char* argv[]) {
 
 
    GMessage("size of std::string = %d, of GStr = %d\n", sizeof(std::string), sizeof(GStr));
-   //run_GHash(swatch, strs, "GHash no suffix");
-   //showTimings(swatch);
 
    run_GHash(swatch, sufstrs, "GHash w/ suffix");
    showTimings(swatch);
+   //run_GHash(swatch, strs, "GHash no suffix");
+   //showTimings(swatch);
 
-
+/*
    run_Hopscotch(swatch, sufstrs, "hopscotch w/ suffix");
    showTimings(swatch);
    run_Hopscotch(swatch, strs, "hopscotch no suffix");
    showTimings(swatch);
-
-
+*/
+/*
    run_Robin(swatch, sufstrs, "robin w/ suffix");
    showTimings(swatch);
    run_Robin(swatch, strs, "robin no suffix");
@@ -433,14 +442,14 @@ int main(int argc, char* argv[]) {
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 
-   run_GKHashSet(swatch, sufstrs, "GKHashSet w/ suffix");
+   run_GHashSet(swatch, sufstrs, "GHashSet w/ suffix");
    showTimings(swatch);
-   run_GKHashSet(swatch, strs, "GKHashSet no suffix");
+   run_GHashSet(swatch, strs, "GHashSet no suffix");
    showTimings(swatch);
-
-   run_GKHashSetShk(swatch, sufstrs, "GKHashSetShk w/ suffix");
+*/
+   run_GHashSetShk(swatch, sufstrs, "GHashSetShk w/ suffix");
    showTimings(swatch);
-   run_GKHashSetShk(swatch, strs, "GKHashSetShk no suffix");
+   run_GHashSetShk(swatch, strs, "GHashSetShk no suffix");
    showTimings(swatch);
 
 /*
