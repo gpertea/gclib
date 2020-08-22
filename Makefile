@@ -121,7 +121,7 @@ debug: all
 OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
-htest.o: htest.cpp GKHash.hh
+htest.o: htest.cpp GHashMap.hh
 htest:  $(OBJS) htest.o city.o
 	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o

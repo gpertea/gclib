@@ -106,7 +106,7 @@ struct cstr_hash {
 };
 
 void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
-	GHash<int> ghash;
+	old::GHash<int> ghash;
 	int num_add=0, num_rm=0, num_clr=0;
 	GMessage("----------------- %s ----------------\n", label);
 	ghash.Clear();
@@ -296,7 +296,7 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
   //GHashSet<> khset;
-  GQStrSet<> khset;
+  GHash<int> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -307,7 +307,7 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
 	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
 		case 0: if (cl_i==0) cl_i=i;
-			khset.Add(hstrs[i]->str.chars()); num_add++; break;
+			khset.Add(hstrs[i]->str.chars(), i); num_add++; break;
 		case 1:if (qryMode) break;
 			if (khset.Remove(hstrs[i]->str.chars())<0)
 				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
@@ -319,7 +319,8 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
 				//with strings from hstrs[cl_i .. i-1] range
 				for(int j=cl_i;j<i;j+=3) {
 					if (hstrs[j]->cmd) continue;
-					if (!khset[hstrs[j]->str.chars()])
+					int* v=khset[hstrs[j]->str.chars()];
+					if (*v!=j)
 						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
 				}
 			}
@@ -332,9 +333,9 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
-void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+void run_GHashMapShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GQSet<const char*> khset;
+  GHashMap<const char*, int> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -345,7 +346,7 @@ void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
 	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
 		case 0: if (cl_i==0) cl_i=i;
-			khset.Add(hstrs[i]->str.chars()); num_add++; break;
+			khset.Add(hstrs[i]->str.chars(),i); num_add++; break;
 		case 1:if (qryMode) break;
 			if (khset.Remove(hstrs[i]->str.chars())<0)
 				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
@@ -357,7 +358,8 @@ void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
 				//with strings from hstrs[cl_i .. i-1] range
 				for(int j=cl_i;j<i;j+=3) {
 					if (hstrs[j]->cmd) continue;
-					if (!khset[hstrs[j]->str.chars()])
+					int* v=khset[hstrs[j]->str.chars()];
+					if (*v!=j)
 						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
 				}
 			}
@@ -516,8 +518,6 @@ int main(int argc, char* argv[]) {
    GResUsage swatch;
 
 
-   GMessage("size of std::string = %d, of GStr = %d\n", sizeof(std::string), sizeof(GStr));
-
    //run_GHash(swatch, sufstrs, "GHash w/ suffix");
    //showTimings(swatch);
    //run_GHash(swatch, strs, "GHash no suffix");
@@ -543,14 +543,14 @@ int main(int argc, char* argv[]) {
 */
    run_GHashMap(swatch, sufstrs, "GHashMap w/ suffix");
    showTimings(swatch);
-// run_GHashMap(swatch, strs, "GHashMap no suffix");
-//  showTimings(swatch);
-/*
-   run_GHashSetShk(swatch, sufstrs, "GHashSetShk w/ suffix");
+   //run_GHashMap(swatch, strs, "GHashMap no suffix");
+   //showTimings(swatch);
+
+   run_GHashMapShk(swatch, sufstrs, "GHashSetShk w/ suffix");
    showTimings(swatch);
-   run_GHashSetShk(swatch, strs, "GHashSetShk no suffix");
-   showTimings(swatch);
-*/
+   //run_GHashMapShk(swatch, strs, "GHashSetShk no suffix");
+   //showTimings(swatch);
+
 /*
    run_Bytell(swatch, sufstrs, "bytell w/ suffix");
    showTimings(swatch);
