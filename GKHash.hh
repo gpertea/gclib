@@ -101,10 +101,137 @@ template <typename K> struct GHashKey_Hash { //K generic (struct or pointer)
 
 template <> struct GHashKey_Hash<const char*> {
    inline uint32_t operator()(const GCharPtrKey& s) const {
-      return CityHash32(s.key, strlen(s.key)); //when K is a generic structure
+      return CityHash32(s.key, strlen(s.key));
    }
 };
 
+template <typename K> struct GQKey_Hash { //K generic (struct or pointer)
+   inline uint32_t operator()(const K& s) const {
+	  //WARNING: alignment padding can mess this up
+      return CityHash32((const char *) &s, sizeof(K)); //when K is a generic type
+   }
+};
+
+template <> struct GQKey_Hash<const char*> {
+   inline uint32_t operator()(const char* s) const {
+      return CityHash32(s, strlen(s));
+   }
+};
+
+template <typename K> struct GQKey_Eq { //K is a type having the == operator defined
+    inline bool operator()(const K& x, const K& y) const {
+      return (x == y); //requires == operator to be defined for key type
+    }
+};
+
+template <> struct GQKey_Eq<const char*> {
+    inline bool operator()(const char* x, const char* y) const {
+      return (strcmp(x, y) == 0);
+    }
+};
+
+
+//GQSet is never making a deep copy of the char* key, it only stores the pointer
+template <typename K=const char*, class Hash=GQKey_Hash<K>, class Eq=GQKey_Eq<K> >
+  class GQSet: public std::conditional< is_char_ptr<K>::value,
+    klib::KHashSetCached< K, Hash,  Eq >,
+	klib::KHashSet< K, Hash,  Eq > >::type  {
+public:
+	inline int Add(const K ky) { // return -1 if the key already exists
+		int absent=-1;
+		uint32_t i=this->put(ky, &absent);
+		if (absent==1) //key was actually added
+		   return i;
+		return -1;
+	}
+
+	int Remove(K ky) { //return index being removed, or -1 if no such key exists
+		  uint32_t i=this->get(ky);
+		  if (i!=this->end()) {
+			  this->del(i);
+	    	  return i;
+		  }
+		  return -1;
+	}
+
+	inline bool operator[](K ky) { //RH only (read-only)
+		return (this->get(ky)!=this->end());
+	}
+
+	inline void Clear() {
+		/*int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+		}*/
+		this->clear(); //does not shrink !
+	}
+
+	inline void Reset() {
+		/*int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+		}*/
+		this->clear();
+		GFREE(this->used); GFREE(this->keys);
+		this->bits=0; this->count=0;
+	}
+    ~GQSet() {
+    	this->Reset();
+    }
+
+};
+
+//GQStrSet stores a copy of the added string
+template <class Hash=GQKey_Hash<const char*>, class Eq=GQKey_Eq<const char*> >
+  class GQStrSet: public klib::KHashSetCached< const char*, Hash,  Eq > {
+  public:
+
+	inline int Add(const char* ky) { // return -1 if the key already exists
+		int absent=-1;
+		uint32_t i=this->put(ky, &absent);
+		if (absent==1) {//key was actually added
+		   const char* s=Gstrdup(ky);
+		   this->key(i)=s; //store a copy of the key string
+		   return i;
+		}
+		//key was already there
+		return -1;
+	}
+
+	int Remove(const char* ky) { //return index being removed, or -1 if no such key exists
+		  uint32_t i=this->get(ky);
+		  if (i!=this->end()) {
+			  GFREE(this->key(i)); //free string copy
+			  this->del(i);
+	    	  return i;
+		  }
+		  return -1;
+	}
+
+	inline bool operator[](const char* ky) { //RH only (read-only)
+		return (this->get(ky)!=this->end());
+	}
+
+	inline void Clear() {
+		int nb=this->n_buckets();
+		for (int i = 0; i != nb; ++i) {
+			if (!this->__kh_used(this->used, i)) continue;
+			//deallocate string copy
+			GFREE(this->key(i));
+		}
+		this->clear(); //does not shrink !
+	}
+
+	inline void Reset() {
+		this->Clear();
+		GFREE(this->used); GFREE(this->keys);
+		this->bits=0; this->count=0;
+	}
+    ~GQStrSet() {
+    	this->Reset();
+    }
+
+};
 /*
 template<typename T>
   using GHashKeyT_Eq = typename std::conditional< std::is_pointer<T>::value,

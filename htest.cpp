@@ -23,11 +23,6 @@ bool qryMode=false;
 bool checkRM=false;
 int numClusters=500;
 
-
-static void strFreeProc(pointer item) {
-      GFREE(item);
-}
-
 struct HStrData {
 	int cmd; // 0=add, 1=remove, 2=clear
 	GStr str;
@@ -299,7 +294,8 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 void run_GHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
-  GHashSet<> khset;
+  //GHashSet<> khset;
+  GQStrSet<> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -337,7 +333,7 @@ void run_GHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
 
 void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GHashSet<const char*> khset;
+  GQSet<const char*> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -348,7 +344,7 @@ void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
 	  } else prevcmd=hstrs[i]->cmd;
 	  switch (hstrs[i]->cmd) {
 		case 0: if (cl_i==0) cl_i=i;
-			khset.shkAdd(hstrs[i]->str.chars()); num_add++; break;
+			khset.Add(hstrs[i]->str.chars()); num_add++; break;
 		case 1:if (qryMode) break;
 			if (khset.Remove(hstrs[i]->str.chars())<0)
 				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
@@ -377,8 +373,6 @@ void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
 int main(int argc, char* argv[]) {
  GPVec<HStrData> strs;
  GPVec<HStrData> sufstrs;
- strs.setFreeItem(strFreeProc);
- sufstrs.setFreeItem(strFreeProc);
  //GArgs args(argc, argv, "hg:c:s:t:o:p:help;genomic-fasta=COV=PID=seq=out=disable-flag;test=");
  GArgs args(argc, argv, "hQCn:");
  //fprintf(stderr, "Command line was:\n");
@@ -413,6 +407,7 @@ int main(int argc, char* argv[]) {
 		   if (f==NULL) GError("Error: could not open file %s !\n", a);
 		   int num=loadStrings(f, sufstrs, strs, numClusters);
 		   total+=num;
+		   fclose(f);
 	   }
   }
    GResUsage swatch;
@@ -420,8 +415,8 @@ int main(int argc, char* argv[]) {
 
    GMessage("size of std::string = %d, of GStr = %d\n", sizeof(std::string), sizeof(GStr));
 
-   run_GHash(swatch, sufstrs, "GHash w/ suffix");
-   showTimings(swatch);
+   //run_GHash(swatch, sufstrs, "GHash w/ suffix");
+   //showTimings(swatch);
    //run_GHash(swatch, strs, "GHash no suffix");
    //showTimings(swatch);
 
@@ -436,22 +431,23 @@ int main(int argc, char* argv[]) {
    showTimings(swatch);
    run_Robin(swatch, strs, "robin no suffix");
    showTimings(swatch);
-
+*/
+/*
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
-
+*/
    run_GHashSet(swatch, sufstrs, "GHashSet w/ suffix");
    showTimings(swatch);
-   run_GHashSet(swatch, strs, "GHashSet no suffix");
-   showTimings(swatch);
-*/
+// run_GHashSet(swatch, strs, "GHashSet no suffix");
+//  showTimings(swatch);
+/*
    run_GHashSetShk(swatch, sufstrs, "GHashSetShk w/ suffix");
    showTimings(swatch);
    run_GHashSetShk(swatch, strs, "GHashSetShk no suffix");
    showTimings(swatch);
-
+*/
 /*
    run_Bytell(swatch, sufstrs, "bytell w/ suffix");
    showTimings(swatch);

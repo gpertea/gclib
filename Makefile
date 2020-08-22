@@ -73,12 +73,38 @@ ifneq (,$(filter %release %nodebug, $(MAKECMDGOALS)))
   CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O3)
   CXXFLAGS += -DNDEBUG $(BASEFLAGS)
 else
-  # -- debug build
-  CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
-  ifneq (, $(findstring darwin, $(DMACH)))
-      CXXFLAGS += -gdwarf-3
-  endif
-  CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG $(BASEFLAGS)
+  ifneq (,$(filter %memcheck %tsan, $(MAKECMDGOALS)))
+     #use sanitizer in gcc 4.9+
+     GCCVER49 := $(shell expr `${CXX} -dumpversion | cut -f1,2 -d.` \>= 4.9)
+     ifeq "$(GCCVER49)" "0"
+       $(error gcc version 4.9 or greater is required for this build target)
+     endif
+     CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
+     SANLIBS :=
+     ifneq (,$(filter %tsan %tcheck %thrcheck, $(MAKECMDGOALS)))
+        # thread sanitizer only (incompatible with address sanitizer)
+        CXXFLAGS += -fno-omit-frame-pointer -fsanitize=thread -fsanitize=undefined $(BASEFLAGS)
+        SANLIBS := -ltsan
+     else
+        # address sanitizer
+        CXXFLAGS += -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address $(BASEFLAGS)
+        SANLIBS := -lasan
+     endif
+     ifeq "$(GCCVER5)" "1"
+       CXXFLAGS += -fsanitize=bounds -fsanitize=float-divide-by-zero -fsanitize=vptr
+       CXXFLAGS += -fsanitize=float-cast-overflow -fsanitize=object-size
+       #CXXFLAGS += -fcheck-pointer-bounds -mmpx
+     endif
+     CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG -fno-common -fstack-protector
+     LIBS := ${SANLIBS} -lubsan -ldl ${LIBS}
+   else
+   # -- plain debug build
+    CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS), -O0 -g)
+    ifneq (, $(findstring darwin, $(DMACH)))
+        CXXFLAGS += -gdwarf-3
+    endif
+    CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG $(BASEFLAGS)
+   endif
 endif
 
 %.o : %.cpp
@@ -86,6 +112,7 @@ endif
 
 .PHONY : all
 all:    htest
+memcheck tsan: all
 #mdtest
 nodebug: all
 release: all
