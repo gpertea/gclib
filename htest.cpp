@@ -13,7 +13,7 @@
 
 //#include "khashl.hh"
 //#include "city.h"
-#include "GKHash.hh"
+#include "GHashMap.hh"
 
 #define USAGE "Usage:\n\
   htest [-Q] [-C] [-n num_clusters] textfile.. \n\
@@ -292,7 +292,7 @@ void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
-void run_GHashSet(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
   //GHashSet<> khset;
@@ -417,12 +417,13 @@ int main(int argc, char* argv[]) {
  FILE* f=NULL;
  int total=0;
 //==== quick test area
+ /*
  std::unordered_map<SObj*, int > umap;
  GHash<int> gh;
- GPVec<SObj> ptrs;
- GQStrSet<> tset;
- GQSet<long> iset;
- GQSet<SObj*> pset;
+ GPVec<SObj> ptrs(false);
+ GQHash<int, SObj*> ihash(false);
+ GQHash<SObj*, int> phash;
+ GQStrHash<SObj*> shash;
  const char* tstrs[6] = {"twelve", "five", "nine", "eleven", "three", "nope"};
  int  vals[6]     = { 12,  5, 9, 11, 3, 777 };
  char buf[20];
@@ -432,29 +433,32 @@ int main(int argc, char* argv[]) {
    sprintf(buf, "%lx", o);
    GMessage("SObj (%s, %d) pointer added: %s\n",tstrs[i], o->val, buf);
    gh.Add(buf, new int(vals[i]));
-   tset.Add(tstrs[i]);
-   iset.Add(vals[i]);
-   pset.Add(o);
+   shash.Add(tstrs[i], o);
+   ihash.Add(vals[i], o);
+   phash.Add(o, vals[i]);
    umap[o]=vals[i];
  }
  ptrs.Sort();
- GMessage("iset has now %d entries.\n", iset.Count());
- //enumerate tset entries:
- /*
+ GMessage("shash has now %d entries.\n", shash.Count());
+ //enumerate shash entries:
  {
-   oset.startIterate();
-   while (SObj* p=oset.Next()) {
-	   GMessage("Enumerating oset entry: (%s, %d)\n",
-			    p->atr.chars(), p->val);
+   shash.startIterate();
+   SObj* iv=NULL;
+   while (const char* k=shash.Next(iv)) {
+	   GMessage("Enumerating shash entry: (%s => %lx)\n",
+			    k, iv);
    }
  }
- */
  //qry:
  for (int i=0;i<ptrs.Count();i++) {
    SObj* o=ptrs[i];
    //test tset
-   if (!pset[o])
-	   GMessage("key <%lx> not found in pset!\n", o);
+   SObj* v=shash.Find(o->atr.chars());
+   if (v==NULL)
+	   GMessage("key <%s> not found in shash!\n", o->atr.chars());
+   int* iv=phash.Find(o);
+   if (iv==NULL)
+	   GMessage("key <%lx> not found in phash!\n", o);
    //if (!oset[*o])
 //   GMessage("struct {%s, %d} not found in oset!\n", o->atr.chars(), o->val);
 
@@ -463,30 +467,32 @@ int main(int argc, char* argv[]) {
    //GMessage("Item {%s, %d} : GHash retrieved flag = %d, umap retrieved flag = %d\n",
    //  o->atr.chars(), o->val, *hv, umap[o]);
  }
-SObj* n=new SObj("test", 10);
-if (!pset[n])
-	   GMessage("key <%lx> not found in pset!\n", n);
+//SObj* n=new SObj("test", 10);
+//if (!pset[n])
+//	   GMessage("key <%lx> not found in pset!\n", n);
 
  for (int i=0;i<6;i++) {
-	 if (!tset[tstrs[i]])
-		 GMessage("key <%s> not found in tset!\n", tstrs[i]);
-	 if (!iset[vals[i]])
-		 GMessage("key <%ld> not found in iset!\n", vals[i]);
+	SObj* o=shash[tstrs[i]];
+	if (o==NULL) GMessage("key <%s> not found in shash!\n", tstrs[i]);
+	if (o && i<5) {
+		if (o->atr!=tstrs[i])
+			GMessage("shash value does not match key <%s!\n", tstrs[i]);
+	}
  }
 
-
- delete n;
+ //delete n;
  //int v=umap[n];
  //GMessage("Non-existing test entry returned value %d\n", v);
+  */
  /*
  auto found=umap.find(n);
  if (found!=umap.end()) {
    GMessage("Found flags %d for entry {\"%s\", %d}\n", found->second,
          n->atr.chars(), found->first->val );
  } else  GMessage("New test obj not found !\n");
-*/
 
  return(0);
+*/
 //==== quick test area end
  if (numargs==0) {
 	 //a="htest_data.lst";
@@ -535,9 +541,9 @@ if (!pset[n])
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */
-   run_GHashSet(swatch, sufstrs, "GHashSet w/ suffix");
+   run_GHashMap(swatch, sufstrs, "GHashMap w/ suffix");
    showTimings(swatch);
-// run_GHashSet(swatch, strs, "GHashSet no suffix");
+// run_GHashMap(swatch, strs, "GHashMap no suffix");
 //  showTimings(swatch);
 /*
    run_GHashSetShk(swatch, sufstrs, "GHashSetShk w/ suffix");
