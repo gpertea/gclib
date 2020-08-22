@@ -36,13 +36,14 @@ class GBamRecord: public GSeg {
    int clipL; //soft clipping data, as seen in the CIGAR string
    int clipR;
    int mapped_len; //sum of exon lengths
+   int uval; //user value (e.g. file index)
    bool isHardClipped() { return hard_Clipped; }
    bool isSoftClipped() { return soft_Clipped; }
    bool hasIntrons() { return has_Introns; }
    //created from a reader:
    void bfree_on_delete(bool b_free=true) { novel=b_free; }
    GBamRecord(bam1_t* from_b=NULL, bam_header_t* b_header=NULL, bool b_free=true):iflags(0), exons(1),
-		   clipL(0), clipR(0), mapped_len(0) {
+		   clipL(0), clipR(0), mapped_len(0), uval(0) {
       bam_header=NULL;
       if (from_b==NULL) {
            b=bam_init1();
@@ -58,7 +59,7 @@ class GBamRecord: public GSeg {
    }
 
    GBamRecord(GBamRecord& r):GSeg(r.start, r.end), iflags(0), exons(r.exons),
-		   clipL(r.clipL), clipR(r.clipR), mapped_len(r.mapped_len) { //copy constructor
+		   clipL(r.clipL), clipR(r.clipR), mapped_len(r.mapped_len), uval(0) { //copy constructor
 	      //makes a new copy of the bam1_t record etc.
 	      clear();
 	      b=bam_dup1(r.b);
@@ -77,6 +78,7 @@ class GBamRecord: public GSeg {
       exons = r.exons;
       clipL = r.clipL;
       clipR = r.clipR;
+      uval = r.uval;
       mapped_len=r.mapped_len;
       return *this;
       }
@@ -317,6 +319,7 @@ class GBamReader {
 class GBamWriter {
    samfile_t* bam_file;
    bam_header_t* bam_header;
+   bool sharedHeader;
  public:
    void create(const char* fname, bool uncompressed=false) {
       if (bam_header==NULL)
@@ -330,16 +333,21 @@ class GBamWriter {
       if (bam_file==NULL)
          GError("Error: could not create BAM file %s!\n",fname);
       }
+
    void create(const char* fname, bam_header_t* bh, bool uncompressed=false) {
      bam_header=bh;
      create(fname,uncompressed);
      }
 
-   GBamWriter(const char* fname, bam_header_t* bh, bool uncompressed=false) {
+   GBamWriter(const char* fname, bam_header_t* bh, bool uncompressed=false):sharedHeader(false) {
       create(fname, bh, uncompressed);
-      }
+   }
 
-   GBamWriter(const char* fname, const char* samfname, bool uncompressed=false) {
+   GBamWriter(bam_header_t* bh, const char* fname, bool uncompressed=false):sharedHeader(true) {
+	   create(fname, bh, uncompressed);
+   }
+
+   GBamWriter(const char* fname, const char* samfname, bool uncompressed=false):sharedHeader(false) {
       tamFile samf_in=sam_open(samfname);
       if (samf_in==NULL)
          GError("Error: could not open SAM file %s\n", samfname);
@@ -352,8 +360,8 @@ class GBamWriter {
 
     ~GBamWriter() {
       samclose(bam_file);
-      bam_header_destroy(bam_header);
-      }
+      if (!sharedHeader) bam_header_destroy(bam_header);
+    }
    bam_header_t* get_header() { return bam_header; }
    int32_t get_tid(const char *seq_name) {
       if (bam_header==NULL)
