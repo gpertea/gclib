@@ -69,7 +69,7 @@ template<typename T>
 
 template <typename K> struct GHashKey_Eq { //K is a type having the == operator defined
     inline bool operator()(const K& x, const K& y) const {
-      return (x == y); //requires == operator to be defined for key type
+      return (x == y); //requires == operator to be defined for K
     }
 };
 
@@ -105,11 +105,12 @@ template <> struct GHashKey_Hash<const char*> {
    }
 };
 
-template <typename K> struct GQKey_Hash { //K generic (struct or pointer)
-   inline uint32_t operator()(const K& s) const {
-	  //WARNING: alignment padding can mess this up
-      return CityHash32((const char *) &s, sizeof(K)); //when K is a generic type
-   }
+template <typename K> struct GQKey_Hash { //K generic (class, primitive, pointer except const char* )
+  //template <typename T=K> inline typename std::enable_if< std::is_trivial<T>::value, uint32_t>::type
+ uint32_t operator()(const K& s) const { //only works for trivial types!
+      static_assert(std::is_trivial<K>::value, "Error: cannot use this for non-trivial types!\n");
+      return CityHash32((const char *) &s, sizeof(K));
+    }
 };
 
 template <> struct GQKey_Hash<const char*> {
@@ -120,7 +121,7 @@ template <> struct GQKey_Hash<const char*> {
 
 template <typename K> struct GQKey_Eq { //K is a type having the == operator defined
     inline bool operator()(const K& x, const K& y) const {
-      return (x == y); //requires == operator to be defined for key type
+      return (x == y); //requires == operator to be defined for K
     }
 };
 
@@ -130,12 +131,13 @@ template <> struct GQKey_Eq<const char*> {
     }
 };
 
-
 //GQSet is never making a deep copy of the char* key, it only stores the pointer
 template <typename K=const char*, class Hash=GQKey_Hash<K>, class Eq=GQKey_Eq<K> >
   class GQSet: public std::conditional< is_char_ptr<K>::value,
     klib::KHashSetCached< K, Hash,  Eq >,
 	klib::KHashSet< K, Hash,  Eq > >::type  {
+protected:
+	uint32_t i_iter=0;
 public:
 	inline int Add(const K ky) { // return -1 if the key already exists
 		int absent=-1;
@@ -154,38 +156,55 @@ public:
 		  return -1;
 	}
 
-	inline bool operator[](K ky) { //RH only (read-only)
-		return (this->get(ky)!=this->end());
-	}
-
 	inline void Clear() {
-		/*int nb=this->n_buckets();
-		for (int i = 0; i != nb; ++i) {
-			if (!this->__kh_used(this->used, i)) continue;
-		}*/
 		this->clear(); //does not shrink !
 	}
 
 	inline void Reset() {
-		/*int nb=this->n_buckets();
-		for (int i = 0; i != nb; ++i) {
-			if (!this->__kh_used(this->used, i)) continue;
-		}*/
 		this->clear();
 		GFREE(this->used); GFREE(this->keys);
 		this->bits=0; this->count=0;
 	}
+
     ~GQSet() {
     	this->Reset();
     }
 
+	inline bool operator[](K ky) { //RH only (read-only), cannot assign (use Add instead)
+		return (this->get(ky)!=this->end());
+	}
+
+
+	int Find(K ky) {//return internal slot location if found,
+	                // or -1 if not found
+  	  uint32_t r=this->get(ky);
+  	  if (r==this->end()) return -1;
+  	  return (int)r;
+	}
+
+	void startIterate() { //iterator-like initialization
+	  i_iter=0;
+	}
+
+	K* Next() {
+		//returns a pointer to next valid key in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		uint32_t nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) return NULL;
+		++i_iter;
+		return &(this->key(i_iter-1));
+	}
+
+	inline uint32_t Count() { return this->count; }
+
 };
 
-//GQStrSet stores a copy of the added string
+//GQStrSet always allocates a copy of each added string;
+// if you don't want that (keys are shared), just use GQSet<const char*> instead
 template <class Hash=GQKey_Hash<const char*>, class Eq=GQKey_Eq<const char*> >
-  class GQStrSet: public klib::KHashSetCached< const char*, Hash,  Eq > {
+  class GQStrSet: public GQSet<const char*, Hash, Eq> {
   public:
-
 	inline int Add(const char* ky) { // return -1 if the key already exists
 		int absent=-1;
 		uint32_t i=this->put(ky, &absent);
@@ -208,10 +227,6 @@ template <class Hash=GQKey_Hash<const char*>, class Eq=GQKey_Eq<const char*> >
 		  return -1;
 	}
 
-	inline bool operator[](const char* ky) { //RH only (read-only)
-		return (this->get(ky)!=this->end());
-	}
-
 	inline void Clear() {
 		int nb=this->n_buckets();
 		for (int i = 0; i != nb; ++i) {
@@ -227,19 +242,13 @@ template <class Hash=GQKey_Hash<const char*>, class Eq=GQKey_Eq<const char*> >
 		GFREE(this->used); GFREE(this->keys);
 		this->bits=0; this->count=0;
 	}
+
     ~GQStrSet() {
     	this->Reset();
     }
 
 };
-/*
-template<typename T>
-  using GHashKeyT_Eq = typename std::conditional< std::is_pointer<T>::value,
-		 GHashKey_Eq<std::remove_pointer<T>>, GHashKey_Eq<T> > ::type;
-template<typename T>
-  using GHashKeyT_Hash = typename std::conditional< std::is_pointer<T>::value,
-		  GHashKey_Hash<std::remove_pointer<T>>, GHashKey_Hash<T> > ::type;
-*/
+
 //generic set with dedicated specialization for const char*
 //if K is a pointer to any other type, the actual pointer value is used as an integer key (int64_t)
 template <typename K=const char*, class Hash=GHashKey_Hash<K>, class Eq=GHashKey_Eq<K> >

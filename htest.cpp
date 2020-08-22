@@ -8,6 +8,7 @@
 #include <iostream>
 #include "tsl/hopscotch_map.h"
 #include "tsl/robin_map.h"
+#include <unordered_map>
 //#include "ska/bytell_hash_map.hpp"
 
 //#include "khashl.hh"
@@ -16,8 +17,10 @@
 
 #define USAGE "Usage:\n\
   htest [-Q] [-C] [-n num_clusters] textfile.. \n\
+  E.g. quick query test: ./htest -Q qtest_str.dta\n\
   \n\
  "
+//quick query test: ./htest -Q qtest_str.dta
 
 bool qryMode=false;
 bool checkRM=false;
@@ -76,7 +79,6 @@ void showTimings(GResUsage swatch) {
  GFREE(wtime);GFREE(utime);GFREE(stime); GFREE(smem);
 }
 
-
 // default values recommended by http://isthe.com/chongo/tech/comp/fnv/
 const uint32_t Prime = 0x01000193; // 16777619
 const uint32_t Seed  = 0x811C9DC5; // 2166136261
@@ -102,7 +104,6 @@ struct cstr_hash {
 		//return fnv1a(s);
 	}
 };
-
 
 void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	GHash<int> ghash;
@@ -369,6 +370,30 @@ void run_GHashSetShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 
+struct SObj {
+  GStr atr;
+  int val;
+  SObj(const char* a=NULL, const int v=0):atr(a),val(v) { }
+  bool operator<(const SObj& o) const { return val<o.val; }
+  bool operator==(const SObj& o) const {
+	  return (atr==o.atr && val==o.val);
+  }
+  uint32_t hash() const { //needed by GQSet, GQHash
+    char *buf=NULL;
+    int alen=atr.length();
+    int buflen=sizeof(alen)+atr.length()+sizeof(val);
+    GMALLOC(buf, buflen);
+    char* p=buf;
+    memcpy(p, &alen, sizeof(alen));
+    p+=sizeof(alen);
+    memcpy(p, atr.chars(), alen);
+    p+=alen;
+    memcpy(p, &val, sizeof(val));
+    uint32_t r=CityHash32(buf, buflen);
+    GFREE(buf);
+    return r;
+  }
+};
 
 int main(int argc, char* argv[]) {
  GPVec<HStrData> strs;
@@ -391,7 +416,78 @@ int main(int argc, char* argv[]) {
  const char* a=NULL;
  FILE* f=NULL;
  int total=0;
+//==== quick test area
+ std::unordered_map<SObj*, int > umap;
+ GHash<int> gh;
+ GPVec<SObj> ptrs;
+ GQStrSet<> tset;
+ GQSet<long> iset;
+ GQSet<SObj*> pset;
+ const char* tstrs[6] = {"twelve", "five", "nine", "eleven", "three", "nope"};
+ int  vals[6]     = { 12,  5, 9, 11, 3, 777 };
+ char buf[20];
+ for (int i=0;i<5;i++) {
+   SObj* o=new SObj(tstrs[i], vals[i]*10);
+   ptrs.Add(o);
+   sprintf(buf, "%lx", o);
+   GMessage("SObj (%s, %d) pointer added: %s\n",tstrs[i], o->val, buf);
+   gh.Add(buf, new int(vals[i]));
+   tset.Add(tstrs[i]);
+   iset.Add(vals[i]);
+   pset.Add(o);
+   umap[o]=vals[i];
+ }
+ ptrs.Sort();
+ GMessage("iset has now %d entries.\n", iset.Count());
+ //enumerate tset entries:
+ /*
+ {
+   oset.startIterate();
+   while (SObj* p=oset.Next()) {
+	   GMessage("Enumerating oset entry: (%s, %d)\n",
+			    p->atr.chars(), p->val);
+   }
+ }
+ */
+ //qry:
+ for (int i=0;i<ptrs.Count();i++) {
+   SObj* o=ptrs[i];
+   //test tset
+   if (!pset[o])
+	   GMessage("key <%lx> not found in pset!\n", o);
+   //if (!oset[*o])
+//   GMessage("struct {%s, %d} not found in oset!\n", o->atr.chars(), o->val);
 
+   //sprintf(buf, "%lx", o);
+   //int* hv=gh[buf];
+   //GMessage("Item {%s, %d} : GHash retrieved flag = %d, umap retrieved flag = %d\n",
+   //  o->atr.chars(), o->val, *hv, umap[o]);
+ }
+SObj* n=new SObj("test", 10);
+if (!pset[n])
+	   GMessage("key <%lx> not found in pset!\n", n);
+
+ for (int i=0;i<6;i++) {
+	 if (!tset[tstrs[i]])
+		 GMessage("key <%s> not found in tset!\n", tstrs[i]);
+	 if (!iset[vals[i]])
+		 GMessage("key <%ld> not found in iset!\n", vals[i]);
+ }
+
+
+ delete n;
+ //int v=umap[n];
+ //GMessage("Non-existing test entry returned value %d\n", v);
+ /*
+ auto found=umap.find(n);
+ if (found!=umap.end()) {
+   GMessage("Found flags %d for entry {\"%s\", %d}\n", found->second,
+         n->atr.chars(), found->first->val );
+ } else  GMessage("New test obj not found !\n");
+*/
+
+ return(0);
+//==== quick test area end
  if (numargs==0) {
 	 //a="htest_data.lst";
 	 a="htest_over500.lst";
@@ -400,6 +496,7 @@ int main(int argc, char* argv[]) {
 	 GMessage("loading %d clusters from file..\n", numClusters);
 	 int num=loadStrings(f, sufstrs, strs, numClusters);
 	 total+=num;
+	 fclose(f);
  }
  else {
 	   while ((a=args.nextNonOpt())) {
