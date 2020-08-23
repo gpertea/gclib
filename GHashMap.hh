@@ -110,6 +110,9 @@ public:
 		return (this->get(ky)!=this->end());
 	}
 
+	inline bool hasKey(K ky) {
+		return (this->get(ky)!=this->end());
+	}
 
 	int Find(K ky) {//return internal slot location if found,
 	                // or -1 if not found
@@ -311,11 +314,11 @@ public:
 	  return &(this->value(r));
 	}
 
-	bool hasKey(K ky) {
+	inline bool hasKey(K ky) {
 		return (this->get(ky)!=this->end());
 	}
 
-	void startIterate() { //iterator-like initialization
+	inline void startIterate() { //iterator-like initialization
 	  i_iter=0;
 	}
 
@@ -346,6 +349,34 @@ public:
 		++i_iter;
 		return k;
 	}
+
+	template <typename T=V> inline
+				typename std::enable_if< !std::is_pointer<T>::value, T*>::type
+	  NextData () {
+		//returns a pointer to next key entry in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		uint32_t nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) return NULL;
+		T* val=&(this->value(i_iter));
+		++i_iter;
+		return val;
+	}
+
+	template <typename T=V> inline
+				typename std::enable_if< std::is_pointer<T>::value, T>::type
+	  NextData () {
+		//returns a pointer to next key entry in the table (NULL if no more)
+		if (this->count==0) return NULL;
+		uint32_t nb=this->n_buckets();
+		while (i_iter<nb && !this->occupied(i_iter)) i_iter++;
+		if (i_iter==nb) return NULL;
+		T val=this->value(i_iter);
+		++i_iter;
+		return val;
+	}
+
+
 
 	inline uint32_t Count() { return this->count; }
 

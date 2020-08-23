@@ -2,15 +2,15 @@
 #define _GHASHT_HH
 #include "GBase.h"
 //----------------------------------------------
-//  Hash table templates based on Jeff Preshing's code
+//  Int Hash table templates
 // ---------------------------------------------
 //  Maps 32-bit integers to user data
 //  Uses open addressing with linear probing.
 //  In the m_cells array, key = 0 is reserved to indicate an unused cell.
 //  Actual value for key 0 (if any) is stored in m_zeroCell.
 //  The hash table automatically doubles in size when it becomes 75% full.
-//  The hash table never shrinks in size, even after Clear(),
-//  unless you explicitly call Compact().
+//  The hash table never shrinks in size
+//  unless you explicitly call Clear() or Compact().
 //----------------------------------------------
 inline uint32_t upper_power_of_two(uint32_t v) {
     v--;
@@ -228,7 +228,7 @@ public:
 };
 
 
-// -- from code.google.com/p/smhasher/wiki/MurmurHash3
+// from code.google.com/p/smhasher/wiki/MurmurHash3
 inline uint32_t integerHash(uint32_t h)
 {
 	h ^= h >> 16;
@@ -239,19 +239,15 @@ inline uint32_t integerHash(uint32_t h)
 	return h;
 }
 
-inline int32_t int_hashfunc_Wang(int32_t key) {
- key += ~(key << 15);
- key ^=  (key >> 10);
- key +=  (key << 3);
- key ^=  (key >> 6);
- key += ~(key << 11);
- key ^=  (key >> 16);
- return key;
-}
-
-// -- from Heng Li's khash.h:
-inline uint32_t int64_hashfunc(uint64_t k) {
-	return (uint32_t)(k>>33^k^k<<11);
+// from code.google.com/p/smhasher/wiki/MurmurHash3
+inline uint64_t integerHash(uint64_t k)
+{
+	k ^= k >> 33;
+	k *= 0xff51afd7ed558ccd;
+	k ^= k >> 33;
+	k *= 0xc4ceb9fe1a85ec53;
+	k ^= k >> 33;
+	return k;
 }
 
 #define GIHASH_FIRST_CELL(hash) (m_cells + ((hash) & (m_arraySize - 1)))

@@ -1,7 +1,6 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.12.1"
-#include <utility> //for city hash
+#define GCLIB_VERSION "0.12.2"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
