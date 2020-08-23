@@ -296,6 +296,47 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
   //GHashSet<> khset;
+  GHash<int, GHashKey_city32<const char*>, GHashKey_Eq<const char*>, uint32_t> khset;
+  GMessage("----------------- %s ----------------\n", label);
+  int cl_i=0;
+  swatch.start();
+  int prevcmd=2;
+  for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
+	  switch (hstrs[i]->cmd) {
+		case 0: if (cl_i==0) cl_i=i;
+			khset.Add(hstrs[i]->str.chars(), i); num_add++; break;
+		case 1:if (qryMode) break;
+			if (khset.Remove(hstrs[i]->str.chars())<0)
+				if (checkRM) GMessage("Warning: key %s could not be removed!\n", hstrs[i]->str.chars());
+			num_rm++;
+			break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				//with strings from hstrs[cl_i .. i-1] range
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					int* v=khset[hstrs[j]->str.chars()];
+					if (*v!=j)
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			khset.Clear(); num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  khset.Clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+void run_GxxHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  //GKHashSet<const char*> khset;
+  //GHashSet<> khset;
   GHash<int> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
@@ -518,8 +559,8 @@ int main(int argc, char* argv[]) {
    GResUsage swatch;
 
 
-   //run_GHash(swatch, sufstrs, "GHash w/ suffix");
-   //showTimings(swatch);
+   run_GHash(swatch, sufstrs, "GHash w/ suffix");
+   showTimings(swatch);
    //run_GHash(swatch, strs, "GHash no suffix");
    //showTimings(swatch);
 
@@ -541,13 +582,17 @@ int main(int argc, char* argv[]) {
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */
-   run_GHashMap(swatch, sufstrs, "GHashMap w/ suffix");
+   run_GHashMap(swatch, sufstrs, "GHashMap city32 w/ suffix");
    showTimings(swatch);
+
+   run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash64 w/ suffix");
+   showTimings(swatch);
+
    //run_GHashMap(swatch, strs, "GHashMap no suffix");
    //showTimings(swatch);
 
-   run_GHashMapShk(swatch, sufstrs, "GHashSetShk w/ suffix");
-   showTimings(swatch);
+   //run_GHashMapShk(swatch, sufstrs, "GHashSetShk w/ suffix");
+   //showTimings(swatch);
    //run_GHashMapShk(swatch, strs, "GHashSetShk no suffix");
    //showTimings(swatch);
 
