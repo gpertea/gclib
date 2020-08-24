@@ -100,7 +100,7 @@ struct cstr_eq {
 
 struct cstr_hash {
 	inline uint32_t operator()(const char* s) const {
-		return CityHash32(s, std::strlen(s));
+		return XXH32(s, std::strlen(s),0);
 		//return fnv1a(s);
 	}
 };
@@ -296,7 +296,7 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
   //GHashSet<> khset;
-  GHash<int, GHashKey_city32<const char*>, GHashKey_Eq<const char*>, uint32_t> khset;
+  GHash<int, cstr_hash, GHashKey_Eq<const char*>, uint32_t> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -335,8 +335,6 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
 
 void run_GxxHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  //GKHashSet<const char*> khset;
-  //GHashSet<> khset;
   GHash<int> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
@@ -420,21 +418,6 @@ struct SObj {
   bool operator<(const SObj& o) const { return val<o.val; }
   bool operator==(const SObj& o) const {
 	  return (atr==o.atr && val==o.val);
-  }
-  uint32_t hash() const { //needed by GQSet, GQHash
-    char *buf=NULL;
-    int alen=atr.length();
-    int buflen=sizeof(alen)+atr.length()+sizeof(val);
-    GMALLOC(buf, buflen);
-    char* p=buf;
-    memcpy(p, &alen, sizeof(alen));
-    p+=sizeof(alen);
-    memcpy(p, atr.chars(), alen);
-    p+=alen;
-    memcpy(p, &val, sizeof(val));
-    uint32_t r=CityHash32(buf, buflen);
-    GFREE(buf);
-    return r;
   }
 };
 
@@ -582,7 +565,7 @@ int main(int argc, char* argv[]) {
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */
-   run_GHashMap(swatch, sufstrs, "GHashMap city32 w/ suffix");
+   run_GHashMap(swatch, sufstrs, "GHashMap xxHash32 w/ suffix");
    showTimings(swatch);
 
    run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash64 w/ suffix");
