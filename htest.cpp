@@ -8,8 +8,8 @@ namespace old {
 #include "GResUsage.h"
 #include <cstdint>
 #include <iostream>
-#include "tsl/hopscotch_map.h"
-#include "tsl/robin_map.h"
+//#include "tsl/hopscotch_map.h"
+//#include "tsl/robin_map.h"
 #include <unordered_map>
 //#include "ska/bytell_hash_map.hpp"
 
@@ -154,7 +154,7 @@ void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	ghash.Clear();
 	GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-
+/*
 void run_Hopscotch(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   //tsl::hopscotch_map<const char*, int, cstr_hash, cstr_eq> hsmap;
@@ -241,7 +241,7 @@ void run_Robin(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   rmap.clear();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
-/*
+
 void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   ska::bytell_hash_map<const char*, int, cstr_hash, cstr_eq> bmap;
