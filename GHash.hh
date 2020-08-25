@@ -18,7 +18,6 @@
 //#define GSTR_HASH(s) fnv1a_hash(s)
 //#define GSTR_HASH(s) murmur3(s)
 
-namespace old {
 template <class OBJ> class GHash {
 protected:
 	struct GHashEntry {
@@ -620,6 +619,5 @@ public:
 	}
 
 };
-}
 
 #endif
