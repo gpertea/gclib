@@ -373,7 +373,7 @@ void GThread::detach()
 
 void GThread::wait_all() {
   while (GThread::num_running()>0)
-	current_thread::sleep_for(2);
+	current_thread::sleep_for(1);
 }
 
 
@@ -445,7 +445,7 @@ void current_thread::yield() {
 // Example usage:
 // // Sleep for 100 milliseconds:
 // current_thread::sleep_for(100);
-void current_thread::sleep_for(const int32_t mstime) {
+void current_thread::sleep_for(const int mstime) {
 #if defined(_GTHREADS_WIN32_)
   Sleep(mstime);
 #else
