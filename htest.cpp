@@ -2,7 +2,9 @@
 #include "GArgs.h"
 #include "GStr.h"
 #include "GVec.hh"
-#include "GHash.hh"
+namespace old {
+ #include "GHash.hh"
+}
 #include "GResUsage.h"
 #include <cstdint>
 #include <iostream>
