@@ -95,6 +95,9 @@ freely, subject to the following restrictions:
     #undef __UNDEF_LEAN_AND_MEAN
   #endif
 #else
+  #ifdef __CYGWIN__
+    #define _BSD_SOURCE
+  #endif 
   #include <pthread.h>
   #include <signal.h>
   #include <sched.h>
@@ -772,6 +775,7 @@ public:
     	int r=tcounter;
     	return r;
     }
+#ifdef _GTHREADS_POSIX_
     static size_t defaultStackSize() {
     	pthread_attr_t attr;
     	size_t stacksize;
@@ -780,6 +784,7 @@ public:
     	pthread_attr_destroy(&attr);
     	return stacksize;
     }
+#endif
     static int liveCount() {
       //return number of running (live) threads
       return num_running();
@@ -821,7 +826,7 @@ namespace current_thread {
   // Example usage:
   // // Sleep for 100 milliseconds:
   // current_thread::sleep_for(100);
-  void sleep_for(const int32_t mstime);
+  void sleep_for(const int mstime);
 }
 
 // Define/macro cleanup

@@ -1,16 +1,14 @@
-INCDIRS := -I. -I${GDIR} -I${BAM}
+INCDIRS := 
+#-I${BAM}
 
 CXX   := $(if $(CXX),$(CXX),g++)
-
 LINKER  := $(if $(LINKER),$(LINKER),g++)
-
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
-
 LIBS    := 
 
+DMACH := $(shell ${CXX} -dumpmachine)
 
-# A simple hack to check if we are on Windows or not (i.e. are we using mingw32-make?)
-ifeq ($(findstring mingw32, $(MAKE)), mingw32)
+ifneq (, $(findstring mingw32, $(DMACH)))
 WINDOWS=1
 endif
 
@@ -21,24 +19,27 @@ ifndef WINDOWS
 TLIBS += -lpthread
 endif
 
+ifneq (, $(findstring linux, $(DMACH)))
+ # -lrt only needed for Linux systems
+ LIBS+= -lrt
+endif
 
-
-DMACH := $(shell ${CXX} -dumpmachine)
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
 DMACH := windows
-ifeq ($(findstring 4.5.,$(shell g++ -dumpversion)), 4.5.)
+ifeq ($(findstring 4.5.,$(shell ${CXX} -dumpversion)), 4.5.)
 LDFLAGS += -static-libstdc++ -static-libgcc
 endif
 endif
 
 # Misc. system commands
-ifdef WINDOWS
-RM = del /Q
-else
+# assuming on Windows this is run under MSYS or cygwin
+#ifdef WINDOWS
+#RM = del /Q
+#else
 RM = rm -f
-endif
+#endif
 
 # File endings
 ifdef WINDOWS
@@ -47,9 +48,7 @@ else
 EXE =
 endif
 
-CC      := ${CXX}
-
-BASEFLAGS  := -Wall -Wextra ${INCDIRS} $(MARCH) \
+BASEFLAGS  := -std=c++11 -Wall -Wextra ${INCDIRS} $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
 GCCVER5 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 5)
@@ -69,34 +68,51 @@ GCC_MINOR:=$(word 2,$(GCC_VERSION))
 #GCC_SUB:=$(word 3,$(GCC_VERSION))
 GCC_SUB:=x
 
-GCC45OPTS :=
-GCC45OPTMAIN :=
-
 ifneq (,$(filter %release %nodebug, $(MAKECMDGOALS)))
   # -- release build
   CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O3)
   CXXFLAGS += -DNDEBUG $(BASEFLAGS)
-  ifeq ($(shell expr $(GCC_MAJOR).$(GCC_MINOR) '>=' 4.5),1)
-    CXXFLAGS += -flto
-    GCC45OPTS := -flto
-    GCC45OPTMAIN := -fwhole-program
-  endif
 else
-  # -- debug build
-  CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
-  ifneq (, $(findstring darwin, $(DMACH)))
-      CXXFLAGS += -gdwarf-3
-  endif
-  CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG $(BASEFLAGS)
+  ifneq (,$(filter %memcheck %tsan, $(MAKECMDGOALS)))
+     #use sanitizer in gcc 4.9+
+     GCCVER49 := $(shell expr `${CXX} -dumpversion | cut -f1,2 -d.` \>= 4.9)
+     ifeq "$(GCCVER49)" "0"
+       $(error gcc version 4.9 or greater is required for this build target)
+     endif
+     CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS),-g -O0)
+     SANLIBS :=
+     ifneq (,$(filter %tsan %tcheck %thrcheck, $(MAKECMDGOALS)))
+        # thread sanitizer only (incompatible with address sanitizer)
+        CXXFLAGS += -fno-omit-frame-pointer -fsanitize=thread -fsanitize=undefined $(BASEFLAGS)
+        SANLIBS := -ltsan
+     else
+        # address sanitizer
+        CXXFLAGS += -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address $(BASEFLAGS)
+        SANLIBS := -lasan
+     endif
+     ifeq "$(GCCVER5)" "1"
+       CXXFLAGS += -fsanitize=bounds -fsanitize=float-divide-by-zero -fsanitize=vptr
+       CXXFLAGS += -fsanitize=float-cast-overflow -fsanitize=object-size
+       #CXXFLAGS += -fcheck-pointer-bounds -mmpx
+     endif
+     CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG -fno-common -fstack-protector
+     LIBS := ${SANLIBS} -lubsan -ldl ${LIBS}
+   else
+   # -- plain debug build
+    CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS), -O0 -g)
+    ifneq (, $(findstring darwin, $(DMACH)))
+        CXXFLAGS += -gdwarf-3
+    endif
+    CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG $(BASEFLAGS)
+   endif
 endif
 
 %.o : %.cpp
 	${CXX} ${CXXFLAGS} -c $< -o $@
 
-
 .PHONY : all
-#all:    htest
-all: umap
+all:    htest
+memcheck tsan: all
 #mdtest
 nodebug: all
 release: all
@@ -105,16 +121,14 @@ debug: all
 OBJS := GBase.o GStr.o GArgs.o GResUsage.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
-	@echo "> GCC Opt. string is: "$(GCC45OPTS)
-htest:  $(OBJS) htest.o GHash.hh
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
-umap:  $(OBJS) umap.o GHash.hh
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
+htest.o: htest.cpp GHashMap.hh
+htest:  $(OBJS) htest.o
+	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 mdtest: $(OBJS) mdtest.o
-	${LINKER} ${LDFLAGS} $(GCC45OPTS) $(GCC45OPTMAIN) -o $@ ${filter-out %.a %.so, $^} ${LIBS}
+	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 # target for removing all object files
 
 .PHONY : clean
 clean:: 
-	@${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
-	@${RM} core.*
+	${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
+	${RM} core.*
