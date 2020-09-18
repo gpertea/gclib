@@ -20,8 +20,7 @@ void GFastaIndex::addRecord(const char* seqname, uint seqlen, off_t foffs, int l
      else {
          farec=new GFastaRec(seqlen,foffs,llen,llen_full);
          records.Add(seqname,farec);
-         //farec->seqname=records.getLastKey();
-         farec->seqname=seqname;
+         farec->seqname=records.getLastKey();
          }
 }
 
