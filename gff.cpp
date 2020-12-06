@@ -364,6 +364,36 @@ bool GffLine::parseSegmentList(GVec<GSeg>& segs, char* str) {
 	return segs_valid;
 }
 
+void GffLine::ensembl_GFF_ID_process(char*& id) {
+	char* n=NULL;
+	if (startsWith(id, "gene:")) {
+		n=Gstrdup(id+5);
+		GFREE(id);
+		id=n;
+	}
+	else if (startsWith(id, "transcript:")) {
+		    n=Gstrdup(id+11);
+		    GFREE(id);
+		    id=n;
+	}
+}
+
+void GffLine::ensembl_GTF_ID_process(char*& id) {
+	char* v=NULL;
+	if (startsWith(id, "ENSG")) {
+	  v=extractAttr("gene_version");
+	}
+	else if (startsWith(id, "ENST")) {
+		v=extractAttr("transcript_version");
+	}
+	if (v!=NULL) {
+		char* n=Gstrdup(id, strlen(v)+1);
+		strcat(n,".");strcat(n,v);
+		GFREE(id);
+		id=n;
+	}
+}
+
 GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len(0),
 		dupline(NULL), line(NULL), llen(0), gseqname(NULL), track(NULL),
 		ftype(NULL), ftype_id(-1), info(NULL), fstart(0), fend(0), //qstart(0), qend(0), qlen(0),
@@ -519,14 +549,26 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  char *gtf_gid=NULL;
  if (reader->is_gff3 || reader->gff_type==0) {
 	ID=extractAttr("ID=",true);
+	if (ID!=NULL && reader->processEnsemblID()) {
+		ensembl_GFF_ID_process(ID);
+	}
 	Parent=extractAttr("Parent=",true);
+	if (Parent!=NULL && reader->processEnsemblID()) {
+		ensembl_GFF_ID_process(Parent);
+	}
+
 	if (reader->gff_type==0) {
 		if (ID!=NULL || Parent!=NULL) reader->is_gff3=true;
 			else { //check if it looks like a GTF
 				gtf_tid=extractAttr("transcript_id", true, true);
-				if (gtf_tid==NULL) {
+				if (gtf_tid!=NULL && reader->processEnsemblID()) {
+					ensembl_GTF_ID_process(gtf_tid);
+				}
+				else {
 					gtf_gid=extractAttr("gene_id", true, true);
-					if (gtf_gid==NULL) return; //cannot determine file type yet
+					if (gtf_gid!=NULL && reader->processEnsemblID())
+						     ensembl_GTF_ID_process(gtf_gid);
+						else return; //cannot determine file type yet
 				}
 				reader->is_gtf=true;
 			}
@@ -698,8 +740,14 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 	 }
 	 if (is_gene) {
 		 reader->gtf_gene=true;
-		 ID = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true); //Ensemble GTF might lack this
+		 ID = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
+		 //Ensemble GTF might lack transcript_id !
+		 if (ID!=NULL && gtf_tid==NULL && reader->processEnsemblID())
+ 					ensembl_GTF_ID_process(ID);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
+		 if (gene_id!=NULL && gtf_gid==NULL && reader->processEnsemblID())
+ 					ensembl_GTF_ID_process(gene_id);
+
 		 if (ID==NULL) {
 			 //no transcript_id -- this should not be valid GTF2 format, but Ensembl (Gencode?)
 			 //has being known to add "gene" features with only gene_id in their GTF
@@ -716,15 +764,23 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 			 	 //something is wrong here, cannot parse the GTF ID
 				 GMessage("Warning: invalid GTF record, transcript_id not found:\n%s\n", l);
 				 return;
-		 }
+		 } else if (gtf_tid==NULL && reader->processEnsemblID())
+				ensembl_GTF_ID_process(ID);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
-		if (gene_id!=NULL)
+		 if (gene_id!=NULL) {
+			if (gtf_gid==NULL && reader->processEnsemblID())
+			 					ensembl_GTF_ID_process(gene_id);
 			Parent=Gstrdup(gene_id);
+		}
 		reader->gtf_transcript=true;
 		is_gtf_transcript=1;
-	 } else { //must be an exon type
+	 } else { //must be an exon type ?
 		 Parent = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
+		 if (Parent!=NULL && gtf_tid==NULL && reader->processEnsemblID())
+ 					ensembl_GTF_ID_process(Parent);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true); // for GTF this is the only attribute accepted as geneID
+		 if (gene_id!=NULL && gtf_gid==NULL && reader->processEnsemblID())
+ 					ensembl_GTF_ID_process(gene_id);
 		 //old pre-GTF2 formats like Jigsaw's (legacy support)
 		 if (Parent==NULL && exontype==exgffExon) {
 			 if (startsWith(track,"jigsaw")) {

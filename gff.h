@@ -262,6 +262,8 @@ class GffLine {
     	GFREE(parents);
     	parents=NULL;
     }
+    void ensembl_GFF_ID_process(char*& id);
+    void ensembl_GTF_ID_process(char*& id);
     static char* extractGFFAttr(char*& infostr, const char* oline, const char* pre, bool caseStrict=false,
     		bool enforce_GTF2=false, int* rlen=NULL, bool deleteAttr=true);
     char* extractAttr(const char* pre, bool caseStrict=false, bool enforce_GTF2=false, int* rlen=NULL){
@@ -1166,6 +1168,9 @@ class GffReader {
        bool sortByLoc:1; //if records should be sorted by location
        bool refAlphaSort:1; //if sortByLoc, reference sequences are
                        // sorted lexically instead of their id#
+       //Ensembl ID processing:
+       bool xEnsemblID:1; //for ensemble GTF merge gene_version and transcript_version into the ID
+                //for ensemble GFF3, cannot merge version (!), just remove "transcript:" and "gene:" prefixes
        bool gff_warns:1;
     };
   };
@@ -1234,6 +1239,8 @@ class GffReader {
   }
   */
   void gene2Exon(bool v) { gene2exon=v;}
+  void processEnsemblID(bool v) { xEnsemblID=v;}
+  bool processEnsemblID() { return xEnsemblID; }
   void enableSorting(bool sorting=true) { sortByLoc=sorting; }
   bool getSorting() { return sortByLoc; }
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!
