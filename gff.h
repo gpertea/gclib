@@ -867,7 +867,7 @@ public:
    void addAttr(const char* attrname, const char* attrvalue);
    int removeAttr(const char* attrname, const char* attrval=NULL);
    int removeAttr(int aid, const char* attrval=NULL);
-   int removeAttrs(GStrSet<> attrSet); //remove attributes whose names are NOT in attrSet
+   int removeAttrs(GStrSet<>& attrSet); //remove attributes whose names are NOT in attrSet
    int removeExonAttr(GffExon& exon, const char* attrname, const char* attrval=NULL);
    int removeExonAttr(GffExon& exon, int aid, const char* attrval=NULL);
 

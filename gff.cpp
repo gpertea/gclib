@@ -379,19 +379,20 @@ void GffLine::ensembl_GFF_ID_process(char*& id) {
 }
 
 void GffLine::ensembl_GTF_ID_process(char*& id) {
-	char* v=NULL;
-	if (startsWith(id, "ENSG")) {
-	  v=extractAttr("gene_version");
-	}
-	else if (startsWith(id, "ENST")) {
-		v=extractAttr("transcript_version");
-	}
-	if (v!=NULL) {
-		char* n=Gstrdup(id, strlen(v)+1);
-		strcat(n,".");strcat(n,v);
-		GFREE(id);
-		id=n;
-	}
+ char* v=NULL;
+ if (startsWith(id, "ENSG")) {
+  v=extractAttr("gene_version");
+ }
+ else if (startsWith(id, "ENST")) {
+	v=extractAttr("transcript_version");
+ }
+ if (v!=NULL) {
+	char* n=Gstrdup(id, strlen(v)+1);
+	strcat(n,".");strcat(n,v);
+	GFREE(v);
+ 	GFREE(id);
+	id=n;
+ }
 }
 
 GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len(0),
@@ -561,14 +562,17 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		if (ID!=NULL || Parent!=NULL) reader->is_gff3=true;
 			else { //check if it looks like a GTF
 				gtf_tid=extractAttr("transcript_id", true, true);
-				if (gtf_tid!=NULL && reader->procEnsemblID()) {
-					ensembl_GTF_ID_process(gtf_tid);
+				if (gtf_tid!=NULL) {
+					if (reader->procEnsemblID())
+					  ensembl_GTF_ID_process(gtf_tid);
 				}
-				else {
+				else { //NULL gtf_tid, try gene_id
 					gtf_gid=extractAttr("gene_id", true, true);
-					if (gtf_gid!=NULL && reader->procEnsemblID())
-						     ensembl_GTF_ID_process(gtf_gid);
-						else return; //cannot determine file type yet
+					if (gtf_gid!=NULL) {
+						if (reader->procEnsemblID())
+						  ensembl_GTF_ID_process(gtf_gid);
+					}
+					else return; //cannot determine file type yet
 				}
 				reader->is_gtf=true;
 			}
@@ -742,8 +746,10 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 reader->gtf_gene=true;
 		 ID = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
 		 //Ensemble GTF might lack transcript_id !
-		 if (ID!=NULL && gtf_tid==NULL && reader->procEnsemblID())
- 					ensembl_GTF_ID_process(ID);
+		 if (ID!=NULL) {
+			 if (gtf_tid==NULL && reader->procEnsemblID())
+				ensembl_GTF_ID_process(ID);
+		 }
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
 		 if (gene_id!=NULL && gtf_gid==NULL && reader->procEnsemblID())
  					ensembl_GTF_ID_process(gene_id);
@@ -1323,7 +1329,8 @@ GffObj::GffObj(GffReader &gfrd, GffLine& gffline):
      gene_name=Gstrdup(gffline.gene_name);
      }
   if (gffline.gene_id) { //only for gene features or GTF2 gene_id attribute
-     geneID=Gstrdup(gffline.gene_id);
+	  if (!(this->isGene() && strcmp(gffID, gffline.gene_id)==0))
+    	 geneID=Gstrdup(gffline.gene_id);
   }
   /*//we cannot assume parents[0] is a gene! for NCBI miRNA, parent can be a primary_transcript feature!
   else if (gffline.is_transcript && gffline.parents!=NULL) {
@@ -2524,17 +2531,15 @@ void GffObj::setRefName(const char* newname) {
  this->gseq_id=rid;
 }
 
-int GffObj::removeAttrs(GStrSet<> attrSet) {
+int GffObj::removeAttrs(GStrSet<>& attrSet) {
 	//remove attributes NOT found in given set of attribute names
 	if (this->attrs==NULL || attrSet.Count()==0) return 0;
 	int delcount=0;
-	int aid=0;
 	for (int i=0;i<this->attrs->Count();i++) {
-	    if (aid==this->attrs->Get(i)->attr_id) {
-	      if (!attrSet.hasKey(this->names->attrs.Get(aid)->name)) {
-	          delcount++;
-	          this->attrs->freeItem(i);
-	      }
+	    int aid=this->attrs->Get(i)->attr_id;
+	    if (!attrSet.hasKey(this->names->attrs.Get(aid)->name)) {
+	        delcount++;
+	        this->attrs->freeItem(i);
 	    }
 	}
 	if (delcount>0) this->attrs->Pack();
