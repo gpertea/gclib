@@ -867,6 +867,7 @@ public:
    void addAttr(const char* attrname, const char* attrvalue);
    int removeAttr(const char* attrname, const char* attrval=NULL);
    int removeAttr(int aid, const char* attrval=NULL);
+   int removeAttrs(GStrSet<> attrSet); //remove attributes whose names are NOT in attrSet
    int removeExonAttr(GffExon& exon, const char* attrname, const char* attrval=NULL);
    int removeExonAttr(GffExon& exon, int aid, const char* attrval=NULL);
 
@@ -1239,8 +1240,8 @@ class GffReader {
   }
   */
   void gene2Exon(bool v) { gene2exon=v;}
-  void processEnsemblID(bool v) { xEnsemblID=v;}
-  bool processEnsemblID() { return xEnsemblID; }
+  void procEnsemblID(bool v) { xEnsemblID=v;}
+  bool procEnsemblID() { return xEnsemblID; }
   void enableSorting(bool sorting=true) { sortByLoc=sorting; }
   bool getSorting() { return sortByLoc; }
   void isBED(bool v=true) { is_BED=v; } //should be set before any parsing!

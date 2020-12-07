@@ -549,11 +549,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
  char *gtf_gid=NULL;
  if (reader->is_gff3 || reader->gff_type==0) {
 	ID=extractAttr("ID=",true);
-	if (ID!=NULL && reader->processEnsemblID()) {
+	if (ID!=NULL && reader->procEnsemblID()) {
 		ensembl_GFF_ID_process(ID);
 	}
 	Parent=extractAttr("Parent=",true);
-	if (Parent!=NULL && reader->processEnsemblID()) {
+	if (Parent!=NULL && reader->procEnsemblID()) {
 		ensembl_GFF_ID_process(Parent);
 	}
 
@@ -561,12 +561,12 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		if (ID!=NULL || Parent!=NULL) reader->is_gff3=true;
 			else { //check if it looks like a GTF
 				gtf_tid=extractAttr("transcript_id", true, true);
-				if (gtf_tid!=NULL && reader->processEnsemblID()) {
+				if (gtf_tid!=NULL && reader->procEnsemblID()) {
 					ensembl_GTF_ID_process(gtf_tid);
 				}
 				else {
 					gtf_gid=extractAttr("gene_id", true, true);
-					if (gtf_gid!=NULL && reader->processEnsemblID())
+					if (gtf_gid!=NULL && reader->procEnsemblID())
 						     ensembl_GTF_ID_process(gtf_gid);
 						else return; //cannot determine file type yet
 				}
@@ -742,10 +742,10 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 reader->gtf_gene=true;
 		 ID = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
 		 //Ensemble GTF might lack transcript_id !
-		 if (ID!=NULL && gtf_tid==NULL && reader->processEnsemblID())
+		 if (ID!=NULL && gtf_tid==NULL && reader->procEnsemblID())
  					ensembl_GTF_ID_process(ID);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
-		 if (gene_id!=NULL && gtf_gid==NULL && reader->processEnsemblID())
+		 if (gene_id!=NULL && gtf_gid==NULL && reader->procEnsemblID())
  					ensembl_GTF_ID_process(gene_id);
 
 		 if (ID==NULL) {
@@ -764,11 +764,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 			 	 //something is wrong here, cannot parse the GTF ID
 				 GMessage("Warning: invalid GTF record, transcript_id not found:\n%s\n", l);
 				 return;
-		 } else if (gtf_tid==NULL && reader->processEnsemblID())
+		 } else if (gtf_tid==NULL && reader->procEnsemblID())
 				ensembl_GTF_ID_process(ID);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
 		 if (gene_id!=NULL) {
-			if (gtf_gid==NULL && reader->processEnsemblID())
+			if (gtf_gid==NULL && reader->procEnsemblID())
 			 					ensembl_GTF_ID_process(gene_id);
 			Parent=Gstrdup(gene_id);
 		}
@@ -776,10 +776,10 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		is_gtf_transcript=1;
 	 } else { //must be an exon type ?
 		 Parent = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
-		 if (Parent!=NULL && gtf_tid==NULL && reader->processEnsemblID())
+		 if (Parent!=NULL && gtf_tid==NULL && reader->procEnsemblID())
  					ensembl_GTF_ID_process(Parent);
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true); // for GTF this is the only attribute accepted as geneID
-		 if (gene_id!=NULL && gtf_gid==NULL && reader->processEnsemblID())
+		 if (gene_id!=NULL && gtf_gid==NULL && reader->procEnsemblID())
  					ensembl_GTF_ID_process(gene_id);
 		 //old pre-GTF2 formats like Jigsaw's (legacy support)
 		 if (Parent==NULL && exontype==exgffExon) {
@@ -2524,7 +2524,22 @@ void GffObj::setRefName(const char* newname) {
  this->gseq_id=rid;
 }
 
-
+int GffObj::removeAttrs(GStrSet<> attrSet) {
+	//remove attributes NOT found in given set of attribute names
+	if (this->attrs==NULL || attrSet.Count()==0) return 0;
+	int delcount=0;
+	int aid=0;
+	for (int i=0;i<this->attrs->Count();i++) {
+	    if (aid==this->attrs->Get(i)->attr_id) {
+	      if (!attrSet.hasKey(this->names->attrs.Get(aid)->name)) {
+	          delcount++;
+	          this->attrs->freeItem(i);
+	      }
+	    }
+	}
+	if (delcount>0) this->attrs->Pack();
+	return delcount;
+}
 
 int GffObj::removeAttr(const char* attrname, const char* attrval) {
   if (this->attrs==NULL || attrname==NULL || attrname[0]==0) return 0;
