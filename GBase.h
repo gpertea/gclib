@@ -1,6 +1,6 @@
 #ifndef G_BASE_DEFINED
 #define G_BASE_DEFINED
-#define GCLIB_VERSION "0.12.2"
+#define GCLIB_VERSION "0.12.4"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -49,7 +49,7 @@
   #define CHPATHSEP '/'
   #ifdef __CYGWIN__
     #define _BSD_SOURCE
-  #endif 
+  #endif
   #include <unistd.h>
 #endif
 
@@ -191,6 +191,9 @@ inline int iround(double x) {
 
 int Gmkdir(const char *path, bool recursive=true, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH));
 void Gmktempdir(char* templ);
+
+
+bool hasStdInput(); //if stdin is from a pipe or redirection
 
 /****************************************************************************/
 

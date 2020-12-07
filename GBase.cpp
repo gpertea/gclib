@@ -236,6 +236,16 @@ int Gmkdir(const char *path, bool recursive, int perms) {
 	return 0;
 }
 
+bool hasStdInput() {
+#ifdef _WIN32
+	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+	DWORD stype = GetFileType(hIn);
+	return (stype!=FILE_TYPE_CHAR);
+#else
+	return !(isatty(fileno(stdin)));
+#endif
+}
+
 FILE* Gfopen(const char *path, char *mode) {
 	FILE* f=NULL;
 	if (mode==NULL) f=fopen(path, "rb");
