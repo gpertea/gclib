@@ -378,14 +378,9 @@ void GffLine::ensembl_GFF_ID_process(char*& id) {
 	}
 }
 
-void GffLine::ensembl_GTF_ID_process(char*& id) {
+void GffLine::ensembl_GTF_ID_process(char*& id, const char* ver_attr) {
  char* v=NULL;
- if (startsWith(id, "ENSG")) {
-  v=extractAttr("gene_version");
- }
- else if (startsWith(id, "ENST")) {
-	v=extractAttr("transcript_version");
- }
+ v=extractAttr(ver_attr);
  if (v!=NULL) {
 	char* n=Gstrdup(id, strlen(v)+1);
 	strcat(n,".");strcat(n,v);
@@ -564,13 +559,13 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 				gtf_tid=extractAttr("transcript_id", true, true);
 				if (gtf_tid!=NULL) {
 					if (reader->procEnsemblID())
-					  ensembl_GTF_ID_process(gtf_tid);
+					  ensembl_GTF_ID_process(gtf_tid, "transcript_version");
 				}
 				else { //NULL gtf_tid, try gene_id
 					gtf_gid=extractAttr("gene_id", true, true);
 					if (gtf_gid!=NULL) {
 						if (reader->procEnsemblID())
-						  ensembl_GTF_ID_process(gtf_gid);
+						  ensembl_GTF_ID_process(gtf_gid, "gene_version");
 					}
 					else return; //cannot determine file type yet
 				}
@@ -748,11 +743,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 //Ensemble GTF might lack transcript_id !
 		 if (ID!=NULL) {
 			 if (gtf_tid==NULL && reader->procEnsemblID())
-				ensembl_GTF_ID_process(ID);
+				ensembl_GTF_ID_process(ID, "transcript_version");
 		 }
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
 		 if (gene_id!=NULL && gtf_gid==NULL && reader->procEnsemblID())
- 					ensembl_GTF_ID_process(gene_id);
+ 					ensembl_GTF_ID_process(gene_id, "gene_version");
 
 		 if (ID==NULL) {
 			 //no transcript_id -- this should not be valid GTF2 format, but Ensembl (Gencode?)
@@ -771,11 +766,11 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 				 GMessage("Warning: invalid GTF record, transcript_id not found:\n%s\n", l);
 				 return;
 		 } else if (gtf_tid==NULL && reader->procEnsemblID())
-				ensembl_GTF_ID_process(ID);
+				ensembl_GTF_ID_process(ID, "transcript_version");
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true);
 		 if (gene_id!=NULL) {
 			if (gtf_gid==NULL && reader->procEnsemblID())
-			 					ensembl_GTF_ID_process(gene_id);
+			 					ensembl_GTF_ID_process(gene_id, "gene_version");
 			Parent=Gstrdup(gene_id);
 		}
 		reader->gtf_transcript=true;
@@ -783,10 +778,10 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 	 } else { //must be an exon type ?
 		 Parent = (gtf_tid!=NULL) ? gtf_tid : extractAttr("transcript_id", true, true);
 		 if (Parent!=NULL && gtf_tid==NULL && reader->procEnsemblID())
- 					ensembl_GTF_ID_process(Parent);
+ 					ensembl_GTF_ID_process(Parent, "transcript_version");
 		 gene_id = (gtf_gid!=NULL) ? gtf_gid : extractAttr("gene_id", true, true); // for GTF this is the only attribute accepted as geneID
 		 if (gene_id!=NULL && gtf_gid==NULL && reader->procEnsemblID())
- 					ensembl_GTF_ID_process(gene_id);
+ 					ensembl_GTF_ID_process(gene_id, "gene_version");
 		 //old pre-GTF2 formats like Jigsaw's (legacy support)
 		 if (Parent==NULL && exontype==exgffExon) {
 			 if (startsWith(track,"jigsaw")) {

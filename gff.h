@@ -263,7 +263,7 @@ class GffLine {
     	parents=NULL;
     }
     void ensembl_GFF_ID_process(char*& id);
-    void ensembl_GTF_ID_process(char*& id);
+    void ensembl_GTF_ID_process(char*& id, const char* ver_attr);
     static char* extractGFFAttr(char*& infostr, const char* oline, const char* pre, bool caseStrict=false,
     		bool enforce_GTF2=false, int* rlen=NULL, bool deleteAttr=true);
     char* extractAttr(const char* pre, bool caseStrict=false, bool enforce_GTF2=false, int* rlen=NULL){
