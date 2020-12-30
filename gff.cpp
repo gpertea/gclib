@@ -49,7 +49,7 @@ byte classcode_rank(char c) {
 		case 's': return 16; //"shadow" - an intron overlaps with a ref intron on the opposite strand (wrong strand mapping?)
 		case 'x': return 18; // generic overlap on opposite strand (usually wrong strand mapping)
 		case 'i': return 20; // intra-intron (transfrag fully contained within a reference intron)
-		case 'y': return 30; // no exon overlap: ref exons fall within transfrag introns!
+		case 'y': return 30; // no exon overlap: ref exons fall within transfrag introns! (reverse of i)
 		case 'p': return 90; //polymerase run
 		case 'r': return 92; //repeats
 		case 'u': return 94; //intergenic
@@ -3368,7 +3368,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	int j=1; //index of exon to the right of current ref intron
 	bool intron_conflict=false; //overlapping introns have at least a mismatching splice site
 	//from here on we check all qry introns against ref introns
-	//bool junct_match=false; //true if at least a junction match is found
+	bool junct_match=false; //true if at least a junction match is found
 	bool ichain_match=false; //if there is intron (sub-)chain match, to be updated by any mismatch
 	bool intron_ovl=false; //if any intron overlap is found
 	bool intron_retention=false; //if any ref intron is covered by a qry exon
@@ -3379,7 +3379,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	int jmlast=0;  //index of  exon after last intron match in reference
 	//--keep track of the last overlapping introns in both qry and ref:
 	odta.ovlen=m.exonOverlapLen(r);
-
+    //int q_first_iovl=-1, r_first_iovl=-1, q_last_iovl=-1, r_last_iovl=-1;
 	//check for intron matches
 	while (i<=imax && j<=jmax) {
 		uint mstart=m.exons[i-1]->end; //qry intron start-end
@@ -3406,6 +3406,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 			continue;
 		} //no intron overlap, skipping qry intron
 		intron_ovl=true;
+
 		//q_last_iovl=i; //keep track of the last overlapping introns in both qry and ref
 		//r_last_iovl=j;
 		//overlapping introns, test junction matching
@@ -3413,7 +3414,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		bool ematch=(mend==rend);
 		odta.numJmatch+=smatch;
 		odta.numJmatch+=ematch;
-		//if (smatch || ematch) junct_match=true;
+		if (smatch || ematch) junct_match=true;
 		if (smatch && ematch) {
 			//perfect match of this intron
 			if (jmfirst==0) {
@@ -3525,15 +3526,20 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		odta.ovlcode='n';
 		return odta;
 	}
-	//if (junct_match) {
-	if (intron_ovl) {
+	//if (intron_ovl) { ?
+	if (junct_match) {
 		odta.ovlcode='j';
 		return odta;
 	}
-	//we could have 'o' or 'y' here
-	//any real exon overlaps?
+	//what's left could be intron overlap but with no junction match = 'o'
 	if (odta.ovlen>4) {
 		odta.ovlcode='o';
+		return odta;
+	}
+	//but if there is no exon overlap, we have 'i' or 'y'
+	//exons are within the introns of the other!
+	if (m.start>r.start && r.end > m.end) {
+		odta.ovlcode='i';
 		return odta;
 	}
 	odta.ovlcode='y';
