@@ -24,7 +24,6 @@ extern int gff_fid_CDS;
 extern const uint GFF_MAX_LOCUS;
 extern const uint GFF_MAX_EXON;
 extern const uint GFF_MAX_INTRON;
-extern const int CLASSCODE_OVL_RANK;
 //extern const uint gfo_flag_LEVEL_MSK; //hierarchical level: 0 = no parent
 //extern const byte gfo_flagShift_LEVEL;
 
@@ -58,9 +57,19 @@ class GffReader;
 class GffObj;
 
 //---transcript overlapping - utility functions:
-int classcode_rank(char c); //returns priority value for class codes
+extern const byte CLASSCODE_OVL_RANK; // this should be the rank for 'o' code
 
-char getOvlCode(GffObj& m, GffObj& r, int& ovlen, bool stricterMatch=false, int trange=0); //returns: class code
+byte classcode_rank(char c); //returns priority value for class codes
+
+struct TOvlData {
+	char ovlcode;
+	int ovlen;
+	int16_t numJmatch; //number of matching junctions
+	TOvlData(char oc=0, int olen=0, int16_t nmj=0):ovlcode(oc),
+			ovlen(olen),numJmatch(nmj) { }
+};
+
+TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch=false, int trange=0);
 
 char transcriptMatch(GffObj& a, GffObj& b, int& ovlen, int trange=0); //generic transcript match test
 // -- return '=', '~'  or 0
@@ -1212,7 +1221,7 @@ class GffReader {
   //GffObj* replaceGffRec(GffLine* gffline, bool keepAttr, bool noExonAttr, int replaceidx);
   GffObj* updateGffRec(GffObj* prevgfo, GffLine* gffline);
   GffObj* updateParent(GffObj* newgfh, GffObj* parent);
-  bool readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon*>* pex=NULL);
+  bool readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon*>* pex = NULL);
   GPVec<GSeqStat> gseqStats; //populated after finalize() with only the ref seqs in this file
   GffReader(FILE* f=NULL, bool t_only=false, bool sort=false):linebuf(NULL), fpos(0),
 		  buflen(0), flags(0), fh(f), fname(NULL), commentParser(NULL), gffline(NULL),
