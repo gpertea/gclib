@@ -1314,7 +1314,7 @@ class GffReader {
       GFREE(linebuf);
       //GFREE(lastReadNext);
       gffnames_unref(GffObj::names);
-      }
+  }
 
 
   GffLine* nextGffLine();
