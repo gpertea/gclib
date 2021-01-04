@@ -337,8 +337,7 @@ int djb_hash(const char* cp);
 
 //---- generic base GSeg : genomic segment (interval) --
 // coordinates are considered 1-based (so 0 is invalid)
-class GSeg {
- public:
+struct GSeg {
   uint start; //start<end always!
   uint end;
   GSeg(uint s=0,uint e=0) {
