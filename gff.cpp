@@ -581,7 +581,6 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 	 //if (ID==NULL && Parent==NULL) return; //silently ignore unidentified/unlinked features
 	 if (ID!=NULL) {
 		 //has ID attr so it's likely to be a parent feature
-
 		 //look for explicit gene name
 		 gene_name=getAttrValue("gene_name=");
 		 if (gene_name==NULL) {
@@ -597,18 +596,6 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 if (gene_id==NULL) {
 			 gene_id=getAttrValue("gene_id=");
 		 }
-		 /*
-		 if (is_gene) { //--WARNING: this might be mislabeled (e.g. TAIR: "mRNA_TE_gene")
-			 //---special case: keep the Name and ID attributes of the gene feature
-			 //if (gene_name==NULL)
-			 //  gene_name=extractAttr("Name=");
-			 if (gene_id==NULL) //the ID is also gene_id in this case
-				 gene_id=Gstrdup(ID);
-			 //skip=false;
-			 //return;
-			 //-- we don't care about gene parents.. unless it's a mislabeled "gene" feature
-		 } //gene feature (probably)
-		*/
 		 //--parse exons for TLF
 		 char* segstr=extractAttr("exons=");
 		 bool exons_valid=false;
@@ -692,48 +679,13 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
 		 }
 	 } //has Parent field
 	 //special case for gene_id: for genes, this is the ID
-	 if (is_gene && gene_id==NULL && ID!=NULL) {
-	    	 gene_id=Gstrdup(ID);
+	 if (gene_id==NULL) {
+	    if (is_gene) {
+	    	 if (ID!=NULL) gene_id=Gstrdup(ID);
+	    } else if (is_transcript) {
+	    	if (Parent!=NULL) gene_id=Gstrdup(Parent);
+	    }
 	 }
-	 //parse other potentially useful GFF3 attributes
-	 /*
-	 if ((p=strstr(info,"Target="))!=NULL) { //has Target attr
-		 p+=7;
-		 while (*p!=';' && *p!=0 && *p!=' ') p++;
-		 if (*p!=' ') {
-			 GError("Error parsing target coordinates from GFF line:\n%s\n",l);
-		 }
-		 if (!parseUInt(p,qstart))
-			 GError("Error parsing target start coordinate from GFF line:\n%s\n",l);
-		 if (*p!=' ') {
-			 GError("Error parsing next target coordinate from GFF line:\n%s\n",l);
-		 }
-		 p++;
-		 if (!parseUInt(p,qend))
-			 GError("Error parsing target end coordinate from GFF line:\n%s\n",l);
-	 }
-	 if ((p=strifind(info,"Qreg="))!=NULL) { //has Qreg attr
-		 p+=5;
-		 if (!parseUInt(p,qstart))
-			 GError("Error parsing target start coordinate from GFF line:\n%s\n",l);
-		 if (*p!='-') {
-			 GError("Error parsing next target coordinate from GFF line:\n%s\n",l);
-		 }
-		 p++;
-		 if (!parseUInt(p,qend))
-			 GError("Error parsing target end coordinate from GFF line:\n%s\n",l);
-		 if (*p=='|' || *p==':') {
-			 p++;
-			 if (!parseUInt(p,qlen))
-				 GError("Error parsing target length from GFF Qreg|: \n%s\n",l);
-		 }
-	 }//has Qreg attr
-	 if (qlen==0 && (p=strifind(info,"Qlen="))!=NULL) {
-		 p+=5;
-		 if (!parseUInt(p,qlen))
-			 GError("Error parsing target length from GFF Qlen:\n%s\n",l);
-	 }
-	  */
  } //GFF3
  else { // ----------------- GTF syntax ------------------
 	 if (reader->transcripts_Only && !is_t_data) {
@@ -3309,6 +3261,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	} //single-exon transfrag
 	//-- multi-exon transfrag --
 	int imax=m.exons.Count()-1;// imax>0 here
+	odta.jbits.resize(imax << 1); //num_junctions = 2 * num_introns
 	if (jmax==0) { //single-exon reference overlap
 		//any exon overlap?
 		GSeg rseg(r.start, r.end);
@@ -3410,11 +3363,20 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		//q_last_iovl=i; //keep track of the last overlapping introns in both qry and ref
 		//r_last_iovl=j;
 		//overlapping introns, test junction matching
-		bool smatch=(mstart==rstart);
-		bool ematch=(mend==rend);
-		odta.numJmatch+=smatch;
-		odta.numJmatch+=ematch;
-		if (smatch || ematch) junct_match=true;
+		bool smatch=false;
+		if (mstart==rstart) {
+			smatch=true;
+			odta.jbits.set( (i-1)<<1 );
+			odta.numJmatch++;
+		    junct_match=true;
+		}
+		bool ematch=false;
+		if (mend==rend) {
+			ematch=true;
+			odta.jbits.set( ((i-1)<<1)+1 );
+		    odta.numJmatch++;
+		    junct_match=true;
+		}
 		if (smatch && ematch) {
 			//perfect match of this intron
 			if (jmfirst==0) {

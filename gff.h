@@ -8,8 +8,8 @@
 #include "codons.h"
 #include "GFaSeqGet.h"
 #include "GList.hh"
-//#include "GHash.hh"
 #include "GHashMap.hh"
+#include "GBitVec.h"
 
 #ifdef CUFFLINKS
 #include <boost/crc.hpp>  // for boost::crc_32_type
@@ -64,9 +64,10 @@ byte classcode_rank(char c); //returns priority value for class codes
 struct TOvlData {
 	char ovlcode;
 	int ovlen;
-	int16_t numJmatch; //number of matching junctions
-	TOvlData(char oc=0, int olen=0, int16_t nmj=0):ovlcode(oc),
-			ovlen(olen),numJmatch(nmj) { }
+	int16_t numJmatch; //number of matching junctions (not introns)
+	GBitVec jbits; //bit array with 1 bit for each junctions (total = 2 * num_introns)
+	TOvlData(char oc=0, int olen=0, int16_t nmj=0, GBitVec* jb=NULL):ovlcode(oc),
+			ovlen(olen),numJmatch(nmj),jbits(jb) { }
 };
 
 TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch=false, int trange=0);
@@ -802,7 +803,7 @@ protected:
 public:
   void removeExon(int idx);
   void removeExon(GffExon* p);
-  char  strand; //true if features are on the reverse complement strand
+  char  strand; //'+', '-' or '.'
   GffScore gscore;
   int covlen; //total coverage of reference genomic sequence (sum of maxcf segment lengths)
   GffAttrs* attrs; //other gff3 attributes found for the main mRNA feature
