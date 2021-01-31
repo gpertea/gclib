@@ -236,7 +236,7 @@ int Gmkdir(const char *path, bool recursive, int perms) {
 	return 0;
 }
 
-bool hasStdInput() {
+bool haveStdInput() {
 #ifdef _WIN32
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 	DWORD stype = GetFileType(hIn);
@@ -254,6 +254,66 @@ FILE* Gfopen(const char *path, char *mode) {
 		GMessage("Error opening file '%s':  %s\n", path, strerror(errno));
 	return f;
 }
+
+void GRangeParser::parse(char* s) {
+	 //parses general range format: [[+/-]refID[+/-][ ]:]start[-/..]end[ :][+/-]
+	// if ref ID has ':' characters a space delimited format is accepted to separate
+	//    the ref ID from the coordinate range: [[+/-]ref<space>start[[-/..][end]]
+	//the safest way is to parse from the end in case the ref ID has ':' characters
+	   this->start=0;
+	   this->end=MAX_UINT;
+	   this->strand=0;
+	   int slen=strlen(s);
+	   if (slen==0) return;
+	   while (isspace(s[slen-1])) { slen--; s[slen]=0; } //trim trailing spaces
+	   while (isspace(*s)) { ++s; --slen; } //trim prefix spaces
+	   char c=*s;
+	   if (c=='+' || c=='-') {
+	     strand=c;
+	     ++s;slen--;
+	   }
+	   if (*s==':' || *s==' ') //ignore
+		   { s++;slen--; }
+	   char* p=s; //parsing position for coordinate string
+	   char* isep=strpbrk(s, " \t");
+	   if (isep==NULL) isep=strchr(s, ':');
+	   if (isep) { //chr (ref) ID was given
+		  p=isep+1;
+		  *isep=0;
+		  char c=*(isep-1);
+		  if (strand==0 && (c=='+' || c=='-')) {
+		  //strand given after the ref ID
+		    isep--;
+		    strand=c;
+		    *isep=0; //ref is now parsable
+		  }
+		  this->refName=Gstrdup(s,isep-1);
+	   }
+	   c=s[slen-1];
+	   if (c=='+' || c=='-' || c=='.') {
+		   strand=c;
+		   slen--;s[slen]=0;
+	   }
+	   char* pend=p;
+	   while (isdigit(*pend)) pend++;
+	   c=*pend;
+	   *pend=0;
+	   this->start=atoi(p);
+	   p=pend;
+	   *p=c;
+	   while (*p=='-' || *p=='.' || isspace(*p)) ++p;
+	   pend=p;
+	   while (isdigit(*pend)) pend++;
+	   if (pend>=p) { //parse the 2nd coordinate
+		   *pend=0;
+		   this->end=atoi(p);
+		   if (this->end==0) this->end=MAX_UINT;
+	   }
+	   if (this->end<this->start) Gswap(this->start, this->end);
+}
+
+
+
 
 bool GstrEq(const char* a, const char* b) {
 	 if (a==NULL || b==NULL) return false;

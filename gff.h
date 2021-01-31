@@ -1021,7 +1021,7 @@ public:
    void updateCDSPhase(GList<GffExon>& segs); //for CDS-only features, updates GffExon::phase
    void printGTab(FILE* fout, char** extraAttrs=NULL);
    void printGxfExon(FILE* fout, const char* tlabel, const char* gseqname,
-          bool iscds, GffExon* exon, bool gff3, bool cvtChars, char* dbuf, int dbuf_len);
+          bool iscds, GffExon* exon, bool gff3, bool cvtChars);
    void printGxf(FILE* fout, GffPrintMode gffp=pgffExon,
              const char* tlabel=NULL, const char* gfparent=NULL, bool cvtChars=false);
    void printGtf(FILE* fout, const char* tlabel=NULL, bool cvtChars=false) {
@@ -1031,6 +1031,7 @@ public:
                                 const char* gfparent=NULL, bool cvtChars=false) {
       printGxf(fout, pgffAny, tlabel, gfparent, cvtChars);
    }
+   bool printAttrs(FILE* fout,  const char* sep=";", bool GTFstyle=false, bool cvtChars=false);
    void printTranscriptGff(FILE* fout, char* tlabel=NULL,
                             bool showCDS=false, const char* gfparent=NULL, bool cvtChars=false) {
       if (isValidTranscript())
@@ -1039,7 +1040,7 @@ public:
    void printExonList(FILE* fout); //print comma delimited list of exon intervals
    void printCDSList(FILE* fout); //print comma delimited list of CDS intervals
 
-   void printBED(FILE* fout, bool cvtChars, char* dbuf, int dbuf_len);
+   void printBED(FILE* fout, bool cvtChars);
        //print a BED-12 line + GFF3 attributes in 13th field
    void printSummary(FILE* fout=NULL);
 

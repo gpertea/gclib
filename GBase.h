@@ -193,7 +193,7 @@ int Gmkdir(const char *path, bool recursive=true, int perms = (S_IRWXU | S_IRGRP
 void Gmktempdir(char* templ);
 
 
-bool hasStdInput(); //if stdin is from a pipe or redirection
+bool haveStdInput(); //if stdin is from a pipe or redirection
 
 /****************************************************************************/
 
@@ -428,6 +428,22 @@ struct GSeg {
      return (start==d.start)?(end<d.end):(start<d.start);
      }
 };
+
+struct GRangeParser: GSeg {
+	char* refName=NULL;
+	int gseq_id=-1;
+	char strand=0;
+	void parse(char* s);
+	GRangeParser(char* s=NULL):GSeg(0, INT_MAX) {
+		if (s) parse(s);
+	}
+	~GRangeParser() {
+		GFREE(refName);
+	}
+};
+
+
+
 
 //basic dynamic array template for primitive types
 //which can only grow (reallocate) as needed
