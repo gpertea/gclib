@@ -31,7 +31,9 @@ void gffnames_unref(GffNames* &n) {
   if (n->numrefs==0) { delete n; n=NULL; }
 }
 
-const byte CLASSCODE_OVL_RANK = 14; // this should be 'o' rank code
+const byte CLASSCODE_OVL_RANK = 14; //rank value just above 'o' class code
+//rank value < this means exon overlap 
+
 const byte CLASSCODE_J_RANK = 6; // all junctional based overlaps
 
 byte classcode_rank(char c) {
@@ -45,7 +47,7 @@ byte classcode_rank(char c) {
 		case 'j': return 6; // multi-exon transfrag overlap with at least one junction match OR intron overlap!
 		case 'e': return 12; // single exon transfrag partially overlapping an intron of reference (possible pre-mRNA fragment)
 		case 'o': return 12; // other generic exon overlap
-	//****  >15 = no overlaps (not on the same strand) from here on *****
+	//****  >14 => no exon overlaps (not on the same strand) from here on *****
 		case 's': return 16; //"shadow" - an intron overlaps with a ref intron on the opposite strand (wrong strand mapping?)
 		case 'x': return 18; // generic overlap on opposite strand (usually wrong strand mapping)
 		case 'i': return 20; // intra-intron (transfrag fully contained within a reference intron)

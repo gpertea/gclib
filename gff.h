@@ -56,8 +56,9 @@ typedef void GFFCommentParser(const char* cmline, GfList* gflst); //comment pars
 class GffReader;
 class GffObj;
 
-//---transcript overlapping - utility functions:
-extern const byte CLASSCODE_OVL_RANK; // this should be the rank for 'o' code
+//---transcript overlapping - utility functions
+
+extern const byte CLASSCODE_OVL_RANK; //rank value just above 'o' class code
 
 byte classcode_rank(char c); //returns priority value for class codes
 
