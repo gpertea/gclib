@@ -431,10 +431,9 @@ struct GSeg {
 
 struct GRangeParser: GSeg {
 	char* refName=NULL;
-	int gseq_id=-1;
 	char strand=0;
 	void parse(char* s);
-	GRangeParser(char* s=NULL):GSeg(0, INT_MAX) {
+	GRangeParser(char* s=NULL):GSeg(0, 0) {
 		if (s) parse(s);
 	}
 	~GRangeParser() {

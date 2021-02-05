@@ -32,7 +32,7 @@ void gffnames_unref(GffNames* &n) {
 }
 
 const byte CLASSCODE_OVL_RANK = 14; //rank value just above 'o' class code
-//rank value < this means exon overlap 
+//rank value < this means exon overlap
 
 const byte CLASSCODE_J_RANK = 6; // all junctional based overlaps
 
@@ -415,12 +415,15 @@ GffLine::GffLine(GffReader* reader, const char* l): _parents(NULL), _parents_len
    line[i]=0;
    t[tidx]=line+i+1;
    tidx++;
-   if (tidx>8) break;
+   //if (tidx>8) break;
    }
   i++;
   }
  if (tidx<8) { // ignore non-GFF lines
   return;
+ }
+ if (tidx>9) {
+	 GMessage("Warning: unexpected tab character in last column, line truncated:\n\%s\n",l);
  }
  gffWarnings=reader->gff_warns;
  gseqname=t[0];
