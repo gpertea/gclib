@@ -583,7 +583,7 @@ template <class OBJ> bool GList<OBJ>::Found(OBJ* item, int& idx) {
    l = 0;
    h = this->fCount - 1;
    while (l <= h) {
-       i = (l + h) >> 1;
+       i = l + ((h-l)>>1);
        c = (*fCompareProc)(this->fList[i], item);
        if (c < 0)  l = i + 1;
        else {

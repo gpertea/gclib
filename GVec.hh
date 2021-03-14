@@ -879,7 +879,7 @@ template <class OBJ> void GPVec<OBJ>::qSort(int L, int R, GCompareProc* cmpFunc)
  do {
     I = L;
     J = R;
-    P = this->fList[(L + R) >> 1];
+    P = this->fList[L + ((R-L)>>1)];
     do {
       while (cmpFunc(this->fList[I], P) < 0) I++;
       while (cmpFunc(this->fList[J], P) > 0) J--;
