@@ -71,52 +71,6 @@ void GMessage(const char* format,...){
   #endif
   }
 
-/*************** Memory management routines *****************/
-// Allocate memory
-inline bool GMalloc(pointer* ptr,unsigned long size){
-  //GASSERT(ptr);
-  if (size!=0)
-	  *ptr=malloc(size);
-  return *ptr!=NULL;
-  }
-
-// Allocate cleaned memory (0 filled)
-inline bool GCalloc(pointer* ptr,unsigned long size){
-  GASSERT(ptr);
-  *ptr=calloc(size,1);
-  return *ptr!=NULL;
-  }
-
-// Resize memory
-inline bool GRealloc(pointer* ptr,unsigned long size){
-  //GASSERT(ptr);
-  if (size==0) {
-    GFree(ptr);
-    return true;
-    }
-  if (*ptr==NULL) {//simple malloc
-   void *p=malloc(size);
-   if (p != NULL) {
-     *ptr=p;
-     return true;
-     }
-    else return false;
-   }//malloc
-  else {//realloc
-   void *p=realloc(*ptr,size);
-   if (p) {
-       *ptr=p;
-       return true;
-       }
-   return false;
-   }
- }
-// Free memory, resets ptr to NULL afterward
-inline void GFree(pointer* ptr){
-  GASSERT(ptr);
-  if (*ptr) free(*ptr);
-  *ptr=NULL;
-  }
 
 char* Gstrdup(const char* str, int xtracap) {
   if (str==NULL) return NULL;

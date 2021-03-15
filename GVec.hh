@@ -103,10 +103,6 @@ template <class OBJ> class GVec {
            fArray[i]=fArray[i-1];
      }
     */
-    inline void shiftUp(int idx) {
-    	std::move_backward(& fArray[idx],  & fArray[fCount], & fArray[fCount+1]);
-    }
-
 
     template <typename T=OBJ>
      typename std::enable_if< std::is_trivial<T>::value, void>::type
@@ -475,7 +471,8 @@ template <class OBJ> void GVec<OBJ>::Insert(int idx, OBJ* item) {
  //move data around to make room for the new item
  if (idx<fCount) {
    //copy after-idx items (shift up)
-   this->shiftUp(idx);
+   //this->shiftUp(idx);
+	std::move_backward(& fArray[idx],  & fArray[fCount], & fArray[fCount+1]);
  }
  fArray[idx]=*item;
  fCount++;
