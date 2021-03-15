@@ -73,7 +73,7 @@ void GMessage(const char* format,...){
 
 /*************** Memory management routines *****************/
 // Allocate memory
-bool GMalloc(pointer* ptr,unsigned long size){
+inline bool GMalloc(pointer* ptr,unsigned long size){
   //GASSERT(ptr);
   if (size!=0)
 	  *ptr=malloc(size);
@@ -81,14 +81,14 @@ bool GMalloc(pointer* ptr,unsigned long size){
   }
 
 // Allocate cleaned memory (0 filled)
-bool GCalloc(pointer* ptr,unsigned long size){
+inline bool GCalloc(pointer* ptr,unsigned long size){
   GASSERT(ptr);
   *ptr=calloc(size,1);
   return *ptr!=NULL;
   }
 
 // Resize memory
-bool GRealloc(pointer* ptr,unsigned long size){
+inline bool GRealloc(pointer* ptr,unsigned long size){
   //GASSERT(ptr);
   if (size==0) {
     GFree(ptr);
@@ -112,7 +112,7 @@ bool GRealloc(pointer* ptr,unsigned long size){
    }
  }
 // Free memory, resets ptr to NULL afterward
-void GFree(pointer* ptr){
+inline void GFree(pointer* ptr){
   GASSERT(ptr);
   if (*ptr) free(*ptr);
   *ptr=NULL;
