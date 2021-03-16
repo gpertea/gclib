@@ -44,7 +44,9 @@ template <class OBJ> class GVec {
     GVec(int init_count, const OBJ init_val);
     GVec(int init_count, OBJ* init_val, bool delete_initval=true); //convenience constructor for complex vectors
     GVec(const GVec<OBJ>& array); //copy constructor
-    const GVec<OBJ>& operator=(const GVec<OBJ>& array); //copy operator
+    GVec(GVec<OBJ>&& array); //move constructor
+    GVec<OBJ>& operator=(const GVec<OBJ>& array); //copy operator
+    GVec<OBJ>& operator=(GVec<OBJ>&& array); //move operator
     virtual ~GVec();
     void Insert(int idx, OBJ item) { Insert(idx, &item); }
     void Insert(int idx, OBJ* item);
@@ -98,7 +100,7 @@ template <class OBJ> class GVec {
       if (NewCapacity!=fCapacity) {
         if (NewCapacity==0) {
            delete[] fArray;
-           fArray=NULL;
+           fArray=nullptr;
         }
         else {
             OBJ* oldArray=fArray;
@@ -176,9 +178,11 @@ template <class OBJ> class GPVec {
     virtual ~GPVec();
     GPVec(int init_capacity=2, bool free_elements=true); //also the default constructor
     GPVec(bool free_elements);
-    GPVec(GPVec<OBJ>& list); //copy constructor?
-    GPVec(GPVec<OBJ>* list); //kind of a copy constructor
-    const GPVec<OBJ>& operator=(const GPVec<OBJ>& list);
+    GPVec(const GPVec<OBJ>& list); //copy constructor
+    GPVec(GPVec<OBJ>&& list); //move construstor
+    GPVec(GPVec<OBJ>* list); //similar to a copy constructor
+    GPVec<OBJ>& operator=(const GPVec<OBJ>& list);
+    GPVec<OBJ>& operator=(GPVec<OBJ>&& list);//move assignment operator
     inline OBJ* Get(int i) {
     	TEST_INDEX(i);
         return fList[i];
@@ -203,8 +207,8 @@ template <class OBJ> class GPVec {
     void Clear();
     void Exchange(int idx1, int idx2);
     void Swap(int idx1, int idx2)  { Exchange(idx1, idx2); }
-    OBJ* First() { return (fCount>0)?fList[0]:NULL; }
-    OBJ* Last()  { return (fCount>0)?fList[fCount-1]:NULL;}
+    OBJ* First() { return (fCount>0)?fList[0]:nullptr; }
+    OBJ* Last()  { return (fCount>0)?fList[fCount-1]:nullptr;}
     bool isEmpty() { return fCount==0; }
     bool notEmpty() { return fCount>0; }
     int Capacity() { return fCapacity; }
@@ -231,7 +235,7 @@ template <class OBJ> class GPVec {
 template <class OBJ> GVec<OBJ>::GVec(int init_capacity) {
   fCount=0;
   fCapacity=0;
-  fArray=NULL;
+  fArray=nullptr;
   setCapacity(init_capacity);
   //if (set_count) fCount = init_capacity;
 }
@@ -240,7 +244,7 @@ template <class OBJ> GVec<OBJ>::GVec(int init_capacity) {
 template <class OBJ> GVec<OBJ>::GVec(int init_count, const OBJ init_val) {
   fCount=0;
   fCapacity=0;
-  fArray=NULL;
+  fArray=nullptr;
   setCapacity(init_count);
   fCount = init_count;
   for (int i=0;i<fCount;i++)
@@ -250,7 +254,7 @@ template <class OBJ> GVec<OBJ>::GVec(int init_count, const OBJ init_val) {
 template <class OBJ> GVec<OBJ>::GVec(int init_count, OBJ* init_val, bool delete_initval) {
 	  fCount=0;
 	  fCapacity=0;
-	  fArray=NULL;
+	  fArray=nullptr;
 	  setCapacity(init_count);
 	  fCount = init_count;
 	  for (int i=0;i<fCount;i++)
@@ -262,15 +266,23 @@ template <class OBJ> GVec<OBJ>::GVec(int init_count, OBJ* init_val, bool delete_
 template <class OBJ> GVec<OBJ>::GVec(const GVec<OBJ>& array) { //copy constructor
  fCount=array.fCount;
  fCapacity=array.fCapacity;
- fArray=NULL;
+ fArray=nullptr;
  if (fCapacity>0) {
-   fArray=new OBJ[this->fCapacity];
-   std::copy(& array.fArray[0], & array.fArray[fCount], & fArray[0]);
- }
- this->fCount=array.fCount;
+     fArray=new OBJ[this->fCapacity];
+     std::copy(& array.fArray[0], & array.fArray[fCount], & fArray[0]);
+   }
  }
 
-template <class OBJ> const GVec<OBJ>& GVec<OBJ>::operator=(const GVec<OBJ>& array) {
+template <class OBJ> GVec<OBJ>::GVec(GVec<OBJ>&& array) { //move constructor
+  fCount=array.fCount;
+  fCapacity=array.fCapacity;
+  fArray=array.fArray;
+  array.fArray=nullptr;
+  array.fCount=0;
+  array.fCapacity=0;
+ }
+
+template <class OBJ> GVec<OBJ>& GVec<OBJ>::operator=(const GVec<OBJ>& array) {
  if (&array==this) return *this;
  Clear();
  fCapacity=array.fCapacity;
@@ -283,6 +295,18 @@ template <class OBJ> const GVec<OBJ>& GVec<OBJ>::operator=(const GVec<OBJ>& arra
  return *this;
 }
 
+template <class OBJ> GVec<OBJ>& GVec<OBJ>::operator=(GVec<OBJ>&& array) {
+ if (&array==this) return *this;
+ Clear();
+ fCapacity=array.fCapacity;
+ fCount=array.fCount;
+ fArray=array.fArray;
+ array.fArray=nullptr;
+ array.fCapacity=0;
+ array.fCount=0;
+ return *this;
+}
+
 template <class OBJ> GVec<OBJ>::~GVec() {
  this->Clear();
 }
@@ -290,7 +314,7 @@ template <class OBJ> GVec<OBJ>::~GVec() {
 template <class OBJ> void GVec<OBJ>::Clear() {
   fCount=0;
   delete[] fArray;
-  fArray=NULL;
+  fArray=nullptr;
   fCapacity=0;
 }
 
@@ -513,7 +537,7 @@ template <class OBJ> void GVec<OBJ>::Sort(GCompareProc* cmpFunc) {
    GMessage("Warning: NULL compare function given, useless Sort() call.\n");
    return;
  }
- if (this->fArray!=NULL && this->fCount>0)
+ if (this->fArray!=nullptr && this->fCount>0)
      qSort(0, this->fCount-1, cmpFunc);
 }
 
@@ -526,10 +550,10 @@ template <class OBJ> void GVec<OBJ>::Sort() {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //*=> GPVec implementation
 
-template <class OBJ> GPVec<OBJ>::GPVec(GPVec& list) { //copy constructor
+template <class OBJ> GPVec<OBJ>::GPVec(const GPVec& list) { //copy constructor
  fCount=list.fCount;
  fCapacity=list.fCapacity;
- fList=NULL;
+ fList=nullptr;
  fFreeProc=list.fFreeProc;
  fCount=list.fCount;
  if (fCapacity>0) {
@@ -540,10 +564,20 @@ template <class OBJ> GPVec<OBJ>::GPVec(GPVec& list) { //copy constructor
  }
 }
 
+template <class OBJ> GPVec<OBJ>::GPVec(GPVec&& list) { //copy constructor
+ fCount=list.fCount;
+ fCapacity=list.fCapacity;
+ fList=list.fList;
+ fFreeProc=list.fFreeProc;
+ list.fCount=0;
+ list.fCapacity=0;
+ list.fList=nullptr;
+}
+
 template <class OBJ> GPVec<OBJ>::GPVec(GPVec* plist) { //another copy constructor
   fCount=0;
   fCapacity=plist->fCapacity;
-  fList=NULL;
+  fList=nullptr;
   fFreeProc=plist->fFreeProc;
   fCount=plist->fCount;
   if (fCapacity>0) {
@@ -554,7 +588,7 @@ template <class OBJ> GPVec<OBJ>::GPVec(GPVec* plist) { //another copy constructo
   }
 }
 
-template <class OBJ> const GPVec<OBJ>& GPVec<OBJ>::operator=(const GPVec& list) {
+template <class OBJ> GPVec<OBJ>& GPVec<OBJ>::operator=(const GPVec& list) {
  if (&list!=this) {
      Clear();
      fFreeProc=list.fFreeProc;
@@ -568,6 +602,22 @@ template <class OBJ> const GPVec<OBJ>& GPVec<OBJ>::operator=(const GPVec& list) 
    		fList=new OBJ*[fCapacity];
    		std::move(&list.fList[0], &list.fList[fCount], &fList[0]);
         }
+     }
+ return *this;
+}
+
+template <class OBJ> GPVec<OBJ>& GPVec<OBJ>::operator=(GPVec&& list) {
+ if (&list!=this) {
+     Clear();
+     fFreeProc=list.fFreeProc;
+     //Attention: only the *POINTERS* are copied,
+     // the actual objects are NOT duplicated
+     fCount=list.fCount;
+     fCapacity=list.fCapacity;
+     fList=list.fList;
+     list.fList=nullptr;
+     list.fCapacity=0;
+     list.fCount=0;
      }
  return *this;
 }
@@ -606,7 +656,7 @@ template <class OBJ> void GPVec<OBJ>::Reverse() {
 template <class OBJ> GPVec<OBJ>::GPVec(int init_capacity, bool free_elements) {
   fCount=0;
   fCapacity=0;
-  fList=NULL;
+  fList=nullptr;
   fFreeProc=(free_elements) ? DefaultFreeProc : NULL;
   if (init_capacity>0)
     setCapacity(init_capacity);
@@ -615,7 +665,7 @@ template <class OBJ> GPVec<OBJ>::GPVec(int init_capacity, bool free_elements) {
 template <class OBJ> GPVec<OBJ>::GPVec(bool free_elements) {
   fCount=0;
   fCapacity=0;
-  fList=NULL;
+  fList=nullptr;
   fFreeProc=(free_elements) ? DefaultFreeProc : NULL;
 }
 
@@ -631,7 +681,7 @@ template <class OBJ> void GPVec<OBJ>::setCapacity(int NewCapacity) {
    if (NewCapacity==0) {
       //GFREE(fList);
 	   delete[] fList;
-       fList=NULL;
+       fList=nullptr;
       }
     else {
       //GREALLOC(fList, NewCapacity*sizeof(OBJ*));
@@ -666,7 +716,7 @@ template <class OBJ> void GPVec<OBJ>::Clear() {
    }
  //GFREE(fList);
  delete[] fList;
- fList=NULL;
+ fList=nullptr;
  fCount=0;
  fCapacity=0;
 }
