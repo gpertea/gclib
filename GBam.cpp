@@ -2,6 +2,9 @@
 #include <ctype.h>
 #include "kstring.h"
 
+#define _cigOp(c) ((c)&BAM_CIGAR_MASK)
+#define _cigLen(c) ((c)>>BAM_CIGAR_SHIFT)
+
 //auxiliary functions for low level BAM record creation
 uint8_t* realloc_bdata(bam1_t *b, int size) {
   if (b->m_data < size) {
@@ -320,63 +323,76 @@ switch (cop) {
 void GBamRecord::setupCoordinates() {
 	const bam1_core_t *c = &b->core;
 	if (c->flag & BAM_FUNMAP) return; /* skip unmapped reads */
-	uint32_t *p = bam1_cigar(b);
+	uint32_t *cigar = bam1_cigar(b);
+	//uint32_t *p = bam1_cigar(b);
 	//--- prevent alignment error here (reported by UB-sanitazer):
-	uint32_t *cigar= new uint32_t[c->n_cigar];
-	memcpy(cigar, p, c->n_cigar * sizeof(uint32_t));
+	//uint32_t *cigar= new uint32_t[c->n_cigar];
+	//memcpy(cigar, p, c->n_cigar * sizeof(uint32_t));
 	//--- UBsan protection end
 	int l=0;
 	mapped_len=0;
 	clipL=0;
 	clipR=0;
 	start=c->pos+1; //genomic start coordinate, 1-based (BAM core.pos is 0-based)
+	GSeg exon;
 	int exstart=c->pos;
 	bool intron=false;
-	int del=0;
+	bool ins=false;
 	for (int i = 0; i < c->n_cigar; ++i) {
-		int op = cigar[i]&0xf;
-		if (op == BAM_CMATCH || op==BAM_CEQUAL ||
-				op == BAM_CDIFF) {
-			l += cigar[i]>>4;
-			intron=false; del=0;
-		}
-		else if(op == BAM_CDEL) {
-			del=cigar[i]>>4;
-			l+=del;
-			if(intron) { // deletion after intron
-				exstart+=del;
+		unsigned char op = _cigOp(cigar[i]);
+		switch(op) {
+		  case BAM_CEQUAL:    // =
+		  case BAM_CDIFF:     // X
+		  case BAM_CMATCH:    // M
+		  case BAM_CDEL:      // D
+		    l+=_cigLen(cigar[i]);
+		    intron=false;
+		    ins=false;
+		    break;
+		  case BAM_CINS:      // I
+		    //rpos+=cl; //gpos not advanced
+		    //take care of cases where there is an ins within an intron
+		    ins=true; 
+		    break;
+		  case BAM_CREF_SKIP: // N
+		    //intron starts
+		    //exon ends here
+			if(!ins || !intron) { // insertion in the middle of an intron --> adjust last exon
+				exon.start=exstart+1;
+				exon.end=c->pos+l;
+				exons.Add(exon);
+				mapped_len+=exon.len();
 			}
-		}
-		else if (op == BAM_CREF_SKIP) { //N
-			//intron starts
-			//exon ends here
 			has_Introns=true;
-			GSeg exon(exstart+1,c->pos+l-del);
-			exons.Add(exon);
-			mapped_len+=exon.len();
-			l += cigar[i]>>4;
+			l += _cigLen(cigar[i]);
 			exstart=c->pos+l;
-			intron=true; del=0;
-		}
-		else if (op == BAM_CINS) {
-			intron=false; del=0;
-		}
-		else if (op == BAM_CSOFT_CLIP) {
-			soft_Clipped=true;
-			if (l) clipR=(cigar[i]>>4);
-			else clipL=(cigar[i]>>4);
-			intron=false; del=0;
-		}
-		else if (op == BAM_CHARD_CLIP) {
-			hard_Clipped=true;
-			intron=false; del=0;
+			intron=true;
+			break;
+		  case BAM_CSOFT_CLIP: // S
+		    soft_Clipped=true;
+		    if (l) clipR=_cigLen(cigar[i]);
+		      else clipL=_cigLen(cigar[i]);
+		    intron=false; ins=false;
+		    break;
+		  case BAM_CHARD_CLIP:
+		    hard_Clipped=true;
+		    intron=false; ins=false;
+		    break;
+		  case BAM_CPAD:
+		    //gpos+=cl;
+		    intron=false; ins=false; //?
+		    break;
+		  default:
+		    int cl=_cigLen(cigar[i]);
+		    fprintf(stderr, "Unhandled CIGAR operation %d:%d\n", op, cl);
 		}
 	}
-	GSeg exon(exstart+1,c->pos+l);
+	exon.start=exstart+1;
+	exon.end=c->pos+l;
 	exons.Add(exon);
 	mapped_len+=exon.len();
 	end=c->pos+l; //genomic end coordinate
-	delete[] cigar; //UBsan protection
+	//delete[] cigar; //UBsan protection
 }
 
 
