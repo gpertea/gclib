@@ -171,7 +171,7 @@ char* Grealpath(const char *path, char *resolved_path) {
   }
   return to_unix_path(ret);
   #else
-    return realpath(path, resolved_path)
+    return realpath(path, resolved_path);
   #endif
 }
 
