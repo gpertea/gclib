@@ -138,6 +138,44 @@ void Gmktempdir(char* templ) {
 #endif
 }
 
+char *to_unix_path(char *p) {
+    if (p != NULL) {
+        char *pp = p;
+        while (*pp != 0) {
+            if (*pp == '\\')
+                *pp = '/';
+            ++pp;
+        }
+    }
+    return p;
+}
+
+char* Grealpath(const char *path, char *resolved_path) {
+#ifdef _WIN32
+  //char *realpath(const char *path, char *resolved_path) {
+  char *ret = NULL;
+  if (path == NULL) {
+     errno = EINVAL;
+  } else if (access(path, R_OK) == 0) {
+     ret = resolved_path;
+     if (ret == NULL) {
+         GMALLOC(ret, _MAX_PATH);
+     }
+     if (ret == NULL) {
+       errno = ENOMEM;
+     } else {
+        ret = _fullpath(ret, path, _MAX_PATH);
+        if (ret == NULL)
+            errno = EIO;
+     }
+  }
+  return to_unix_path(ret);
+  #else
+    return realpath(path, resolved_path)
+  #endif
+}
+
+
 int Gmkdir(const char *path, bool recursive, int perms) {
 	if (path==NULL || path[0]==0) return -1;
 	mode_t process_mask = umask(0); //is this really needed?

@@ -194,9 +194,11 @@ inline int iround(double x) {
    return (int)floor(x + 0.5);
 }
 
-int Gmkdir(const char *path, bool recursive=true, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH));
-void Gmktempdir(char* templ);
+char* Grealpath(const char *path, char *resolved_path);
 
+int Gmkdir(const char *path, bool recursive=true, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH));
+
+void Gmktempdir(char* templ);
 
 bool haveStdInput(); //if stdin is from a pipe or redirection
 
@@ -475,9 +477,6 @@ struct GRangeParser: GSeg {
 		GFREE(refName);
 	}
 };
-
-
-
 
 //basic dynamic array template for primitive types
 //which can only grow (reallocate) as needed
