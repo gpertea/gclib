@@ -4,19 +4,12 @@ INCDIRS :=
 CXX   := $(if $(CXX),$(CXX),g++)
 LINKER  := $(if $(LINKER),$(LINKER),g++)
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
-LIBS    := 
+LIBS    := -lz
 
 DMACH := $(shell ${CXX} -dumpmachine)
 
 ifneq (, $(findstring mingw32, $(DMACH)))
 WINDOWS=1
-endif
-
-# Compiler settings
-TLIBS = 
-# Non-windows systems need pthread
-ifndef WINDOWS
-TLIBS += -lpthread
 endif
 
 ifneq (, $(findstring linux, $(DMACH)))
@@ -27,19 +20,16 @@ endif
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
-DMACH := windows
-ifeq ($(findstring 4.5.,$(shell ${CXX} -dumpversion)), 4.5.)
-LDFLAGS += -static-libstdc++ -static-libgcc
-endif
+ DMACH := windows
+ ifeq ($(findstring 4.5.,$(shell ${CXX} -dumpversion)), 4.5.)
+  LDFLAGS += -static-libstdc++ -static-libgcc
+ endif
+  LIBS += -lregex -lws2_32
 endif
 
 # Misc. system commands
-# assuming on Windows this is run under MSYS or cygwin
-#ifdef WINDOWS
-#RM = del /Q
-#else
+# assuming on Windows this is run under MSYS
 RM = rm -f
-#endif
 
 # File endings
 ifdef WINDOWS

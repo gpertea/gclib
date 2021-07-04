@@ -5,16 +5,13 @@
 namespace old {
  #include "GHash.hh"
 }
+
 #include "GResUsage.h"
-#include <cstdint>
 #include <iostream>
 //#include "tsl/hopscotch_map.h"
 //#include "tsl/robin_map.h"
 #include <unordered_map>
 //#include "ska/bytell_hash_map.hpp"
-
-//#include "khashl.hh"
-//#include "city.h"
 #include "GHashMap.hh"
 
 #define USAGE "Usage:\n\
@@ -108,7 +105,7 @@ struct cstr_hash {
 };
 
 void run_GHash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
-	old::GHash<int> ghash;
+	old::GHash<int> ghash; // @suppress("Type cannot be resolved")
 	int num_add=0, num_rm=0, num_clr=0;
 	GMessage("----------------- %s ----------------\n", label);
 	ghash.Clear();
@@ -298,7 +295,8 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
   int num_add=0, num_rm=0, num_clr=0;
   //GKHashSet<const char*> khset;
   //GHashSet<> khset;
-  GHash<int, cstr_hash, GHashKey_Eq<const char*>, uint32_t> khset;
+  //GHash<int, cstr_hash, GHashKey_Eq<const char*>, uint32_t> khset;
+  GHashMap<const char*, int> khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -561,9 +559,10 @@ int main(int argc, char* argv[]) {
    run_Robin(swatch, strs, "robin no suffix");
    showTimings(swatch);
 */
-/*
+
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
+/*
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */

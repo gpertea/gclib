@@ -52,7 +52,8 @@ template <> struct GHashKey_Eq<const char*> {
     }
 };
 
-//GHashSet is never making a deep copy of the char* key, it only stores the pointer
+// GHashSet<KType> never makes a deep copy of a char* key, it only stores the pointer
+//  - for pointer keys like char*, key allocation must be managed separately (and should always survive the GHashSet)
 template <typename K=const char*, class Hash=GHashKey_xxHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t >
   class GHashSet: public std::conditional< is_char_ptr<K>::value,
     klib::KHashSetCached< K, Hash,  Eq, khInt_t >,
@@ -125,8 +126,8 @@ public:
 
 };
 
-//GStrSet always allocates a copy of each added string;
-// if you don't want that (keys are shared), just use GHashSet<const char*> instead
+// GStrSet always allocates a new copy of each added string;
+//  if you don't want that, just use GHashSet<const char*> instead and manage the key allocation separately
 template <class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t>
   class GStrSet: public GHashSet<const char*, Hash, Eq, khInt_t> {
   protected:
@@ -183,8 +184,11 @@ template <class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const ch
 
 };
 
-//generic hash map where keys and values can be of any type
-//Warning: keys are always copied (shared), including const char* keys -- no deep copy!
+// Generic hash map where keys and values can be of any type
+// Note: keys are always copied (shared) as simple value, there is no deep copy/allocation for pointers
+//     so pointer keys must me managed separately
+// Note: pointer values are automatically deallocated on container destruction by default,
+//         use GHashMap(false) to disable that
 template <class K, class V, class Hash=GHashKey_xxHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t>
   class GHashMap:public std::conditional< is_char_ptr<K>::value,
     klib::KHashMapCached< K, V, Hash,  Eq, khInt_t>,
@@ -227,7 +231,6 @@ public:
 		  return -1;
 	}
 
-
 	template <typename T=V> inline
 		typename std::enable_if< std::is_pointer<T>::value, void>::type
 		Clear() {
@@ -258,7 +261,6 @@ public:
     }
 
   // -- these can be shared with GHash:
-
 	GHashMap(bool doFree=std::is_pointer<V>::value):freeItems(doFree) {
 		static_assert(std::is_trivial<K>::value,
 				"Error: cannot use this for non-trivial types!\n");
@@ -361,12 +363,13 @@ public:
 		return val;
 	}
 
-
-
 	inline uint32_t Count() { return this->count; }
 
 };
 
+// GHash<VType>(doFree=true) -- basic string hashmap
+// Note: this hash map always makes a copy of the string key which can be costly
+//     use GHashMap<const char*, VTYPE> for a faster alternative
 template <class V, class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t >
   class GHash:public GHashMap<const char*, V, Hash, Eq, khInt_t>  {
 protected:
