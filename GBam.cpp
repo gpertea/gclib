@@ -391,8 +391,7 @@ void GBamRecord::setupCoordinates() {
 	exon.end=c->pos+l;
 	exons.Add(exon);
 	mapped_len+=exon.len();
-	end=c->pos+l; //genomic end coordinate
-	//delete[] cigar; //UBsan protection
+	end=exon.end; //genomic end coordinate
 }
 
 
