@@ -17,11 +17,11 @@
 #endif
 #include <time.h>
 
-// report the memory usage of the current process, rounded to kilobytes
+// report the memory usage of the current process in bytes
 size_t getCurrentMemUse(); //current memory usage of the program (RSS)
 size_t getPeakMemUse(); //maximum memory usage (RSS) for the program until now
 
-void printMemUsage(FILE* fout=stderr);
+void printMemUsage(FILE* fout=stderr); //in kilobytes
 
 double get_usecTime();
 
@@ -42,12 +42,12 @@ class GResUsage {
           if (do_start) start();
 	}
 
-	double start(); //returns microseconds time using clock_gettime(CLOCK_MONOTONIC
+	double start(); //returns microseconds time using clock_gettime(CLOCK_MONOTONIC)
 	double stop(); //stop the stopwatch, returns the current time in microseconds
 	double elapsed(); //microseconds elapsed between start and stop (wallclock time)
 	double u_elapsed(); //microseconds of user time elapsed
 	double s_elapsed(); //microseconds of system time elapsed
-	size_t memoryUsed(); //memory increase between start and stop in KB (can be negative)
+	double memoryUsed(); //memory increase between start and stop in KB (can be negative)
 };
 
 #endif

@@ -62,12 +62,14 @@ void GMessage(const char* format,...){
     _vsnprintf(msg, 4095, format, arguments);
     msg[4095]=0;
     va_end(arguments);
-    OutputDebugString(msg);
+    fflush(stderr);
+    //OutputDebugString(msg);
   #else
     va_list arguments;
     va_start(arguments,format);
     vfprintf(stderr,format,arguments);
     va_end(arguments);
+    fflush(stderr);
   #endif
   }
 

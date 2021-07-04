@@ -149,22 +149,30 @@ size_t getPeakMemUse() {
 	// -- Windows
 	PROCESS_MEMORY_COUNTERS info;
 	GetProcessMemoryInfo( GetCurrentProcess( ), &info, sizeof(info) );
-	return (size_t)info.PeakWorkingSetSize/1024;
+	return (size_t)info.PeakWorkingSetSize;
+#elif defined(__APPLE__) && defined(__MACH__) && defined(MACH_TASK_BASIC_INFO)
+	  struct mach_task_basic_info info;
+		mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
+		if ( task_info( mach_task_self( ), MACH_TASK_BASIC_INFO,
+			(task_info_t)&info, &infoCount ) != KERN_SUCCESS )
+		   return (size_t)info.resident_size_max;
+			else
+		   return (size_t)0L;		// Can't access?
 #else // defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
 	// asssume BSD, Linux, or OSX
 	struct rusage rusage;
 	getrusage( RUSAGE_SELF, &rusage );
- #if defined(__APPLE__) && defined(__MACH__)
-	return (size_t)rusage.ru_maxrss/1024;
- #else
-	return (size_t)(rusage.ru_maxrss);
- #endif
+	#if defined(__APPLE__)
+	  return (size_t)(rusage.ru_maxrss);
+	#else //linux returns this in kilobytes
+	  return (size_t)(rusage.ru_maxrss*1024L);
+	#endif
 #endif
 }
 
 /**
  * Returns the current resident set size (physical memory use) measured
- * in bytes, or zero if the value cannot be determined on this OS.
+ * in bytes
  */
 size_t getCurrentMemUse() {
 #if defined(_WIN32)
@@ -201,15 +209,10 @@ size_t getCurrentMemUse() {
 	}
 	fclose( fp );
 	int page_size=sysconf(_SC_PAGESIZE);
-	return ((size_t)progsize * (size_t)page_size)/1024;
+	return ((size_t)progsize * (size_t)page_size);
 #endif
 }
 
-// get_mem_usage(double &, double &) - takes two doubles by reference,
-// attempts to read the system-dependent data for a process' virtual memory
-// size and resident set size, and return the results in KB.
-//
-// On failure, returns 0.0, 0.0
 void printMemUsage(FILE* fout) {
   double rs= getCurrentMemUse();
   rs/=1024;
@@ -226,6 +229,8 @@ double GResUsage::start() {
 	started=true;
 	stopped=false;
 	start_mem=getCurrentMemUse();
+	double mem=(double)start_mem/1024;
+	GMessage("   start_mem=%.2f\n", mem);
 	getrusage(RUSAGE_SELF, &start_ru);
 	G_gettime(start_ts);
 	double tm=start_ts.tv_sec*1000000.0 + start_ts.tv_nsec/1000.0;
@@ -240,6 +245,9 @@ double GResUsage::stop() {
 	getrusage(RUSAGE_SELF, &stop_ru);
 	double tm=stop_ts.tv_sec*1000000.0 + stop_ts.tv_nsec/1000.0;
 	stop_mem=getCurrentMemUse();
+	double mem=(double)stop_mem/1024;
+	GMessage("   stop_mem=%.2f\n", mem);
+
 	return tm;
 }
 
@@ -271,8 +279,8 @@ double GResUsage::s_elapsed() {
 	return (et-st);
 }
 
-size_t GResUsage::memoryUsed() {
+double GResUsage::memoryUsed() { //in kilobytes
 	stopCheck("memoryUsed");
-	return (stop_mem-start_mem);
+	return (((double)stop_mem-(double)start_mem)/1024.0);
 }
 
