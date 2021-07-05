@@ -16,14 +16,16 @@ namespace old {
 
 #include "khash.h"
 
+#include "KHash.hh"
+
 #define USAGE "Usage:\n\
   htest [-Q] [-C] [-n num_clusters] textfile.. \n\
   E.g. quick query test: ./htest -Q qtest_str.dta\n\
   \n\
  "
 //quick query test: ./htest -Q qtest_str.dta
-
-KHASH_MAP_INIT_STR(str, int)
+const int kcstr = 33;
+KHASH_MAP_INIT_STR(kcstr, int)
 
 bool qryMode=false;
 bool checkRM=false;
@@ -261,13 +263,20 @@ void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 }
 */
 
+// shorthand way to get the key from hashtable or defVal if not found
+#define kh_get_val(kname, hash, key, defVal) ({k=kh_get(kname, hash, key);(k!=kh_end(hash)?kh_val(hash,k):defVal);})
+
+// shorthand way to set value in hash with single line command.  Returns value
+// returns 0=replaced existing item, 1=bucket empty (new key), 2-adding element previously deleted
+#define kh_set(kname, hash, key, val) ({int ret; k = kh_put(kname, hash,key,&ret); kh_value(hash,k) = val; ret;})
+
+
 void run_Khash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   //klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
   khiter_t k;
-  int ret;
   GMessage("----------------- %s ----------------\n", label);
-  khash_t(str) *kh = kh_init(str);
+  khash_t(kcstr)* kh = kh_init(kcstr);
   swatch.start();
   int cl_i=0;
   int prevcmd=2;
@@ -278,15 +287,14 @@ void run_Khash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 	  switch (hstrs[i]->cmd) {
 		case 0:if (cl_i==0) cl_i=i;
 			//khmap[hstrs[i]->str.chars()]=i;
-		  k = kh_put(str, kh, hstrs[i]->str.chars(), &ret );
-		  //if (ret) {//absent
-			kh_val(kh, k)=i;
-		  //}
+		    //k = kh_put(kcstr, kh, hstrs[i]->str.chars(), &ret );
+			//kh_val(kh, k)=i;
+			kh_set(kcstr, kh, hstrs[i]->str.chars(), i);
 			num_add++; break;
 		case 1:if (qryMode) break;
 			//khmap.del(khmap.get(hstrs[i]->str.chars()));
-	    k = kh_get(str, kh, hstrs[i]->str.chars());
-		  kh_del(str, kh, k);
+			k = kh_get(kcstr, kh, hstrs[i]->str.chars());
+			kh_del(kcstr, kh, k);
 			num_rm++; break;
 		case 2:
 			if (qryMode) {
@@ -294,23 +302,72 @@ void run_Khash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
 				for(int j=cl_i;j<i;j+=3) {
 					if (hstrs[j]->cmd) continue;
 					//int v=khmap[hstrs[j]->str.chars()];
-			    k = kh_get(str, kh, hstrs[j]->str.chars());
-					int v=kh_val(kh, k);
+					int v=kh_get_val(kcstr, kh, hstrs[j]->str.chars(), -1);
 					if (v!=j)
 						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
 				}
 			}
 			cl_i=0;
 			//khmap.clear();
-			kh_destroy(str, kh);
+			kh_clear(kcstr, kh);
 			num_clr++; break;
 	  }
   }
   swatch.stop();
-  kh_destroy(str, kh);
+  kh_destroy(kcstr, kh);
   //khmap.clear();
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
+
+void run_KhashCpp(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  //klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
+  GMessage("----------------- %s ----------------\n", label);
+  KHash<const char*, int> kh;
+  swatch.start();
+  uint32_t k;
+  int cl_i=0;
+  int prevcmd=2;
+  for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
+	  switch (hstrs[i]->cmd) {
+		case 0:if (cl_i==0) cl_i=i;
+			//khmap[hstrs[i]->str.chars()]=i;
+		    //k = kh_put(kcstr, kh, hstrs[i]->str.chars(), &ret );
+			//kh_val(kh, k)=i;
+			kh.set(hstrs[i]->str.chars(), i);
+			num_add++; break;
+		case 1:if (qryMode) break;
+			//khmap.del(khmap.get(hstrs[i]->str.chars()));
+			k = kh.get(hstrs[i]->str.chars());
+			kh.del(k);
+			num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					//int v=khmap[hstrs[j]->str.chars()];
+					int v=kh.get_val(hstrs[j]->str.chars(), -1);
+					if (v!=j)
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			//khmap.clear();
+			kh.clear();
+			num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  //kh.destroy(kcstr, kh);
+  //khmap.clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
+
 
 void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
@@ -617,6 +674,10 @@ int main(int argc, char* argv[]) {
 */
 
    run_Khash(swatch, sufstrs, "khash C w/ suffix");
+   showTimings(swatch);
+
+   run_KhashCpp(swatch, sufstrs, "KHash C++ template w/ suffix");
+   showTimings(swatch);
 
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
