@@ -14,12 +14,16 @@ namespace old {
 //#include "ska/bytell_hash_map.hpp"
 #include "GHashMap.hh"
 
+#include "khash.h"
+
 #define USAGE "Usage:\n\
   htest [-Q] [-C] [-n num_clusters] textfile.. \n\
   E.g. quick query test: ./htest -Q qtest_str.dta\n\
   \n\
  "
 //quick query test: ./htest -Q qtest_str.dta
+
+KHASH_MAP_INIT_STR(str, int)
 
 bool qryMode=false;
 bool checkRM=false;
@@ -256,6 +260,58 @@ void run_Bytell(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
 }
 */
+
+void run_Khash(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
+  int num_add=0, num_rm=0, num_clr=0;
+  //klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
+  khiter_t k;
+  int ret;
+  GMessage("----------------- %s ----------------\n", label);
+  khash_t(str) *kh = kh_init(str);
+  swatch.start();
+  int cl_i=0;
+  int prevcmd=2;
+  for (int i=0;i<hstrs.Count();i++) {
+	  if (hstrs[i]->cmd==prevcmd) {
+		  if (prevcmd==2) continue;
+	  } else prevcmd=hstrs[i]->cmd;
+	  switch (hstrs[i]->cmd) {
+		case 0:if (cl_i==0) cl_i=i;
+			//khmap[hstrs[i]->str.chars()]=i;
+		  k = kh_put(str, kh, hstrs[i]->str.chars(), &ret );
+		  //if (ret) {//absent
+			kh_val(kh, k)=i;
+		  //}
+			num_add++; break;
+		case 1:if (qryMode) break;
+			//khmap.del(khmap.get(hstrs[i]->str.chars()));
+	    k = kh_get(str, kh, hstrs[i]->str.chars());
+		  kh_del(str, kh, k);
+			num_rm++; break;
+		case 2:
+			if (qryMode) {
+				//run some query tests here
+				for(int j=cl_i;j<i;j+=3) {
+					if (hstrs[j]->cmd) continue;
+					//int v=khmap[hstrs[j]->str.chars()];
+			    k = kh_get(str, kh, hstrs[j]->str.chars());
+					int v=kh_val(kh, k);
+					if (v!=j)
+						GError("Error at <%s>, invalid value for key %s!\n",label, hstrs[j]->str.chars() );
+				}
+			}
+			cl_i=0;
+			//khmap.clear();
+			kh_destroy(str, kh);
+			num_clr++; break;
+	  }
+  }
+  swatch.stop();
+  kh_destroy(str, kh);
+  //khmap.clear();
+  GMessage("  (%d inserts, %d deletions, %d clears)\n", num_add, num_rm, num_clr);
+}
+
 void run_Khashl(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
   klib::KHashMapCached<const char*, int, cstr_hash, cstr_eq > khmap;
@@ -560,6 +616,8 @@ int main(int argc, char* argv[]) {
    showTimings(swatch);
 */
 
+   run_Khash(swatch, sufstrs, "khash C w/ suffix");
+
    run_Khashl(swatch, sufstrs, "khashl w/ suffix");
    showTimings(swatch);
 /*
@@ -569,7 +627,7 @@ int main(int argc, char* argv[]) {
    run_GHashMap(swatch, sufstrs, "GHashMap xxHash32 w/ suffix");
    showTimings(swatch);
 
-   run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash64 w/ suffix");
+   run_GxxHashMap(swatch, sufstrs, "GHash xxHash64 w/ suffix");
    showTimings(swatch);
 
    //run_GHashMap(swatch, strs, "GHashMap no suffix");
