@@ -11,6 +11,7 @@
 
 #define XXH_INLINE_ALL 1
 #include "xxhash.h"
+#include "wyhash.h"
 
 template <typename K> struct GHashKey_xxHash32 { //K generic (class, primitive, pointer except const char* )
   //template <typename T=K> inline typename std::enable_if< std::is_trivial<T>::value, uint32_t>::type
@@ -37,6 +38,21 @@ template <typename K> struct GHashKey_xxHash { //K generic (class, primitive, po
 template <> struct GHashKey_xxHash<const char*> {
    inline uint32_t operator()(const char* s) const {
       return XXH64(s, strlen(s), 0);
+   }
+};
+
+
+template <typename K> struct GHashKey_wyHash { //K generic (class, primitive, pointer except const char* )
+  //template <typename T=K> inline typename std::enable_if< std::is_trivial<T>::value, uint32_t>::type
+ uint64_t operator()(const K& s) const { //only works for trivial types!
+      static_assert(std::is_trivial<K>::value, "Error: cannot use this for non-trivial types!\n");
+      return wyhash((const void *) &s, sizeof(K), 0, _wyp);
+    }
+};
+
+template <> struct GHashKey_wyHash<const char*> {
+   inline uint32_t operator()(const char* s) const {
+      return wyhash(s, strlen(s), 0, _wyp);
    }
 };
 
@@ -188,7 +204,7 @@ template <class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const ch
 // Note: keys are always copied (shared) as simple value, there is no deep copy/allocation for pointers
 //     so pointer keys must me managed separately
 // Note: pointer values are automatically deallocated on container destruction by default,
-//         use GHashMap(false) to disable that
+//         use GHashMap(false) to disable that when V is a pointer
 template <class K, class V, class Hash=GHashKey_xxHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t>
   class GHashMap:public std::conditional< is_char_ptr<K>::value,
     klib::KHashMapCached< K, V, Hash,  Eq, khInt_t>,
