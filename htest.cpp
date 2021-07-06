@@ -730,7 +730,7 @@ int main(int argc, char* argv[]) {
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */
-   run_GHashMap(swatch, sufstrs, "GHashMap xxHash64 w/ suffix");
+   run_GHashMap(swatch, sufstrs, "GHashMap default w/ suffix");
    showTimings(swatch);
 
    run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash32 w/ suffix");

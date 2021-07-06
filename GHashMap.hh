@@ -70,7 +70,7 @@ template <> struct GHashKey_Eq<const char*> {
 
 // GHashSet<KType> never makes a deep copy of a char* key, it only stores the pointer
 //  - for pointer keys like char*, key allocation must be managed separately (and should always survive the GHashSet)
-template <typename K=const char*, class Hash=GHashKey_xxHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t >
+template <typename K=const char*, class Hash=GHashKey_wyHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t >
   class GHashSet: public std::conditional< is_char_ptr<K>::value,
     klib::KHashSetCached< K, Hash,  Eq, khInt_t >,
 	klib::KHashSet< K, Hash,  Eq, khInt_t > >::type  {
@@ -144,7 +144,7 @@ public:
 
 // GStrSet always allocates a new copy of each added string;
 //  if you don't want that, just use GHashSet<const char*> instead and manage the key allocation separately
-template <class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t>
+template <class Hash=GHashKey_wyHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t>
   class GStrSet: public GHashSet<const char*, Hash, Eq, khInt_t> {
   protected:
 	const char* lastKey=NULL;
@@ -205,7 +205,7 @@ template <class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const ch
 //     so pointer keys must me managed separately
 // Note: pointer values are automatically deallocated on container destruction by default,
 //         use GHashMap(false) to disable that when V is a pointer
-template <class K, class V, class Hash=GHashKey_xxHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t>
+template <class K, class V, class Hash=GHashKey_wyHash<K>, class Eq=GHashKey_Eq<K>, typename khInt_t=uint64_t>
   class GHashMap:public std::conditional< is_char_ptr<K>::value,
     klib::KHashMapCached< K, V, Hash,  Eq, khInt_t>,
     klib::KHashMap< K, V, Hash,  Eq, khInt_t> >::type  {
@@ -386,7 +386,7 @@ public:
 // GHash<VType>(doFree=true) -- basic string hashmap
 // Note: this hash map always makes a copy of the string key which can be costly
 //     use GHashMap<const char*, VTYPE> for a faster alternative
-template <class V, class Hash=GHashKey_xxHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t >
+template <class V, class Hash=GHashKey_wyHash<const char*>, class Eq=GHashKey_Eq<const char*>, typename khInt_t=uint64_t >
   class GHash:public GHashMap<const char*, V, Hash, Eq, khInt_t>  {
 protected:
   const char* lastKey=NULL;
