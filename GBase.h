@@ -204,9 +204,13 @@ bool haveStdInput(); //if stdin is from a pipe or redirection
 
 /****************************************************************************/
 
-inline int Gintcmp(int a, int b) {
+static inline int Gintcmp(int a, int b) {
  //return (a>b)? 1 : ((a==b)?0:-1);
   return a-b;
+}
+
+static inline int Gstrlen(const char* a) {
+  return ((a==NULL) ? 0 : strlen(a));
 }
 
 int Gstrcmp(const char* a, const char* b, int n=-1);
@@ -494,15 +498,21 @@ struct GRangeParser: GSeg {
 #define GDynArray_NOIDX UINT_MAX
 
 //basic dynamic array (vector) template for simple/primitive types or structs
-//Warning: uses malloc so it will never call the item's default constructor when growing
+//Note: uses malloc so it will never call the item's default constructor when growing
 
 template<class OBJ> class GDynArray {
  protected:
-	bool byptr; //in-place copy (pointer) takeover of existing OBJ[]
-    OBJ *fArray;
-    uint fCount;
-    uint fCapacity; // size of allocated memory
-	const static uint dyn_array_defcap = 16; // initial capacity (in elements)
+	  bool byptr=false; //in-place copy (pointer) takeover of existing OBJ[]
+    OBJ *fArray=NULL;
+    uint fCount=0;
+    uint fCapacity=0; // size of allocated memory
+	  const static uint dyn_array_defcap = 16; // initial capacity (in elements)
+    constexpr static const char* ERR_MAX_CAPACITY = "Error at GDynArray: max capacity reached!\n";
+    inline void add(OBJ item) {
+    	 if (fCount==MAX_UINT-1) GError(ERR_MAX_CAPACITY);
+    	 if ((++fCount) > fCapacity) Grow();
+    	 fArray[fCount-1] = item;
+    }
  public:
     GDynArray(int initcap=dyn_array_defcap):byptr(false), fArray(NULL), fCount(0),
 	     fCapacity(initcap) { // constructor
@@ -540,29 +550,25 @@ template<class OBJ> class GDynArray {
     	int delta = (fCapacity>16) ? (fCapacity>>2) : 2;
     	if (GDynArray_MAXCOUNT-delta<=fCapacity)
     		delta=GDynArray_MAXCOUNT-fCapacity;
-    	if (delta<=1) GError("Error at GDynArray::Grow(): max capacity reached!\n");
+    	if (delta<=1) GError(ERR_MAX_CAPACITY);
     	growTo(fCapacity + delta);
     }
-#define GDynArray_ADD(item) \
-    	if (fCount==MAX_UINT-1) GError("Error at GDynArray: cannot add item, maximum count reached!\n"); \
-    	if ((++fCount) > fCapacity) Grow(); \
-    	fArray[fCount-1] = item;
 
     uint Add(OBJ* item) { // Add item to the end of array
       //element given by pointer
       if (item==NULL) return GDynArray_NOIDX;
-  	  GDynArray_ADD( (*item) );
+  	  this->add(*item);
   	  return (fCount-1);
     }
 
     uint Add(OBJ item) { // Add OBJ copy to the end of array
-	  GDynArray_ADD(item);
-	  return (fCount-1);
+	    this->add(item);
+	    return (fCount-1);
     }
 
     uint Push(OBJ item) { //same as Add
-    	GDynArray_ADD(item);
-    	return (fCount-1);
+    	 this->add(item);
+    	 return (fCount-1);
     }
 
     OBJ Pop() { //shoddy.. Do NOT call this for an empty array!
@@ -580,11 +586,13 @@ template<class OBJ> class GDynArray {
     	fCapacity=newcap;
     }
 
-    void append(OBJ* arr, uint count) {
+    void append(const OBJ* arr, uint count=0) {
     	//fast adding of a series of objects
-    	growTo(fCount+count);
-    	memcpy(fArray+fCount, arr, count*sizeof(OBJ));
-    	fCount+=count;
+      if (count>0) {
+    	  growTo(fCount+count);
+    	  memcpy(fArray+fCount, arr, count*sizeof(OBJ));
+    	  fCount+=count;
+      }
     }
 
     void append(GDynArray<OBJ> arr) {
@@ -616,18 +624,7 @@ template<class OBJ> class GDynArray {
     	fArray[fCount]=z;
     }
 
-
     inline void Shrink() { Pack(); }
-
-    void Delete(uint idx) {
-	  GDynArray_TEST_INDEX(idx);
-	  --fCount;
-	  if (idx<fCount)
-		  memmove(&fArray[idx], &fArray[idx+1], (fCount-idx)*sizeof(OBJ));
-    }
-
-    inline void Remove(uint idx) { Delete(idx); }
-
     void Clear() { // clear array, shrinking its allocated memory
     	fCount = 0;
     	GREALLOC(fArray, sizeof(OBJ)*dyn_array_defcap);
@@ -639,6 +636,15 @@ template<class OBJ> class GDynArray {
     	fCount = 0;
     }
 
+    void Delete(uint idx) {
+	    GDynArray_TEST_INDEX(idx);
+	    --fCount;
+	    if (idx<fCount)
+		    memmove(&fArray[idx], &fArray[idx+1], (fCount-idx)*sizeof(OBJ));
+    }
+
+    inline void Remove(uint idx) { Delete(idx); }
+
     OBJ* operator()() { return fArray; }
 
     //use methods below in order to prevent deallocation of fArray pointer on destruct
@@ -647,7 +653,6 @@ template<class OBJ> class GDynArray {
     void DetachPtr() { byptr=true;  }
 
 };
-
 
 int strsplit(char* str, GDynArray<char*>& fields, const char* delim, int maxfields=MAX_INT);
 //splits a string by placing 0 where any of the delim chars are found, setting fields[] to the beginning
@@ -660,6 +665,346 @@ int strsplit(char* str, GDynArray<char*>& fields, const char delim, int maxfield
 int strsplit(char* str, GDynArray<char*>& fields, int maxfields=MAX_INT); //splits by tab or space
 //splits a string by placing 0 where tab or space is found, setting fields[] to the beginning
 //of each field (stopping after maxfields); returns number of fields parsed
+
+
+// Basic dynamic C string (0-terminated character array)
+// Note: this always initializes as a string of length 0, so fCount is always >0
+class Gcstr: public GDynArray<char> {
+
+  friend bool operator==(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return s2.is_empty();
+    return (strcmp(s1, s2.chars()) == 0);
+  }
+
+  friend bool operator<(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return !s2.is_empty();
+    return (strcmp(s1, s2.chars()) < 0);
+  }
+  
+  friend bool operator<=(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return true;
+    return (strcmp(s1, s2.chars()) <= 0);
+  }
+
+  friend bool operator>(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return false;
+    return (strcmp(s1, s2.chars()) > 0);
+  }
+
+  friend bool operator>=(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return true;
+    return (strcmp(s1, s2.chars()) >= 0);
+  }
+  
+  friend bool operator!=(const char* s1, const Gcstr& s2) {
+    if (s1==NULL) return true;
+    return (strcmp(s1, s2.chars()) != 0);
+  }
+
+  public: 
+  Gcstr(int initcap=dyn_array_defcap):GDynArray<char>(initcap?initcap:4) {
+     this->Add('\0');
+  }
+
+  Gcstr(const char* s, int extra_room=4):
+    GDynArray<char>(Gstrlen(s)+extra_room+1) {
+      this->append(s);
+  }
+
+  inline int length() const { return ((fCount>0) ? fCount-1 : 0); }
+
+  inline int len() const { return ((fCount>0) ? fCount-1 : 0); }
+
+  const char* chars() const {
+      return fArray;
+  }
+
+  void Clear() { // clear array, shrinking its allocated memory
+    	GREALLOC(fArray, dyn_array_defcap);
+    	// set initial memory size again
+    	fCapacity = dyn_array_defcap;
+      this->Reset();
+  }
+
+  inline void Reset() {// fast clear array WITHOUT deallocating it
+   	fCount = 1;
+    fArray[0]='\0';
+  }
+
+  Gcstr& append(const char* s, uint count=0) {
+     uint len=Gstrlen(s);
+     //must have \0 as the last element!
+     if (fCount==0) this->Add('\0');
+     GASSERT(fArray[fCount-1]==0);
+     if (len>0) {
+        if (count>0) { len=GMIN(len, count); }
+        growTo(fCount+len);
+        memcpy(fArray+fCount-1, s, len);
+        fCount+=len;
+        fArray[fCount-1]=0;
+     }
+     return *this;
+  }
+  
+  inline bool is_empty() const { return fCount<=1; }
+
+  //same as above but requires a fixed count (faster)
+  Gcstr& append_buf(const char* b, int count) {
+     if (count<=0) return *this;
+     growTo(fCount+count);
+     memcpy(fArray+fCount-1, b, count);
+     fCount+=count;
+     fArray[fCount-1]=0; //to be consistent
+     return *this;
+  }
+
+  Gcstr& append(const char* s, int from, int to) {
+     int len=Gstrlen(s);
+     //must have \0 as the last element!
+     if (fCount==0) this->Add('\0');
+     GASSERT(fArray[fCount-1]==0);
+     if (to<=0) to=len-1-to;
+     if (len>0 && from<len && to<len && to>=from) {
+        int cplen=to-from+1;
+        growTo(fCount+cplen);
+        memcpy(fArray+fCount-1, s+from, cplen);
+        fCount+=cplen;
+        fArray[fCount-1]=0;
+     }
+     return *this;
+  }
+  Gcstr& append(char c) {
+    growTo(fCount+1);
+    fArray[fCount-1]=c;
+    fArray[fCount]='\0';
+    fCount++;
+    return *this;
+  }
+
+  Gcstr& append(int i) {
+    char buf[20];
+    sprintf(buf,"%d",i);
+    return append((const char*) buf);
+  }
+  Gcstr& append(uint i) {
+    char buf[20];
+    sprintf(buf,"%u",i);
+    return append((const char*)buf);
+  }
+
+  Gcstr& append(long l) {
+    char buf[20];
+    sprintf(buf,"%ld",l);
+    return append((const char*)buf);
+  }
+
+  Gcstr& append(unsigned long l) {
+    char buf[20];
+    sprintf(buf,"%lu", l);
+    return append((const char*)buf);
+  }
+
+  Gcstr& append(double f) {
+    char buf[30];
+    sprintf(buf,"%f",f);
+    return append((const char*)buf);
+  }
+
+  void Trim(uint tcount=1) {
+   	//cut (discard) the last tcount non-zero characters
+   	//new Count is now fCount-tcount
+   	//does NOT shrink allocated capacity! 
+    if (fCount==0) { this->Add('\0'); return; }
+    fCount--; //string length
+    if (tcount>fCount) tcount=fCount;
+   	fCount-=tcount;
+    fArray[fCount]='\0';
+    fCount++;
+  }
+
+  inline char last() { 
+    if (fCount==0)  this->Add('\0');
+    //for empty strings returns 0
+    return ( (fCount>1) ? fArray[fCount-2] : 0 );
+  }
+
+  void chomp(char endch=0) {
+    if (fCount==0) { this->Add('\0'); return; }
+    //trim line endings - default is \n and \r
+    uint slen=fCount-1;
+    if (endch) {
+      while (slen>0 && fArray[slen-1]==endch) slen--;
+    } else {
+      while (slen>0 && (fArray[slen-1]=='\n' || fArray[slen-1]=='\r')) slen--;
+    }
+    if (slen<fCount-1) { fArray[slen]='\0'; fCount=slen; }
+  }
+  
+  bool operator==(const Gcstr& s) const {
+    if (s.is_empty()) return is_empty();
+    return (length() == s.length()) &&
+      (strcmp(chars(), s.chars()) == 0);
+  }
+
+  bool operator==(const char *s) const {
+    if (s==NULL) return is_empty();
+    return (strcmp(chars(), s) == 0);
+  }
+
+  bool operator<(const Gcstr& s) const {
+    if (s.is_empty()) return false;
+    return (strcmp(chars(), s.chars()) < 0);
+  }
+
+  bool operator<(const char *s) const {
+    if (s==NULL) return false;
+    return (strcmp(chars(), s) < 0);
+  }
+
+  bool operator<=(const Gcstr& s) const {
+    if (s.is_empty()) return is_empty();
+    return (strcmp(chars(), s.chars()) <= 0);
+  }
+
+  bool operator<=(const char *s) const {
+    if (s==NULL) return is_empty();
+    return (strcmp(chars(), s) <= 0);
+  }
+
+  bool operator>(const Gcstr& s) const {
+    if (s.is_empty()) return !is_empty();
+    return (strcmp(chars(), s.chars()) > 0);
+  }
+
+  bool operator>(const char *s) const {
+    if (s==NULL) return !is_empty();
+    return (strcmp(chars(), s) > 0);
+  }
+
+  bool operator>=(const Gcstr& s) const {
+    if (s.is_empty()) return true;
+    return (strcmp(chars(), s.chars()) >= 0);
+  }
+
+  bool operator>=(const char *s) const {
+    if (s==NULL) return true;
+    return (strcmp(chars(), s) >= 0);
+  }
+
+  bool operator!=(const Gcstr& s) const {
+    if (s.is_empty()) return !is_empty();
+    return (length() != s.length()) ||
+          (memcmp(chars(), s.chars(), length()) != 0);
+    }
+
+  bool operator!=(const char *s) const {
+    if (s==NULL) return !is_empty();
+    return (strcmp(chars(), s) != 0);
+  }
+
+  Gcstr& operator+=(const Gcstr& s) { return append(s.chars()); }
+  Gcstr& operator+=(const char* s) { return append(s); }
+  Gcstr& operator+=(char c) { return append(c); }
+  Gcstr& operator+=(int i) { return append(i); }
+  Gcstr& operator+=(uint i) { return append(i); }
+  Gcstr& operator+=(long l) { return append(l); }
+  Gcstr& operator+=(unsigned long l) { return append(l); }
+  Gcstr& operator+=(double f);
+  int asInt(int base = 10 ) {  return strtol(chars(), NULL, base); }
+  double asReal() { return strtod( chars(), NULL); }
+
+};
+
+// - GFStream -- basic file reading stream based on Heng Li's kseq.h
+
+template< typename TFile, typename TFunc > class GFStream {
+  protected:
+     constexpr static byte SEP_SPACE = 0;  // isspace(): \t, \n, \v, \f, \r
+     constexpr static byte SEP_TAB = 1;    // isspace() && !' '
+     constexpr static byte SEP_LINE = 2;   // line separator: "\n" (Unix) or "\r\n" (Windows)
+     constexpr static byte SEP_MAX = 2;
+     /* Consts */
+     constexpr static uint DEFAULT_BUFSIZE = 16384;
+     char* buf=NULL;                      // character buffer
+     TFile f;
+     TFunc rdfunc;
+     uint bufsize=0;                   // buffer size
+     int begin=0;                     // begin buffer index
+     int end=0;                       // end buffer index or error flag if -1 
+     bool is_eof=false;                   // eof flag
+
+  public: 
+     GFStream(TFile f_, TFunc rdfunc_, uint bufsize_=DEFAULT_BUFSIZE) : f(f_), rdfunc(rdfunc_), bufsize(bufsize_) 
+        {
+          // f( std::move( f_ ) ), rdfunc( std::move(  rdfunc_  ) )
+          GMALLOC(buf, bufsize);
+        }
+     ~GFStream() { GFREE(buf); }
+     bool err() { return ( this->end < 0); }
+     bool eof() { return ( this->is_eof  && this->begin >= this->end ); }
+     void rewind() { this->is_eof=false; this->begin = this->end = 0; }
+
+     int getc() {
+       if (this->err()) return -3;
+       if (this->is_eof && this->begin >= this->end) return -1;
+		   if (this->begin >= this->end) {
+			    this->begin = 0;
+			    this->end = this->rdfunc(this->f, this->buf, this->bufsize);
+			    if (this->end == 0) { this->is_eof = 1; return -1;}	
+			    if (this->end == -1) { this->is_eof = 1; return -3;}
+       }
+		   return (int)buf[this->begin++];
+     }
+
+     int getUntil(int delimiter, Gcstr& str, bool append=false, int* dret=NULL) {
+       int gotany = 0;
+       if (dret) *dret = 0;
+		   //str->l = append? str->l : 0;
+       if (!append) str.Reset();
+       for (;;) {
+         int i;
+         if (this->err()) return -3;
+         if (this->begin >= this->end) {
+           if (!this->is_eof) {
+             this->begin = 0;
+             this->end = this->rdfunc(this->f, this->buf, this->bufsize);
+             if (this->end == 0) { this->is_eof = 1; break; }
+             if (this->end == -1) { this->is_eof = 1; return -3; }
+           } else break;
+         }
+         if (delimiter == SEP_LINE) {
+           for (i = this->begin; i < this->end; ++i)
+             if (this->buf[i] == '\n') break;
+         } else if (delimiter > SEP_MAX) {
+             for (i = this->begin; i < this->end; ++i)
+               if (this->buf[i] == delimiter) break;
+         } else if (delimiter == SEP_SPACE) {
+            for (i = this->begin; i < this->end; ++i)
+              if (isspace(this->buf[i])) break;
+         } else if (delimiter == SEP_TAB) {
+            for (i = this->begin; i < this->end; ++i)
+              //if (isspace(this->buf[i]) && this->buf[i] != ' ') break;
+              if (this->buf[i] == '\t') break;
+         } else i = 0; // never be here!
+          // append from buf from begin to i
+         gotany = 1;
+         //memcpy(str->s + str->l, this->buf + this->begin, i - this->begin);
+         //str->l = str->l + (i - this->begin);
+         str.append_buf(this->buf + this->begin, i - this->begin);
+         this->begin = i + 1;
+         if (i < this->end) {
+           if (dret) *dret = this->buf[i];
+           break;
+         }
+       }
+       if (!gotany && this->eof) return -1;
+       if (delimiter == SEP_LINE && str.len() > 1 && str.last() == '\r') str.Trim();
+       return str.len();
+     }
+
+
+ };
+
 
 // ************** simple line reading class for text files
 //GLineReader -- text line reading/buffering class

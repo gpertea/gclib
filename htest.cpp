@@ -1,6 +1,6 @@
 #include "GBase.h"
 #include "GArgs.h"
-#include "GStr.h"
+//#include "GStr.h"
 #include "GVec.hh"
 namespace old {
  #include "GHash.hh"
@@ -27,7 +27,7 @@ int numClusters=500;
 
 struct HStrData {
 	int cmd; // 0=add, 1=remove, 2=clear
-	GStr str;
+	Gcstr str;
 	HStrData(char* s=NULL, int c=0):cmd(c), str(s) { }
 };
 
@@ -415,7 +415,7 @@ void run_GHashMapShk(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* lab
 }
 
 struct SObj {
-  GStr atr;
+  Gcstr atr;
   int val;
   SObj(const char* a=NULL, const int v=0):atr(a),val(v) { }
   bool operator<(const SObj& o) const { return val<o.val; }
@@ -433,7 +433,7 @@ int main(int argc, char* argv[]) {
  //args.printCmdLine(stderr);
  args.printError(USAGE, true);
  if (args.getOpt('h') || args.getOpt("help")) GMessage(USAGE);
- GStr s=args.getOpt('n');
+ Gcstr s=args.getOpt('n');
  if (!s.is_empty()) {
 	 numClusters=s.asInt();
 	 if (numClusters<=0)

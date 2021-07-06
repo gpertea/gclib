@@ -229,7 +229,6 @@ double GResUsage::start() {
 	started=true;
 	stopped=false;
 	start_mem=getCurrentMemUse();
-	double mem=(double)start_mem/1024;
 	getrusage(RUSAGE_SELF, &start_ru);
 	G_gettime(start_ts);
 	double tm=start_ts.tv_sec*1000000.0 + start_ts.tv_nsec/1000.0;
@@ -244,7 +243,6 @@ double GResUsage::stop() {
 	getrusage(RUSAGE_SELF, &stop_ru);
 	double tm=stop_ts.tv_sec*1000000.0 + stop_ts.tv_nsec/1000.0;
 	stop_mem=getCurrentMemUse();
-	double mem=(double)stop_mem/1024;
 	return tm;
 }
 

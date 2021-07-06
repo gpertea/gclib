@@ -113,7 +113,7 @@ bool operator<=(const char *s1, const GStr& s2){
 
 bool operator>(const char *s1, const GStr& s2) {
   if (s1==NULL) return false;
- return (strcmp(s1, s2.chars()) > 0);
+  return (strcmp(s1, s2.chars()) > 0);
  }
 
 

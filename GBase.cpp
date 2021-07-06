@@ -494,7 +494,7 @@ char* rstrchr(char* str, char ch) {  /* returns a pointer to the rightmost
  while (p>=str) {
     if (*p==ch) return p;
     p--;
-    }
+ }
  return NULL;
 }
 
