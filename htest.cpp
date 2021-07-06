@@ -75,12 +75,14 @@ void showTimings(GResUsage swatch) {
  char *wtime=commaprintnum((uint64_t)swatch.elapsed());
  char *utime=commaprintnum((uint64_t)swatch.u_elapsed());
  char *stime=commaprintnum((uint64_t)swatch.s_elapsed());
- char *smem=commaprintnum((uint64_t)swatch.memoryUsed());
+ double d=swatch.memoryUsed();
+ long ld=(int64_t)d;
+ char *smem=commaprintnum(ld);
  GMessage("Elapsed time (microseconds): %12s us\n", wtime);
  GMessage("                  user time: %12s us\n", utime);
  GMessage("                system time: %12s us\n", stime);
  GMessage("                  mem usage: %12s KB\n", smem);
-
+ GMessage("                  mem usage: %ld KB\n", ld);
  GFREE(wtime);GFREE(utime);GFREE(stime); GFREE(smem);
 }
 

@@ -1036,9 +1036,14 @@ void writeFasta(FILE *fw, const char* seqid, const char* descr,
 
 
 
-char* commaprintnum(uint64 n) {
+char* commaprintnum(int64 n) {
   char retbuf[48];
   int comma = ',';
+  bool negative=false;
+  if (n<0) {
+	  negative=true;
+	  n=-n;
+  }
   char *p = &retbuf[sizeof(retbuf)-1];
   int i = 0;
   *p = '\0';
@@ -1049,5 +1054,6 @@ char* commaprintnum(uint64 n) {
     n /= 10;
     i++;
   } while(n != 0);
+  if (negative) { p--;*p='-'; }
   return Gstrdup(p);
 }
