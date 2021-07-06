@@ -62,6 +62,7 @@ int loadStrings(FILE* f, GPVec<HStrData>& strgsuf, GPVec<HStrData>& strgs, int t
       strgs.Add(new HStrData(line));
 	  num++;
   } //while line
+  GError("Test the error box!\n");
   return num;
 }
 

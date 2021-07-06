@@ -723,7 +723,7 @@ char* fgetline(char* & buf, int& buflen, FILE* stream, off_t* f_pos=NULL, int* l
 
 
 //print int/values nicely formatted in 3-digit groups
-char* commaprintnum(uint64 n);
+char* commaprintnum(int64_t n);
 
 /*********************** File management functions *********************/
 
