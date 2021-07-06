@@ -335,7 +335,9 @@ void run_GHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label)
 
 void run_GxxHashMap(GResUsage& swatch, GPVec<HStrData> & hstrs, const char* label) {
   int num_add=0, num_rm=0, num_clr=0;
-  GHash<int> khset;
+  //GHash<int> khset;
+  GHashMap<const char*, int, GHashKey_xxHash32<const char*>,
+          GHashKey_Eq<const char*>, uint32_t > khset;
   GMessage("----------------- %s ----------------\n", label);
   int cl_i=0;
   swatch.start();
@@ -566,10 +568,10 @@ int main(int argc, char* argv[]) {
    run_Khashl(swatch, strs, "khashl no suffix");
    showTimings(swatch);
 */
-   run_GHashMap(swatch, sufstrs, "GHashMap xxHash32 w/ suffix");
+   run_GHashMap(swatch, sufstrs, "GHashMap default w/ suffix");
    showTimings(swatch);
 
-   run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash64 w/ suffix");
+   run_GxxHashMap(swatch, sufstrs, "GHashMap xxHash32 w/ suffix");
    showTimings(swatch);
 
    //run_GHashMap(swatch, strs, "GHashMap no suffix");
