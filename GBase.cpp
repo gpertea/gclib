@@ -1036,7 +1036,7 @@ void writeFasta(FILE *fw, const char* seqid, const char* descr,
 
 
 
-char* commaprintnum(int64 n) {
+char* commaprintnum(int64_t n) {
   char retbuf[48];
   int comma = ',';
   bool negative=false;
