@@ -646,6 +646,7 @@ template<class OBJ> class GDynArray {
 
     inline void Remove(uint idx) { Delete(idx); }
 
+    // Warning: not const, the returned pointer (array) can be modified
     OBJ* operator()() { return fArray; }
 
     //use methods below in order to prevent deallocation of fArray pointer on destruct
@@ -919,11 +920,12 @@ class Gcstr: public GDynArray<char> {
 // - GFStream -- basic file reading stream based on Heng Li's kseq.h
 
 template< typename TFile, typename TFunc > class GFStream {
+  public:
+    constexpr static byte SEP_SPACE = 0;  // isspace(): \t, \n, \v, \f, \r
+    constexpr static byte SEP_TAB = 1;    // isspace() && !' '
+    constexpr static byte SEP_LINE = 2;   // line separator: "\n" (Unix) or "\r\n" (Windows)
+    constexpr static byte SEP_MAX = 2;
   protected:
-     constexpr static byte SEP_SPACE = 0;  // isspace(): \t, \n, \v, \f, \r
-     constexpr static byte SEP_TAB = 1;    // isspace() && !' '
-     constexpr static byte SEP_LINE = 2;   // line separator: "\n" (Unix) or "\r\n" (Windows)
-     constexpr static byte SEP_MAX = 2;
      /* Consts */
      constexpr static uint DEFAULT_BUFSIZE = 16384;
      char* buf=NULL;                      // character buffer
@@ -957,7 +959,7 @@ template< typename TFile, typename TFunc > class GFStream {
 		   return (int)buf[this->begin++];
      }
 
-     int getUntil(int delimiter, Gcstr& str, bool append=false, int* dret=NULL) {
+     int getUntil(byte delimiter, Gcstr& str, bool append=false, int* dret=NULL) {
        int gotany = 0;
        if (dret) *dret = 0;
 		   //str->l = append? str->l : 0;
@@ -998,7 +1000,7 @@ template< typename TFile, typename TFunc > class GFStream {
            break;
          }
        }
-       if (!gotany && this->eof) return -1;
+       if (!gotany && this->eof()) return -1;
        if (delimiter == SEP_LINE && str.len() > 1 && str.last() == '\r') str.Trim();
        return str.len();
      }
