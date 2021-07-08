@@ -59,16 +59,17 @@
 #define _DEBUG_ 1
 #endif
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 
 #include <math.h>
 #include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <stdint.h>
-#include <stdarg.h>
+#include <cstdint>
+#include <cstdarg>
+#include <cctype>
 #include <type_traits>
 
 typedef int64_t int64;
@@ -680,7 +681,7 @@ class Gcstr: public GDynArray<char> {
     if (s1==NULL) return !s2.is_empty();
     return (strcmp(s1, s2.chars()) < 0);
   }
-  
+
   friend bool operator<=(const char* s1, const Gcstr& s2) {
     if (s1==NULL) return true;
     return (strcmp(s1, s2.chars()) <= 0);
@@ -695,13 +696,13 @@ class Gcstr: public GDynArray<char> {
     if (s1==NULL) return true;
     return (strcmp(s1, s2.chars()) >= 0);
   }
-  
+
   friend bool operator!=(const char* s1, const Gcstr& s2) {
     if (s1==NULL) return true;
     return (strcmp(s1, s2.chars()) != 0);
   }
 
-  public: 
+  public:
   Gcstr(int initcap=dyn_array_defcap):GDynArray<char>(initcap?initcap:4) {
      this->Add('\0');
   }
@@ -745,7 +746,7 @@ class Gcstr: public GDynArray<char> {
      }
      return *this;
   }
-  
+
   inline bool is_empty() const { return fCount<=1; }
 
   //same as above but requires a fixed count (faster)
@@ -813,7 +814,7 @@ class Gcstr: public GDynArray<char> {
   void Trim(uint tcount=1) {
    	//cut (discard) the last tcount non-zero characters
    	//new Count is now fCount-tcount
-   	//does NOT shrink allocated capacity! 
+   	//does NOT shrink allocated capacity!
     if (fCount==0) { this->Add('\0'); return; }
     fCount--; //string length
     if (tcount>fCount) tcount=fCount;
@@ -822,7 +823,7 @@ class Gcstr: public GDynArray<char> {
     fCount++;
   }
 
-  inline char last() { 
+  inline char last() {
     if (fCount==0)  this->Add('\0');
     //for empty strings returns 0
     return ( (fCount>1) ? fArray[fCount-2] : 0 );
@@ -839,7 +840,7 @@ class Gcstr: public GDynArray<char> {
     }
     if (slen<fCount-1) { fArray[slen]='\0'; fCount=slen; }
   }
-  
+
   bool operator==(const Gcstr& s) const {
     if (s.is_empty()) return is_empty();
     return (length() == s.length()) &&
@@ -930,11 +931,11 @@ template< typename TFile, typename TFunc > class GFStream {
      TFunc rdfunc;
      uint bufsize=0;                   // buffer size
      int begin=0;                     // begin buffer index
-     int end=0;                       // end buffer index or error flag if -1 
+     int end=0;                       // end buffer index or error flag if -1
      bool is_eof=false;                   // eof flag
 
-  public: 
-     GFStream(TFile f_, TFunc rdfunc_, uint bufsize_=DEFAULT_BUFSIZE) : f(f_), rdfunc(rdfunc_), bufsize(bufsize_) 
+  public:
+     GFStream(TFile f_, TFunc rdfunc_, uint bufsize_=DEFAULT_BUFSIZE) : f(f_), rdfunc(rdfunc_), bufsize(bufsize_)
         {
           // f( std::move( f_ ) ), rdfunc( std::move(  rdfunc_  ) )
           GMALLOC(buf, bufsize);
@@ -950,7 +951,7 @@ template< typename TFile, typename TFunc > class GFStream {
 		   if (this->begin >= this->end) {
 			    this->begin = 0;
 			    this->end = this->rdfunc(this->f, this->buf, this->bufsize);
-			    if (this->end == 0) { this->is_eof = 1; return -1;}	
+			    if (this->end == 0) { this->is_eof = 1; return -1;}
 			    if (this->end == -1) { this->is_eof = 1; return -3;}
        }
 		   return (int)buf[this->begin++];
