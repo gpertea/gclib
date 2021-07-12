@@ -224,6 +224,31 @@ public:
 		}
 		return -1;
 	}
+	inline khInt_t addIfNew(const K ky, const V val, bool& newKey) { // if a key does not exist allocate a copy of the key
+		// return -1 if the key already exists
+		int absent=-1;
+		khInt_t i=this->put(ky, &absent);
+		if (absent==1) { //key was actually added
+			this->value(i)=val; //value is always copied
+			newKey=true;
+			return i;
+		}
+		newKey=false;
+		return i;
+	}
+
+	inline void setKey(khInt_t i, const K ky) {
+		this->key(i)=ky;
+	}
+
+	inline void setValue(khInt_t i, const V val) {
+		this->value(i)=val;
+	}
+
+	inline V getValue(khInt_t i) {
+			return this->value(i); //return a V copy
+	}
+
 	template <typename T=V> inline
 		typename std::enable_if< std::is_pointer<T>::value, int>::type
 			Remove(K ky) { //return index being removed
