@@ -1,8 +1,3 @@
-//---------------------------------------------------------------------------
-/*
-Sortable collection of pointers to objects
-*/
-
 #ifndef _GVec_HH
 #define _GVec_HH
 

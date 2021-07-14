@@ -511,7 +511,7 @@ template<class STYPE> class GDynArray {
     const static uint dyn_array_defcap = 16; // initial capacity (in elements)
     constexpr static const char* ERR_MAX_CAPACITY = "Error at GDynArray: max capacity reached!\n";
     inline void add(STYPE item) {
-    	 if (fCount==MAX_UINT-1) GError(ERR_MAX_CAPACITY);
+    	 //if (fCount==MAX_UINT-1) GError(ERR_MAX_CAPACITY);
     	 if ((++fCount) > fCapacity) Grow();
     	 fArray[fCount-1] = item;
     }
@@ -549,7 +549,7 @@ template<class STYPE> class GDynArray {
     	return fArray[idx];
     }
 
-    void Grow() {
+    inline void Grow() {
     	int delta = (fCapacity>16) ? (fCapacity>>2) : 2;
     	if (GDynArray_MAXCOUNT-delta<=fCapacity)
     		delta=GDynArray_MAXCOUNT-fCapacity;
@@ -569,7 +569,8 @@ template<class STYPE> class GDynArray {
    	 if ((++fCount) > fCapacity) Grow();
    	 return fArray[fCount-1];
     }
-    uint Add(STYPE item) { // Add STYPE copy to the end of array
+
+    inline uint Add(STYPE item) { // Add STYPE copy to the end of array
 	    this->add(item);
 	    return (fCount-1);
     }
@@ -587,7 +588,7 @@ template<class STYPE> class GDynArray {
 
     uint Count() { return fCount; } // get size of array (elements)
     uint Capacity() { return fCapacity; }
-    void growTo(uint newcap) {
+    inline void growTo(uint newcap) {
     	if (newcap==0) { Clear(); return; }
     	if (newcap <= fCapacity) return; //never shrink! (use Pack() for shrinking)
     	GREALLOC(fArray, newcap*sizeof(STYPE));

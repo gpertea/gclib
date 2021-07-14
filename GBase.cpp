@@ -612,14 +612,12 @@ char* strupper(char * str) {//changes string in place
 
 //test if a char is in a given string (set)
 bool chrInStr(char c, const char* str) {
- if (str==NULL || *str=='\0') return false;
- for (const char* p=str; (*p)!='\0'; p++) {
-   if ((*p)==c) return true;
+   if (str==NULL || *str=='\0') return false;
+   for (const char* p=str; (*p)!='\0'; p++) {
+     if ((*p)==c) return true;
    }
- return false;
+   return false;
  }
-
-
 
 char* rstrfind(const char* str, const char* substr) {
 /* like rindex() for a string */
