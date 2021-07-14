@@ -229,6 +229,7 @@ template<class REC> void GAIList<REC>::build(int cLen) {
 			}
 		}
 	}
+	this->ready=true;
 }
 
 template<class REC> uint32_t GAIList<REC>::query(const char *chr, uint32_t qs, uint32_t qe) {
