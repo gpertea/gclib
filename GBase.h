@@ -636,7 +636,9 @@ template<class STYPE> class GDynArray {
     inline void Shrink() { Pack(); }
     void Clear() { // clear array, shrinking its allocated memory
     	fCount = 0;
-    	GREALLOC(fArray, sizeof(STYPE)*dyn_array_defcap);
+    	GFREE(fArray);
+    	//GREALLOC(fArray, sizeof(STYPE)*dyn_array_defcap);
+    	GMALLOC(fArray, sizeof(STYPE)*dyn_array_defcap);
     	// set initial memory size again
     	fCapacity = dyn_array_defcap;
     }
@@ -713,7 +715,7 @@ class Gcstr: public GDynArray<char> {
 
   public:
   Gcstr(int initcap=dyn_array_defcap):GDynArray<char>(initcap?initcap:4) {
-     this->Add('\0');
+     this->Reset();
   }
 
   Gcstr(const char* s, int extra_room=4):
@@ -721,18 +723,36 @@ class Gcstr: public GDynArray<char> {
       this->append(s);
   }
 
+  Gcstr(const Gcstr& s, int extra_room=4):
+    GDynArray<char>(s.length()+extra_room+1) {
+	  this->Reset();
+      this->append_buf(s.chars(), s.length());
+  }
+
+
+  Gcstr(int num_chars, const char* s):GDynArray<char>(num_chars+1) {
+     if (num_chars==0) return;
+     this->append(s, num_chars);
+  }
+
+  Gcstr& operator=(const Gcstr& s) { Reset(); growTo(s.length()); append_buf(s, s.length()); return *this; }
+
+  Gcstr& operator=(const char* s) {  Reset();  int slen=Gstrlen(s);  growTo(slen);  append_buf(s, slen);  return *this; }
+
   inline int length() const { return ((fCount>0) ? fCount-1 : 0); }
 
   inline int len() const { return ((fCount>0) ? fCount-1 : 0); }
 
-  const char* chars() const {
-      return fArray;
-  }
+  const char* chars() const {  return fArray;  }
 
-  void Clear() { // clear array, shrinking its allocated memory
-    	GREALLOC(fArray, dyn_array_defcap);
-    	// set initial memory size again
-    	fCapacity = dyn_array_defcap;
+  operator const char* () const { return fArray; }
+
+  void Clear(int cap=0) { // clear array, shrinking its allocated memory
+	  GFREE(fArray);
+	  if (cap==0) cap=dyn_array_defcap;
+	  GMALLOC(fArray, cap);
+      // set initial memory size again
+      fCapacity = cap;
       this->Reset();
   }
 
@@ -768,7 +788,9 @@ class Gcstr: public GDynArray<char> {
      return *this;
   }
 
-  Gcstr& append(const char* s, int from, int to) {
+  Gcstr& append(const Gcstr& s) { return append_buf( s.chars(), s.length() ); }
+
+  Gcstr& append(const char* s, int from, int to=0) {
      int len=Gstrlen(s);
      //must have \0 as the last element!
      if (fCount==0) this->Add('\0');
@@ -796,6 +818,7 @@ class Gcstr: public GDynArray<char> {
     sprintf(buf,"%d",i);
     return append((const char*) buf);
   }
+
   Gcstr& append(uint i) {
     char buf[20];
     sprintf(buf,"%u",i);
@@ -820,7 +843,7 @@ class Gcstr: public GDynArray<char> {
     return append((const char*)buf);
   }
 
-  void Trim(uint tcount=1) {
+  void trim(uint tcount=1) {
    	//cut (discard) the last tcount non-zero characters
    	//new Count is now fCount-tcount
    	//does NOT shrink allocated capacity!
@@ -837,7 +860,7 @@ class Gcstr: public GDynArray<char> {
     //for empty strings returns 0
     return ( (fCount>1) ? fArray[fCount-2] : 0 );
   }
-
+ //trim endch or any new line characters
   void chomp(char endch=0) {
     if (fCount==0) { this->Add('\0'); return; }
     //trim line endings - default is \n and \r
@@ -912,7 +935,7 @@ class Gcstr: public GDynArray<char> {
     return (strcmp(chars(), s) != 0);
   }
 
-  Gcstr& operator+=(const Gcstr& s) { return append(s.chars()); }
+  Gcstr& operator+=(const Gcstr& s) { return append_buf(s.chars(), s.length() ); }
   Gcstr& operator+=(const char* s) { return append(s); }
   Gcstr& operator+=(char c) { return append(c); }
   Gcstr& operator+=(int i) { return append(i); }
@@ -920,8 +943,146 @@ class Gcstr: public GDynArray<char> {
   Gcstr& operator+=(long l) { return append(l); }
   Gcstr& operator+=(unsigned long l) { return append(l); }
   Gcstr& operator+=(double f);
+
   int asInt(int base = 10 ) {  return strtol(chars(), NULL, base); }
+
   double asReal() { return strtod( chars(), NULL); }
+
+  inline Gcstr& upper() {
+    for (char *p = fArray; *p; p++) *p = (char) toupper(*p);
+    return *this;
+  }
+
+  inline Gcstr& lower() {
+    for (char *p = fArray; *p; p++) *p = (char) tolower(*p);
+    return *this;
+  }
+
+  int index(const char *s, int start_index=0) const {
+    // A negative index specifies an index from the right of the string.
+    if (s==NULL || s[0]==0 ) return -1;
+    if (start_index < 0) start_index += length();
+    if (start_index < 0 || start_index >= length()) return -1;
+    const char* idx = strstr(&fArray[start_index], s);
+    return idx ? idx-fArray : -1;
+}
+
+ int index(char c, int start_index=0 ) const {
+    // A negative index specifies an index from the right of the string.
+    if (length()==0 || c=='\0') return -1;
+    if (start_index < 0) start_index += length();
+    if (start_index < 0 || start_index >= length()) return -1;
+    const char *idx=(char *) ::memchr(&fArray[start_index], c,
+                                         length()-start_index);
+    return idx ? idx - fArray : -1;
+}
+
+int rindex(char c, int end_index=-1) const {
+    if (c == 0 || length()==0 || end_index>=length()) return -1;
+    if (end_index<0) end_index=length()-1;
+    for (int i=end_index;i>=0;i--)  if (fArray[i]==c) return i;
+    return -1;
+}
+
+int rindex(const char* str, int end_index=-1) const {
+    if (str==NULL || *str == '\0' || length()==0 || end_index>=length())
+        return -1;
+    int slen=strlen(str);
+    if (end_index<0) end_index=length()-1;
+    //end_index is the index of the right-side boundary
+    //the scanning starts at the end
+    if (end_index>=0 && end_index<slen-1) return -1;
+    for (int i=end_index-slen+1;i>=0;i--) {
+       if (memcmp((void*)(fArray+i), (void*)str, slen)==0)
+           return i;
+       }
+    return -1;
+}
+
+Gcstr&  cut(int idx) {
+    //cut off from index idx to the end of string
+    //negative index means from the end of the string
+    if (idx < 0)  idx += length();
+    if (idx<0 || (uint)idx>=fCount-1) return *this; //invalid index
+    fCount=idx+1;
+    fArray[idx]='\0';
+    return *this;
+}
+
+//delete string span without reallocation
+Gcstr& remove(int idx, int rlen=-1) {
+	    if (rlen==-1) return cut(idx);
+      if (idx < 0)  idx += length();
+      if (rlen==0 || idx<0 || (uint)idx>=fCount-1 ) return *this;
+      if (rlen < 0  || rlen>length()-idx) return cut(idx);
+	    fCount-=rlen;
+	    if (idx<(int)fCount) //copy the zero terminator as well (hence the +2)
+		    memmove(&fArray[idx], &fArray[idx+rlen],fCount-idx-rlen+2);
+      return *this;
+}
+
+inline Gcstr& cut(int idx, int rlen) { return remove(idx, rlen); }
+
+Gcstr substr(int idx = 0, int len = -1) const {
+    if (idx < 0)  idx += length();
+        else if (idx>=length()) { len=0; idx=length(); }
+    if (len) {// A length of -1 specifies the rest of the string.
+      if (len < 0  || len>length()-idx) len = length() - idx;
+      if (idx<0 || idx>=length() || len<0 ) return Gcstr((int)0);
+    }
+    if (len) return Gcstr(len, &fArray[idx]);
+    return Gcstr((int)0);
+}
+
+Gcstr split(const char* delim) {
+          //split "this" in two parts, at the first (leftmost)
+          //encounter of delim:
+          //     1st is left in "this",
+          //      2nd part will be returned as a new string!
+ int i=index(delim);
+ if (i>=0) {
+      int i2=i+strlen(delim);
+      Gcstr result(length()-i2, &fArray[i2]);
+      cut(i);
+      return result;
+ }
+ return Gcstr((int)0);
+}
+
+Gcstr split(char c) {
+  int i=index(c);
+  if (i>=0){
+      Gcstr result(length()-i-1, &fArray[i+1]);
+      cut(i);
+      return result;
+      }
+  return Gcstr((int)0);
+}
+
+ bool contains(const Gcstr& s) const {
+    return (index(s.chars()) >= 0);
+ }
+
+ bool contains(const char *s) const {
+   return (index(s) >= 0);
+ }
+
+ bool contains(char c) const {
+   return (index(c) >= 0);
+ }
+
+Gcstr& appendfmt(const char *fmt, ...) {
+// Format as in sprintf
+  char* buf; GMALLOC(buf, strlen(fmt)+1024);
+  //+1K buffer should be enough for common expressions
+  va_list arguments;
+  va_start(arguments,fmt);
+  vsprintf(buf,fmt,arguments);
+  va_end(arguments);
+  append(buf);
+  GFREE(buf);
+  return *this;
+  }
 
 };
 
@@ -1118,4 +1279,4 @@ bool parseInt(char* &p, int& i); //advance pointer p after the number
 bool parseUInt(char* &p, uint& i); //advance pointer p after the number
 bool parseHex(char* &p,  uint& i);
 
-#endif /* G_BASE_DEFINED */
+#endif // G_BASE_DEFINED

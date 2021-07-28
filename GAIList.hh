@@ -8,64 +8,8 @@
 //-------------------------------------------------------------------------------------
 #include "GHashMap.hh"
 #include "GRadixSorter.hh"
-#include <vector>
-/*
-  struct AICtgData{
-		char *name;  //name of contig
-		int64_t nr, mr;  //number/capacity of glist
-		AIRegData *glist;   //regions data
-		int nc, lenC[MAXC], idxC[MAXC];  //components
-		uint32_t *maxE;                  //augmentation
-	};
-	AICtgData *ctgs;            // list of contigs (of size nctg)
-	int32_t nctg, mctg;   // count and max number of contigs
-	GHashMap<const char*, int32_t>* ctghash;
-	bool ready=false; //ready for query (only after build() is called)
-
-	// hits data for the last query()
-	uint32_t* hits;
-	uint32_t h_cap;
-	uint32_t h_count;
-    int32_t  h_ctg; //index in ctg[] array
-
-
-	void init() {
-	    ctghash=new GHashMap<const char*, int32_t>();
-		ctghash->resize(64);
-		nctg = 0;
-		mctg = 32;
-		ready=false;
-		GMALLOC(ctgs, mctg*sizeof(AICtgData));
-
-		h_count=0;
-		h_cap=1000000;
-		h_ctg=-1;
-		GMALLOC(hits, h_cap*sizeof(uint32_t));
-	}
-	int32_t getCtg(const char *chr) {
-		int32_t* fi=this->ctghash->Find(chr);
-		return fi ? *fi : -1;
-	}
-
-	void destroy() {
-		for (int i = 0; i < nctg; ++i){
-			free(ctgs[i].name);
-			free(ctgs[i].glist);
-			free(ctgs[i].maxE);
-		}
-		free(ctgs);
-		if (hits) free(hits);
-		delete ctghash;
-	}
-
-	//add & query BED-style intervals: 0 based, open-ended
-	void add(const char *chr, uint32_t s, uint32_t e, REC payload);
-	uint32_t query(const char *chr, uint32_t qs, uint32_t qe);
-
- */
 
 //one GAIList per contig!
-
 template <typename REC> class GAIList {
   public:
 	struct AIRegData {
@@ -97,7 +41,7 @@ template <typename REC> class GAIList {
     AIRegData& getReg(int64_t hidx) { return glist[hidx]; } //no check!
    //add a chr:start-end interval (0-based, end not included)
 	void add(uint32_t s, uint32_t e, REC payload);
-	void build(int cLen); //freeze the data, prepare for query
+	void build(int cLen=20); //freeze the data, prepare for query
 	//query a BED-style interval: 0 based, open-ended
 	//uint32_t query(const char *chr, uint32_t qs, uint32_t qe);
 	uint32_t query(uint32_t qs, uint32_t qe, uint32_t& h_cap, uint32_t* & hits);
@@ -153,12 +97,12 @@ template <typename REC> class GAIListSet {
 		return fi ? *fi : -1;
 	}
 
-	void build(int cLen) {
+	void build(int cLen=20) {
 		for(uint i=0; i<ctgs.Count(); i++)
 			ctgs[i]->ailst.build(cLen);
 	}
 
-	//add & query BED-style intervals: 0 based, open-ended
+	//add & query (1 based regular intervals)
 	void add(const char *chr, uint32_t s, uint32_t e, REC payload) {
 		if(s > e) return;
 		bool cnew=false; //new contig
@@ -177,7 +121,9 @@ template <typename REC> class GAIListSet {
 		q->ailst.add(s,e,payload);
 	}
 
+	//taking regular, 1-style intervals
 	uint32_t query(const char *chr, uint32_t qs, uint32_t qe) {
+		if (qs>qe) Gswap(qs, qe);
 	    int32_t gid = getCtg(chr);
 	    if ((uint32_t)gid>=ctgs.Count()) { h_ctg=-1; h_count=0; return 0;}
 	    h_ctg=gid;
@@ -186,26 +132,43 @@ template <typename REC> class GAIListSet {
 	}
 
 	uint32_t hitCount() { return h_count; } //for last query()
-	REC hitData(uint32_t hit_idx) { //for last query()
+
+	//hitData(hitidx) always returns a pointer, either *REC or REC if REC is a pointer type
+	template <typename T=REC> inline 
+	 typename std::enable_if< !std::is_pointer<T>::value, T*>::type 
+	     hitData(uint32_t hit_idx) { //payload for for last query() hit at index idx
+		if (hit_idx<h_count && h_ctg>=0) {
+			uint32_t h=hits[hit_idx];
+			return & (ctgs[h_ctg]->ailst.getReg(h).data);
+		}
+	   return NULL;
+	}
+
+	template <typename T=REC> inline
+	 typename std::enable_if< std::is_pointer<T>::value, T>::type 
+	     hitData(uint32_t hit_idx) { //payload for for last query() hit at index idx
 		if (hit_idx<h_count && h_ctg>=0) {
 			uint32_t h=hits[hit_idx];
 			return ctgs[h_ctg]->ailst.getReg(h).data;
 		}
-	   return -1;
+	   return NULL;
 	}
+
 	const char* hitCtg(uint32_t hit_idx) { //for last query()
 		if (hit_idx<h_count && h_ctg>=0) {
 			return ctgs[h_ctg]->name;
 		}
 	   return NULL;
 	}
+
 	uint32_t hitStart(uint32_t hit_idx) { //for last query()
 		if (hit_idx<h_count && h_ctg>=0) {
 			uint32_t h=hits[hit_idx];
-			return ctgs[h_ctg]->ailst.getReg(h).start;
+			return ctgs[h_ctg]->ailst.getReg(h).start+1;
 		}
 	   return (uint32_t)-1;
 	}
+
 	uint32_t hitEnd(uint32_t hit_idx) { //for last query()
 		if (hit_idx<h_count && h_ctg>=0) {
 			uint32_t h=hits[hit_idx];
@@ -215,8 +178,6 @@ template <typename REC> class GAIListSet {
 	}
 
 };
-
-
 
 template<class REC> int32_t GAIList<REC>::bSearch(AIRegData* As, int32_t idxS, int32_t idxE, uint32_t qe) {   //find tE: index of the first item satisfying .s<qe from right
     int tE=-1, tL=idxS, tR=idxE-1, tM, d;
@@ -242,7 +203,7 @@ template<class REC> void GAIList<REC>::add(uint32_t s, uint32_t e, REC payload) 
 	if (nr == mr)
 		{ GA_EXPAND(glist, mr); }
 	AIRegData *p = &glist[nr++];
-	p->start = s;
+	p->start = s-1; // internally using BED-style intervals
 	p->end   = e;
 	p->data  = payload;
 }
@@ -338,6 +299,9 @@ template<class REC> uint32_t GAIList<REC>::query(uint32_t qs, uint32_t qe, uint3
     if(gid>=nctg || gid<0) { h_ctg=-1; h_count=0; return 0;}
     AICtgData *p = &ctgs[gid];
     */
+	--qs;
+   // internally using BED-style intervals
+
     for(int k=0; k<nc; k++) { //search each component
         int32_t cs = idxC[k];
         int32_t ce = cs + lenC[k];

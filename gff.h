@@ -63,10 +63,10 @@ extern const byte CLASSCODE_OVL_RANK; //rank value just above 'o' class code
 byte classcode_rank(char c); //returns priority value for class codes
 
 struct TOvlData {
-	char ovlcode;
-	int ovlen;
-	int16_t numJmatch; //number of matching junctions (not introns)
-	GBitVec jbits; //bit array with 1 bit for each junctions (total = 2 * num_introns)
+	char ovlcode; //structural relationship class code
+	int ovlen; //overlapping bases 
+	int16_t numJmatch; //number of matching intron-exon junctions (not introns)
+	GBitVec jbits; //bit array with 1 bit for each intron-exon junction (total = 2 * num_introns)
 	TOvlData(char oc=0, int olen=0, int16_t nmj=0, GBitVec* jb=NULL):ovlcode(oc),
 			ovlen(olen),numJmatch(nmj),jbits(jb) { }
 };
