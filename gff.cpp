@@ -337,7 +337,7 @@ bool GffLine::parseSegmentList(GVec<GSeg>& segs, char* str) {
 	char* p=strchr(str, '-');
 	if (p!=NULL && p>str) {
 		GDynArray<char*> ss;
-		strsplit(str, ss, ',');
+		strSplit(str, ss, ',');
 		GSeg seg;
 		segs_valid=true;
 		for (uint i=0;i<ss.Count();++i) {

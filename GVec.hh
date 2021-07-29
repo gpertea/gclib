@@ -174,7 +174,7 @@ template <class OBJ> class GPVec {
     GPVec(int init_capacity=2, bool free_elements=true); //also the default constructor
     GPVec(bool free_elements);
     GPVec(const GPVec<OBJ>& list); //copy constructor
-    GPVec(GPVec<OBJ>&& list); //move construstor
+    GPVec(GPVec<OBJ>&& list); //move constructor
     GPVec(GPVec<OBJ>* list); //similar to a copy constructor
     GPVec<OBJ>& operator=(const GPVec<OBJ>& list);
     GPVec<OBJ>& operator=(GPVec<OBJ>&& list);//move assignment operator
@@ -327,10 +327,11 @@ template <class OBJ> void GVec<OBJ>::Grow(int newCap) {
 template <class OBJ> void GVec<OBJ>::Reverse() {
   int l=0;
   int r=fCount-1;
-  OBJ c;
+  //OBJ c;
   while (l<r) {
-     c=fArray[l];fArray[l]=fArray[r];
-     fArray[r]=c;
+     //c=fArray[l];fArray[l]=fArray[r];
+     //fArray[r]=c;
+     std::swap(fArray[l], fArray[r]); // <utility> ?
      l++;r--;
   }
 }
@@ -373,6 +374,7 @@ template <class OBJ> void GVec<OBJ>::Add(GVec<OBJ>& list) {
   if (list.Count()==0) return;
   //simply copy
   setCapacity(fCapacity+list.fCount);
+  /*
   if (std::is_trivial<OBJ>::value) {
     memcpy( &fArray[fCount], list.fArray, list.fCount*sizeof(OBJ));
     }
@@ -380,6 +382,8 @@ template <class OBJ> void GVec<OBJ>::Add(GVec<OBJ>& list) {
     for (int i=0;i<list.fCount;i++)
           fArray[fCount+i]=list.fArray[i];
     }
+   */
+  std::copy(list.fArray, & list.fArray[list.fCount], &fArray[fCount]);
   fCount+=list.fCount;
 }
 
@@ -390,25 +394,27 @@ template <class OBJ> OBJ GVec<OBJ>::Pop() {
  //OBJ o(fArray[fCount]); //copy constructor
  //o=fList[fCount];
  //fArray[fCount]=NULL;
- return fArray[fCount]; //copy of the last element (copy constructor called)
+ OBJ r(std::move(fArray[fCount]));
+ return r; //copy of the last element (RVO should kick in)
 }
 
 //Queue usage:
 template <class OBJ> OBJ GVec<OBJ>::Shift() {
  if (fCount<=0) GError("Error: invalid GVec::Shift() operation!\n");
+ OBJ o(std::move(fArray[0])); //move constructor
+ //memmove(&fArray[0], &fArray[1], (fCount-1)*sizeof(OBJ));
+ std::move(&fArray[1], &fArray[fCount], &fArray[0]);
  fCount--;
- OBJ o(fArray[0]); //copy constructor
- if (fCount>0)
-   memmove(&fArray[0], &fArray[1], (fCount)*sizeof(OBJ));
  //fList[fCount]=NULL; //not that it matters..
  return o;
 }
 
 template <class OBJ> void GVec<OBJ>::Shift(int idx) {
- if (idx<=0 || fCount-idx<=0) GError("Error: invalid GVec::Shift() operation!\n");
+ if (idx<=0 || fCount-idx<0) GError("Error: invalid GVec::Shift() operation!\n");
  fCount-=idx;
- if (fCount>0)
-   memmove(&fArray[0], &fArray[idx], (fCount)*sizeof(OBJ));
+ if (fCount==0) return;
+ //memmove(&fArray[0], &fArray[idx], (fCount)*sizeof(OBJ));
+ std::move(&fArray[idx], &fArray[fCount+idx], &fArray[0]);
 }
 
 template <class OBJ> void GVec<OBJ>::Insert(int idx, OBJ* item) {
@@ -674,12 +680,10 @@ template <class OBJ> void GPVec<OBJ>::setCapacity(int NewCapacity) {
     //error: capacity not within range
   if (NewCapacity!=fCapacity) {
    if (NewCapacity==0) {
-      //GFREE(fList);
 	   delete[] fList;
        fList=nullptr;
       }
     else {
-      //GREALLOC(fList, NewCapacity*sizeof(OBJ*));
         OBJ** oldList=fList;
   	    fList=new OBJ*[NewCapacity];
         if (oldList) {

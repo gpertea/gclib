@@ -367,81 +367,178 @@ int Gstricmp(const char* a, const char* b, int n) {
       else return strcasecmp(a,b);
 }
 
-int strsplit(char* str, GDynArray<char*>& fields, const char* delim, int maxfields) {
- //splits by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+inline bool _charInStr(char ch, const char* str) {
+	for (const char* q=str;*q!='\0';++q)
+		if (ch == *q) return true;
+	return false;
+}
+
+int strSplit(char* str, GDynArray<char*>& fields, const char* delimCharSet, uint maxfields) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
  //of each field (stopping after maxfields); returns number of fields parsed
- int tidx=0;
- bool afterdelim=true;
- int i=0;
+ //int dlen=Gstrlen(delimCharSet);
  fields.Reset();
- while (str[i]!=0 && tidx<maxfields) {
-    if (afterdelim) {
-       fields.Add(str+i);
-       tidx++;
-    }
-    afterdelim=false;
-    if (chrInStr(str[i],(char*)delim)) {
-        str[i]=0;
-        i++;
-        while (str[i]!=0 && chrInStr(str[i], (char*)delim)) i++;
-        afterdelim=true;
-        continue;
-    }
-    i++;
+ if (maxfields<2) maxfields=2; //weird request?
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\0' || _charInStr(*q, delimCharSet)) {
+		int c = *q;
+		*q = 0;
+		uint fc=fields.Add(p)+2;
+		p = q + 1;
+		if (c == '\0') break;
+		else if (fc==maxfields) { fields.Add(p); break; }
+ 	}
  }
- return tidx;
+ return fields.Count();
 }
 
-int strsplit(char* str, GDynArray<char*>& fields, const char delim, int maxfields) {
-  //splits by placing 0 where delim is found, setting fields[] to the beginning
-  //of each field (stopping after maxfields); returns number of fields parsed
-  int tidx=0;
-  bool afterdelim=true;
-  int i=0;
-  fields.Reset();
-  while (str[i]!=0 && tidx<maxfields) {
-     if (afterdelim) {
-    	 fields.Add(str+i);
-         tidx++;
-     }
-     afterdelim=false;
-     if (str[i]==delim) {
-         str[i]=0;
-         i++;
-         while (str[i]!=0 && str[i]==delim) i++;
-         afterdelim=true;
-         continue;
-     }
-     i++;
-  }
-  return tidx;
+inline bool _startsWith(const char* prefix, const char* str) {
+	for (const char *q=str, *p=prefix;*p!='\0';++q,++p)
+		if (*p!=*q) return false;
+    return true;
 }
 
-int strsplit(char* str,  GDynArray<char*>& fields, int maxfields) {
-  //splits by placing 0 where delim is found, setting fields[] to the beginning
-  //of each field (stopping after maxfields); returns number of fields parsed
-  int tidx=0;
-  bool afterdelim=true;
-  int i=0;
-  fields.Reset();
-  while (str[i]!=0 && tidx<maxfields) {
-     if (afterdelim) {
-        fields.Add(str+i);
-        tidx++;
-     }
-     afterdelim=false;
-     if (str[i]==' ' || str[i]=='\t') {
-         str[i]=0;
-         i++;
-         while (str[i]!=0 && (str[i]=='\t' || str[i]==' ')) i++;
-         afterdelim=true;
-         continue;
-     }
-     i++;
-  }
-  return tidx;
+int strStrSplit(char* str, GDynArray<char*>& fields, const char* delimStr, uint maxfields) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+ //of each field (stopping after maxfields); returns number of fields parsed
+ int dlen=Gstrlen(delimStr);
+ fields.Reset();
+ if (maxfields<2) maxfields=2; //weird request?
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\0' || _startsWith(delimStr, q)) {
+		int c = *q;
+		*q = 0;
+		uint fc=fields.Add(p)+2;
+		p = q + dlen;
+		if (c == '\0') break;
+		else if (fc==maxfields) { fields.Add(p); break; }
+ 	}
+ }
+ return fields.Count();
 }
 
+int strSplit(char* str, GDynArray<char*>& fields, const char delimChar, uint maxfields) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+ //of each field (stopping after maxfields); returns number of fields parsed
+ //int dlen=Gstrlen(delimCharSet);
+ fields.Reset();
+ if (maxfields<2) maxfields=2; //weird request?
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == delimChar || *q == '\0') {
+		int c = *q;
+		*q = 0;
+		uint fc=fields.Add(p)+2;
+		p = q + 1;
+		if (c == '\0') break;
+		else if (fc==maxfields) { fields.Add(p); break; }
+ 	}
+ }
+ return fields.Count();
+}
+
+
+int strSplitTokens(char* str, GDynArray<char*>& fields, const char* delimCharSet) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+ //of each field (stopping after maxfields); returns number of fields parsed
+ // SKIPS empty fields!
+ fields.Reset();
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\0' || _charInStr(*q, delimCharSet)) {
+		int c = *q;
+		*q = 0;
+		if (q-p>1) fields.Add(p);
+		p = q + 1;
+		if (c == '\0') break;
+ 	}
+ }
+ return fields.Count();
+}
+
+int strSplitTokens(char* str, GDynArray<char*>& fields, const char delimChar) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+ //of each field (stopping after maxfields); returns number of fields parsed
+ // SKIPS empty fields!
+ fields.Reset();
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == delimChar || *q == '\0') {
+		int c = *q;
+		*q = 0;
+		if (q-p>1) fields.Add(p);
+		p = q + 1;
+		if (c == '\0') break;
+ 	}
+ }
+ return fields.Count();
+}
+
+int strTabSplit(char* str, GDynArray<char*>& fields, uint maxfields) {
+ //splits str by placing 0 where any of the delim chars are found, setting fields[] to the beginning
+ //of each field (stopping after maxfields); returns number of fields parsed
+ fields.Reset();
+ if (maxfields<2) maxfields=2; //weird request
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\t' || *q == '\0') {
+		int c = *q;
+		*q = 0;
+		uint fc=fields.Add(p)+2;
+		p = q + 1;
+		if (c == '\0') break;
+		else if (fc==maxfields) { fields.Add(p); break; }
+ 	}
+ }
+ return fields.Count();
+}
+
+int strSpcSplit(char* str, GDynArray<char*>& fields, uint maxfields) {
+ //splits str by tab or space, skipping over empty tokens
+ fields.Reset();
+ if (maxfields<2) maxfields=2; //weird request?
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\t' || *q == ' ' || *q == '\0') {
+		int c = *q;
+		*q = 0;
+		if (q-p>1) fields.Add(p);
+		p = q + 1;
+		if (c == '\0') break;
+		else if (fields.Count()+1 == maxfields) {
+			while(*p=='\t' || *p==' ') ++p;
+			if (*p!='\0') fields.Add(p);
+			break;
+		}
+ 	}
+ }
+ return fields.Count();
+}
+
+
+int strLineSplit(char* str,  GDynArray<char*>& fields, uint maxfields) {
+ //splits str by \r or \n, skipping over empty lines
+ fields.Reset();
+ if (maxfields<2) maxfields=2; //weird request?
+ char *p, *q = NULL;
+ for (p = q = str;; ++q) {
+	if (*q == '\n' || *q == '\r' || *q == '\0') {
+		int c = *q;
+		*q = 0;
+		if (q-p>1) fields.Add(p);
+		p = q + 1;
+		if (c == '\0') break;
+		else if (fields.Count()+1 == maxfields) {
+			while(*p=='\n' || *p=='\r') ++p;
+			if (*p != '\0') fields.Add(p);
+			break;
+		}
+ 	}
+ }
+ return fields.Count();
+}
 
 char* Gsubstr(const char* str, char* from, char* to) {
  //extract (and allocate) a substring, including boundaries (from/to)
@@ -497,8 +594,6 @@ char* rstrchr(char* str, char ch) {  /* returns a pointer to the rightmost
  }
  return NULL;
 }
-
-
 
 /* DOS/UNIX safer fgets : reads a text line from a (binary) file and
   update the file position accordingly and the buffer capacity accordingly.
@@ -596,14 +691,14 @@ char* loCase(const char* str) {
  return lostr;
  }
 
-char* strlower(char * str) {//changes string in place
+char* strlower(char *str) {//changes string in place
   if (str==NULL) return NULL;
   int i=0;
   while (str[i]!=0) { str[i]=tolower(str[i]); i++; }
   return str;
 }
 
-char* strupper(char * str) {//changes string in place
+char* strupper(char *str) {//changes string in place
   if (str==NULL) return NULL;
   int i=0;
   while (str[i]!=0) { str[i]=toupper(str[i]); i++; }
@@ -655,18 +750,18 @@ char* strifind(const char* str,  const char* substr) {
 
 // tests if string s has the given prefix
 bool startsWith(const char* s, const char* prefix) {
- if (prefix==NULL || s==NULL) return false;
- int i=0;
- while (prefix[i]!='\0' && prefix[i]==s[i]) i++;
- return (prefix[i]=='\0');
- }
+ if (prefix==NULL || s==NULL || *prefix=='\0') return false;
+ for (const char *q=s, *p=prefix;*p!='\0';++q,++p)
+      if (*p!=*q) return false;
+ return true;
+}
 
 bool startsiWith(const char* s, const char* prefix) {
- if (prefix==NULL || s==NULL) return false;
- int i=0;
- while (prefix[i]!='\0' && tolower(prefix[i])==tolower(s[i])) i++;
- return (prefix[i]=='\0');
- }
+ if (prefix==NULL || s==NULL || *prefix=='\0') return false;
+ for (const char *q=s, *p=prefix;*p!='\0';++q,++p)
+      if (tolower(*p)!=tolower(*q)) return false;
+ return true;
+}
 
 
 // tests if string s ends with given suffix
