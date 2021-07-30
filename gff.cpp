@@ -1320,9 +1320,7 @@ GffLine* GffReader::nextGffLine() {
     int llen=0;
     buflen=GFF_LINELEN-1;
     char* l=fgetline(linebuf, buflen, fh, &fpos, &llen);
-    if (l==NULL) {
-         return NULL; //end of file
-         }
+    if (l==NULL)  return NULL; //end of file
 #ifdef CUFFLINKS
      _crc_result.process_bytes( linebuf, llen );
 #endif

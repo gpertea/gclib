@@ -71,8 +71,7 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
  if (fofs!=0) { fseeko(fh,fofs,SEEK_SET); } //e.g. for offsets provided by fasta indexing
  //read the first two lines to determine fasta parameters
  if (seqname) GFREE(seqname);
- GDynArray<char> fseqname(64);
- fseqname.DetachPtr(); //will not free the allocated memory
+ Gcstr fseqname(128);
  fseqstart=fofs;
  int c=getc(fh);
  fseqstart++;
@@ -89,8 +88,8 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
    }
    if (c=='\n' || c=='\r') { break; } //end of defline
  }
- fseqname.Add('\0'); //terminate the string
- seqname=fseqname(); //takeover the string pointer
+ seqname=fseqname.disown(); //seqname takes over the string pointer
+
  if (c==EOF) GError(gfa_ERRPARSE);
  line_len=0;
  uint lendlen=0;
