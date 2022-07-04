@@ -991,7 +991,7 @@ class Gcstr: public GDynArray<char> {
 
   Gcstr& append(const Gcstr& s) { return append_buf( s.chars(), s.length() ); }
 
-  Gcstr& append(const char* s, int from, int to=0) {
+  Gcstr& append_substr(const char* s, int from, int to=0) {
      int len=Gstrlen(s);
      //must have \0 as the last element!
      if (fCount==0) this->Add('\0');
