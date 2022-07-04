@@ -745,7 +745,7 @@ template<typename STYPE> class GDynArray {
     	fCount+=arr.fCount;
     }
 
-    void Trim(int tcount=1) {
+    void chop(int tcount=1) {
     	//simply cut (discard) the last tcount items
     	//new Count is now fCount-tcount
     	//does NOT shrink capacity accordingly!
@@ -1044,7 +1044,7 @@ class Gcstr: public GDynArray<char> {
     return append((const char*)buf);
   }
 
-  void trim(uint tcount=1) {
+  void chop(uint tcount=1) {
    	//cut (discard) the last tcount non-zero characters
    	//new Count is now fCount-tcount
    	//does NOT shrink allocated capacity!
@@ -1295,6 +1295,7 @@ template< typename TFile, typename TFunc > class GFStream {
     constexpr static byte SEP_TAB = 1;    // isspace() && !' '
     constexpr static byte SEP_LINE = 2;   // line separator: "\n" (Unix) or "\r\n" (Windows)
     constexpr static byte SEP_MAX = 2;
+    constexpr static byte SEP_MASK = 0x7F; //127
   protected:
      /* Consts */
      constexpr static uint DEFAULT_BUFSIZE = 16384;
@@ -1303,8 +1304,8 @@ template< typename TFile, typename TFunc > class GFStream {
      TFunc rdfunc;
      uint bufsize=0;                   // buffer size
      int begin=0;                     // begin buffer index
-     int end=0;                       // end buffer index or error flag if -1
-     bool is_eof=false;                   // eof flag
+     int end=0;                       // end buffer index (past last char) or error flag if -1
+     bool is_eof=false;               // eof flag
 
   public:
      GFStream(TFile f_, TFunc rdfunc_, uint bufsize_=DEFAULT_BUFSIZE) : f(f_), rdfunc(rdfunc_),
@@ -1315,6 +1316,7 @@ template< typename TFile, typename TFunc > class GFStream {
      ~GFStream() { GFREE(buf); }
      bool err() { return ( this->end < 0); }
      bool eof() { return ( this->is_eof  && this->begin >= this->end ); }
+     // only rewind to the beginning of the buffer
      void rewind() { this->is_eof=false; this->begin = this->end = 0; }
 
      int getc() {
@@ -1328,52 +1330,72 @@ template< typename TFile, typename TFunc > class GFStream {
 		   }
 		   return (int)buf[this->begin++];
      }
-
-     int getUntil(byte delimiter, Gcstr& str, bool append=false, int* dret=NULL) {
-       int gotany = 0;
-       if (dret) *dret = 0;
+     // reads next chunk until the delimiter requested by sepType
+     //    into string str, optionally appending to it
+     // if given, sepch will have a copy of the delimiter character
+     // returns the bytes read (before/up to delimiter)
+     // any sepType > SEP_MAX is taken as actual character (e.g. ',')
+     // if sepType > 127 then sep is taken as (sepType & ~128) and must follow '\n'
+     int getUntil(byte sepType, Gcstr& str, bool append=false, char* sepch=NULL) {
+       int got = 0;
+       char lastch = 0;
+       if (sepch) *sepch = 0;
        //str->l = append? str->l : 0;
        if (!append) str.Reset();
        for (;;) {
          int i;
+         int chAdd=0;
          if (this->err()) return -3;
          if (this->begin >= this->end) {
-           if (!this->is_eof) {
+           if (!this->is_eof) { //get next block from file
              this->begin = 0;
              this->end = this->rdfunc(this->f, this->buf, this->bufsize);
              if (this->end == 0) { this->is_eof = 1; break; }
              if (this->end == -1) { this->is_eof = 1; return -3; }
            } else break;
          }
-         if (delimiter == SEP_LINE) {
+         if (sepType == SEP_LINE) {
            for (i = this->begin; i < this->end; ++i)
-             if (this->buf[i] == '\n') break;
-         } else if (delimiter > SEP_MAX) {
-             for (i = this->begin; i < this->end; ++i)
-               if (this->buf[i] == delimiter) break;
-         } else if (delimiter == SEP_SPACE) {
+             if (this->buf[i] == '\n') { chAdd=i-this->begin; break; }
+         } else if (sepType > SEP_MAX) { //actual ASCII char, or if > 127: & 127 only if it follows '\n'
+        	 if (sepType>SEP_MASK) { //special case, must be preceded by '\n'
+        	   byte sepch = (sepType & SEP_MASK);
+               for (i = this->begin; i < this->end; ++i)
+                   if (this->buf[i] == sepch) {
+            	      char prevch = i>0 ? this->buf[i-1] : lastch;
+            	      if (prevch == '\n')  { chAdd=i-this->begin-1; break; }
+                   }
+               if (i==this->end) lastch=this->buf[i-1];
+        	 } else {
+                 for (i = this->begin; i < this->end; ++i)
+                   if (this->buf[i] == sepType) { chAdd=i-this->begin; break; }
+        	 }
+         } else if (sepType == SEP_SPACE) {
             for (i = this->begin; i < this->end; ++i)
-              if (isspace(this->buf[i])) break;
-         } else if (delimiter == SEP_TAB) {
+              if (isspace(this->buf[i])) { chAdd=i-this->begin; break; }
+         } else if (sepType == SEP_TAB) {
             for (i = this->begin; i < this->end; ++i)
               //if (isspace(this->buf[i]) && this->buf[i] != ' ') break;
-              if (this->buf[i] == '\t') break;
-         } else i = 0; // never be here!
-          // append from buf from begin to i
-         gotany = 1;
+              if (this->buf[i] == '\t') { chAdd=i-this->begin; break; }
+         } else chAdd=0; // should never be!
+          // append from buf from begin to i: chAdd=i-this->begin;
+         got += i-this->begin; //chAdd can be -1
          //memcpy(str->s + str->l, this->buf + this->begin, i - this->begin);
          //str->l = str->l + (i - this->begin);
-         str.append_buf(this->buf + this->begin, i - this->begin);
-         this->begin = i + 1;
-         if (i < this->end) {
-           if (dret) *dret = this->buf[i];
+         if (chAdd>0 )
+            str.append_buf(this->buf + this->begin, chAdd);
+         else if (chAdd<0) str.chop(); //can only be -1
+         if (i < this->end) { //delimiter found before end of buffer
+           if (sepch) *sepch = this->buf[i];
            break;
          }
-       }
-       if (!gotany && this->eof()) return -1;
-       if (delimiter == SEP_LINE && str.len() > 1 && str.last() == '\r') str.Trim();
-       return str.len();
-     }
+         this->begin = i + 1;
+       } // for(;;)
+       if (!got && this->eof()) return -1;
+       if ((sepType == SEP_LINE || sepType>SEP_MASK) &&
+    	       (str.length() && str.last() == '\r') ) { str.chop(); }
+       return got;
+     } // getUntil(  )
 
 
  };
