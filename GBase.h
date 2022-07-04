@@ -553,7 +553,7 @@ template <typename T>
 
 template<typename STYPE> class GDynArray {
  protected:
-    bool ext_ptr:1; //if true, fArray is a pointer takeover of an external array
+    bool ext_ptr:1; //if true, fArray is a pointer takeover of an external array/char*
     //bool fixedptr:1=false; //if true, reallocations are not allowed
     STYPE *fArray=NULL;
     uint fCount=0;
@@ -582,36 +582,44 @@ template<typename STYPE> class GDynArray {
     }
 
     //pointer take-over of external array:
-    GDynArray(STYPE* ptr, uint pcap, uint pcount=0):ext_ptr(true), fArray(ptr),
-    		fCount(pcount), fCapacity(pcap) {
-    	//frozen array on top of given pointer, will automatically
-    	//  detach/copy itself as needed
-    	/*if (ptr==nullptr || pcap==0)
-    		GError("GDynArray nullptr or zero capacity constructor!\n");
-    		*/
+    GDynArray(const STYPE* ptr, uint pcap, int pcount=0, bool takeOver=true):ext_ptr(takeOver),
+    		 fArray(NULL), fCount(pcount), fCapacity(pcap) {
+    	// if takeOver:
+    	//   frozen array on top of given pointer, will automatically
+    	//       detach/copy itself as needed
     	//if NULL was passed, just create a new GDynArray with 0 elements
-    	if (ptr==nullptr || pcap==0) {
-    		fCapacity=pcap?pcap:dyn_array_defcap;
-    		G_newArray<STYPE>(fArray, fCapacity);
-    		fCount=0;
+    	if (takeOver && ptr!=nullptr && pcap!=0) {
+    		fArray=const_cast<char*>(ptr);
+    		fCount=(pcount<0)? pcap : pcount;
+    	} else { //make a copy or create new
     		ext_ptr=false;
+    		if (pcount<0) pcount=pcap;
+    		else if (pcap<(uint)pcount) pcap=pcount;
+    		if (pcap<dyn_array_defcap) pcap=dyn_array_defcap;
+    		fCapacity=pcap;
+    		G_newArray<STYPE>(fArray, fCapacity);
+    		if (ptr==nullptr) fCount=0;
+    		   else {
+    			   fCount=pcount;
+    			   std::copy(ptr, &ptr[fCount], fArray);
+    		   }
     	}
     }
 
-    //pointer take-over constructor:
-    GDynArray(const STYPE* ptr, uint pcap, uint pcount=0):ext_ptr(true),
+    //pointer take-over constructor?
+    /*
+    GDynArray(const STYPE* ptr, uint pcap, uint pcount=0, bool takeOver=false):ext_ptr(takeOver),
     		fArray(const_cast<char*>(ptr)),  fCount(pcount), fCapacity(pcap) {
-    	//frozen array: will never deallocate the passed pointer
+    	//takeOver=true : frozen array, will never deallocate the passed pointer
     	//              and cannot grow, add or append beyond pcap
     	//if NULL was passed, just create a new GDynArray with 0 elements
-    	if (ptr==nullptr || pcap==0) {
+    	if (!takeOver || ptr==nullptr || pcap==0) {
     		fCapacity=pcap?pcap:dyn_array_defcap;
     		G_newArray<STYPE>(fArray, fCapacity);
-    		fCount=0;
+    		fCount
     		ext_ptr=false;
     	}
-
-    }
+    }  */
 
     GDynArray(GDynArray<STYPE>&& arr ) { //move constructor
     	fCount=arr.fCount;
@@ -705,8 +713,15 @@ template<typename STYPE> class GDynArray {
     	if (newcap==0) { Clear(); return true; }
     	if (newcap <= fCapacity) return true; //never shrink! (use Pack() for shrinking)
     	fCapacity=newcap;
-    	G_reallocArray<STYPE>(fArray, fCapacity, copyItems?fCount:0);
-    	ext_ptr=false; //silent detachment from external pointer
+    	if (ext_ptr) { //detach from external pointer making a copy
+    		STYPE* oldarr=fArray;
+    		G_newArray<STYPE>(fArray, fCapacity);
+        	ext_ptr=false;
+        	std::copy(oldarr, oldarr+fCount, fArray);
+    	} else {
+    		G_reallocArray<STYPE>(fArray, fCapacity, copyItems?fCount:0);
+    	}
+
     	return true;
     }
 
@@ -739,7 +754,9 @@ template<typename STYPE> class GDynArray {
 
     void Pack() { //shrink capacity to fCount+dyn_array_defcap
     	if (fCapacity-fCount<=dyn_array_defcap) return;
-    	//if (ext_ptr) { frozenErr("Pack"); return; }
+    	if (ext_ptr) {
+    		 GMessage("Warning: Pack() requested on frozen GDynArray!"); return;
+    	}
     	fCapacity=fCount+dyn_array_defcap;
     	G_reallocArray<STYPE>(fArray, fCapacity, fCount);
     }
@@ -756,7 +773,7 @@ template<typename STYPE> class GDynArray {
 
     void Clear() { // clear array, shrinking its allocated memory
     	fCount = 0;
-    	if (ext_ptr) return; //never free a frozen array!
+    	if (ext_ptr) return; //never free/clear a frozen array!
     	G_delArray<STYPE>(fArray);
     	fCapacity = dyn_array_defcap;
     	G_newArray<STYPE>(fArray, fCapacity);
@@ -794,7 +811,7 @@ template<typename STYPE> class GDynArray {
   	  return *this;
     }
 
-    //take control over the external pointer, it'll deallocate it on destruct
+    //take full control over the external pointer, which can now be changed and will be deallocated on destruct!
     void own() { ext_ptr=false;  }
 
     //detach the pointer (if attached), making a copy of the previous array
@@ -894,12 +911,13 @@ class Gcstr: public GDynArray<char> {
       this->append(s);
   }
 
-  //this does NOT make a copy, just take over the pointer
-  Gcstr(const char* s):GDynArray<char>(s, Gstrlen(s)+1) {
-      //the string has frozen length (but it can be trimmed or its chars can be changed)
-	  //-- call detach() or copy() if you want to thaw this string
-	  fCount=fCapacity; //copy the string
-	  if (s==nullptr) this->Reset();
+  //if takeOver is true, it takes over the pointer
+  //  ?
+  Gcstr(const char* s, bool takeOver=false):GDynArray<char>(s, Gstrlen(s)+1, -1, takeOver) {
+      //if takeOver, the string has frozen length (but it can be trimmed or its chars can be changed)
+	  //--    call detach() or copy() if you want to thaw this string
+	  //if (s!=nullptr) fCount=fCapacity;
+	  //if (s==nullptr) this->Reset();
   }
 
   Gcstr(const Gcstr& s, int extra_room=4):
