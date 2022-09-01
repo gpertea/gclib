@@ -1495,7 +1495,7 @@ GffObj* GffReader::updateGffRec(GffObj* prevgfo, GffLine* gffline) {
  return prevgfo;
 }
 
-bool GffReader::readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon*>* pex) {
+bool GffReader::readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon*>* pex) { // @suppress("Member declaration not found")
 	//this should only be called before prevgfo->finalize()!
 	bool r=true;
 	if (gffline->strand!=prevgfo->strand) {
@@ -1527,7 +1527,7 @@ bool GffReader::readExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExo
 	return r;
 }
 
-CNonExon* GffReader::subfPoolCheck(GffLine* gffline, GHash<CNonExon*>& pex, char*& subp_name) {
+CNonExon* GffReader::subfPoolCheck(GffLine* gffline, GHash<CNonExon*>& pex, char*& subp_name) { // @suppress("Member declaration not found")
   CNonExon* subp=NULL;
   subp_name=NULL;
   for (int i=0;i<gffline->num_parents;i++) {
@@ -1542,7 +1542,7 @@ CNonExon* GffReader::subfPoolCheck(GffLine* gffline, GHash<CNonExon*>& pex, char
   return NULL;
 }
 
-void GffReader::subfPoolAdd(GHash<CNonExon*>& pex, GffObj* newgfo) {
+void GffReader::subfPoolAdd(GHash<CNonExon*>& pex, GffObj* newgfo) { // @suppress("Member declaration not found")
 //this might become a parent feature later
 if (newgfo->exons.Count()>0) {
    char* xbuf=gfoBuildId(gffline->ID, gffline->gseqname);
@@ -1551,7 +1551,7 @@ if (newgfo->exons.Count()>0) {
    }
 }
 
-GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonExon*>& pex) {
+GffObj* GffReader::promoteFeature(CNonExon* subp, char*& subp_name, GHash<CNonExon*>& pex) { // @suppress("Member declaration not found")
   GffObj* prevp=subp->parent; //grandparent of gffline (e.g. gene)
   //if (prevp!=gflst[subp->idx])
   //  GError("Error promoting subfeature %s, gflst index mismatch?!\n", subp->gffline->ID);
@@ -3187,12 +3187,12 @@ char transcriptMatch(GffObj& a, GffObj& b, int& ovlen, int trange) {
 	return '~';
 }
 
-char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen, int trange) {
+char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen, int trange, int* ovlrefstart) {
  //return '=' if boundaries match within tdelta distance,
  //    or '~' if the overlap is >=80% of the longer sequence length
  // return 0 if there is no overlap
  GSeg mseg(m.start, m.end);
- ovlen=mseg.overlapLen(r.start,r.end);
+ ovlen=mseg.overlapLen(r.start,r.end, ovlrefstart);
  if (ovlen<=0) return 0;
  // fuzzy matching for single-exon transcripts:
  // matching = overlap is at least 80% of the length of the longer transcript
@@ -3222,10 +3222,11 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		GSeg mseg(m.start, m.end);
 		if (jmax==0) { //also single-exon ref
 			char eqcode=0;
-			if ((eqcode=singleExonTMatch(m, r, odta.ovlen, trange))>0) {
+			if ((eqcode=singleExonTMatch(m, r, odta.ovlen, trange, &odta.ovlRefstart))>0) {
 				odta.ovlcode=(stricterMatch) ? eqcode : '=';
 				return odta;
 			}
+			//singleExonTMatch set odta.ovlen and odta.ovlRefstart anyway
 			if (m.covlen<r.covlen)
 			   { if (odta.ovlen >= m.covlen*0.8) { odta.ovlcode='c'; return odta; } } // fuzzy containment
 			else
@@ -3237,18 +3238,28 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		//-- single-exon qry overlaping multi-exon ref
 		//check full pre-mRNA case (all introns retained): code 'm'
 		if (m.start<=r.exons[0]->end && m.end>=r.exons[jmax]->start)
-			{ odta.ovlcode='m'; return odta; }
-
+			{ odta.ovlcode='m';
+			 odta.ovlRefstart = ((r.exons[0]->start>m.start) ? 1 : m.start-r.exons[0]->start+1);
+			 int rovlend = (r.exons[jmax]->end<m.end) ? r.covlen : r.exons[jmax]->end-m.end+1;
+			 odta.ovlen=rovlend-odta.ovlRefstart+1;
+			 return odta;
+			}
+        int refxpos=0;
 		for (int j=0;j<=jmax;j++) {
-			//check if it's ~contained by an exon
-			int exovlen=mseg.overlapLen(r.exons[j]);
+			int ovlst=0; //check if it's ~contained by an exon
+			int exovlen=mseg.overlapLen(r.exons[j]->start, r.exons[j]->end, &ovlst);
 			if (exovlen>0) {
+				if (odta.ovlen==0) { //first exon being overlapped
+					odta.ovlRefstart=refxpos+ovlst;
+				}
 				odta.ovlen+=exovlen;
+
 				if (m.start>r.exons[j]->start-4 && m.end<r.exons[j]->end+4) {
 					odta.ovlcode='c';
 					return odta; //close enough to be considered contained in this exon
 				}
 			}
+			refxpos+=r.exons[j]->len();
 			if (j==jmax) break; //last exon here, no intron to check
 			//check if it fully covers an intron (retained intron)
 			if (m.start<r.exons[j]->end && m.end>r.exons[j+1]->start)
@@ -3274,8 +3285,10 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		GSeg rseg(r.start, r.end);
 		for (int i=0;i<=imax;i++) {
 			//check if it's ~contained by an exon
-			int exovlen=rseg.overlapLen(m.exons[i]);
+			int rxpos=0;
+			int exovlen=m.exons[i]->overlapLen(r.start, r.end, &rxpos);
 			if (exovlen>0) {
+				if (odta.ovlRefstart==0) odta.ovlRefstart=rxpos;
 				odta.ovlen+=exovlen;
 				if (r.start>m.exons[i]->start-4 && r.end<m.exons[i]->end+4) {
 					odta.ovlcode='k';
@@ -3288,10 +3301,11 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 				 return odta;
 			}
 		}
-		odta.ovlcode='o';
+		odta.ovlcode='o'; // ref is just partially overlapped by this transfrag
 		return odta;
 	} // SET reference
 	// -- MET comparison ---
+	odta.rint.resize(jmax);
 	// check if qry contained by a ref intron
 	for (int j=0;j<jmax;j++) {
 		if (m.end<r.exons[j+1]->start && m.start>r.exons[j]->end)
@@ -3302,11 +3316,11 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		//check if last qry exon plugs the 1st ref intron
 		if (m.exons[imax]->start<=r.exons[0]->end &&
 			m.exons[imax]->end>=r.exons[1]->start) {
-			odta.ovlen=m.exonOverlapLen(r);
+			odta.ovlen=m.exonOverlapLen(r, &odta.ovlRefstart);
 			odta.ovlcode='n';
 			return odta;
 		}
-		odta.ovlen=m.exons[imax]->overlapLen(r.exons[0]);
+		odta.ovlen=m.exons[imax]->overlapLen(r.exons[0]->start, r.exons[0]->end, &odta.ovlRefstart);
 		odta.ovlcode='o'; //only terminal exons overlap
 		return odta;
 	}
@@ -3315,11 +3329,12 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		//check if first qry exon plugs the last ref intron
 		if (m.exons[0]->start<=r.exons[jmax-1]->end &&
 			m.exons[0]->end>=r.exons[jmax]->start) {
-			odta.ovlen=m.exonOverlapLen(r);
+			odta.ovlen=m.exonOverlapLen(r, &odta.ovlRefstart);
 			odta.ovlcode='n';
 			return odta;
 		}
-		odta.ovlen=m.exons[0]->overlapLen(r.exons[jmax]);
+		odta.ovlen=m.exons[0]->overlapLen(r.exons[jmax]->start, r.exons[jmax]->end, &odta.ovlRefstart);
+		odta.ovlRefstart+=r.covlen-r.exons[jmax]->len();
 		odta.ovlcode='o'; //only terminal exons overlap
 		return odta;
 	}
@@ -3338,7 +3353,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	int imlast=0;  //index of exon after last intron match in query
 	int jmlast=0;  //index of  exon after last intron match in reference
 	//--keep track of the last overlapping introns in both qry and ref:
-	odta.ovlen=m.exonOverlapLen(r);
+	odta.ovlen=m.exonOverlapLen(r, &odta.ovlRefstart);
     //int q_first_iovl=-1, r_first_iovl=-1, q_last_iovl=-1, r_last_iovl=-1;
 	//check for intron matches
 	while (i<=imax && j<=jmax) {
@@ -3386,6 +3401,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		}
 		if (smatch && ematch) {
 			//perfect match of this intron
+			odta.rint.set(j-1);
 			if (jmfirst==0) {
 				ichain_match=true;
 				jmfirst=j;
@@ -3500,13 +3516,13 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		odta.ovlcode='j';
 		return odta;
 	}
-	//what's left could be intron overlap but with no junction match = 'o'
+	//what's left could be intron overlap but with no junction match: 'o'
 	if (odta.ovlen>4) {
 		odta.ovlcode='o';
 		return odta;
 	}
-	//but if there is no exon overlap, we have 'i' or 'y'
-	//exons are within the introns of the other!
+	//but if there is no exon overlap, we can have 'i' or 'y'
+	//exons are within the introns of the other transcript
 	if (m.start>r.start && r.end > m.end) {
 		odta.ovlcode='i';
 		return odta;
