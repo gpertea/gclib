@@ -1,6 +1,9 @@
 #ifndef GFF_H
 #define GFF_H
 
+#define GFFLIB_VERSION="0.12.7"
+//^^could be used for gffcompare/gffread builds to check for min version required
+
 //#define CUFFLINKS 1
 
 #include "GBase.h"
