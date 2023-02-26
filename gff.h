@@ -1,7 +1,7 @@
 #ifndef GFF_H
 #define GFF_H
 
-#define GFF_VERSION "0.12.7"
+#define GFF_VERSION 128
 //^^could be used for gffcompare/gffread builds to check for min version required
 
 //#define CUFFLINKS 1

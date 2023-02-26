@@ -128,13 +128,14 @@ public:
     if (value)
       clear_unused_bits();
   }
+
   unsigned long getMemorySize() const {
 	   unsigned long r = ((unsigned long) Capacity) * sizeof(BitWord);
 	   return r;
   }
 
   GBitVec(const GBitVec* RHS) {
-    if (RHS==NULL) {
+    if (RHS==NULL || RHS->size()==0) {
       Size = 0;
       fBits = 0;
       Capacity = 0;
@@ -142,6 +143,7 @@ public:
     }
     Capacity = NumBitWords(RHS->size());
     GMALLOC(fBits, Capacity * sizeof(BitWord));
+    Size = RHS->size();
     memcpy(fBits, RHS->fBits, Capacity * sizeof(BitWord));
   }
 
