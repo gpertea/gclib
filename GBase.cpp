@@ -46,7 +46,7 @@ void GError(const char* format,...){
     va_end(arguments);
     #ifdef DEBUG
      // comment this if you do NOT want a core dump
-     abort();
+     //abort();
     #endif
   #endif
     exit(1);
