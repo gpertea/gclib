@@ -86,7 +86,8 @@ template <class OBJ> class GVec {
          return fArray[0];
          }
     void Clear();
-    void Delete(int index);
+    void Delete(int index); //delete item at index
+    void Delete(int index, int delcount); //delete delcount items starting at index
     void Replace(int idx, OBJ& item); //Put, use operator= to copy
     void Exchange(int idx1, int idx2);
     void Swap(int idx1, int idx2)  { Exchange(idx1, idx2); }
@@ -465,6 +466,7 @@ template <class OBJ> void GVec<OBJ>::Delete(int idx) {
  TEST_INDEX(idx);
  std::move(& fArray[idx+1], & fArray[fCount], & fArray[idx]);
  fCount--;
+}
  /*
  if (std::is_trivial<OBJ>::value) {
    if (index<fCount)
@@ -478,7 +480,15 @@ template <class OBJ> void GVec<OBJ>::Delete(int idx) {
       }
   }
   */
+template <class OBJ> void GVec<OBJ>::Delete(int idx, int delcount) {
+ if (delcount<1 || delcount>fCount-idx)
+	 GError("GVec::Delete error: cannot delete %d items from %d-long GVec at pos %d !\n",
+			 delcount, fCount, idx);
+ TEST_INDEX(idx);
+ std::move(& fArray[idx+delcount], & fArray[fCount], & fArray[idx]);
+ fCount-=delcount;
 }
+
 
 template <class OBJ> void GVec<OBJ>::setCount(int NewCount) {
 	if (NewCount<0 || NewCount > MAXLISTSIZE)
