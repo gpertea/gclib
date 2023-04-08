@@ -66,17 +66,31 @@ extern const byte CLASSCODE_OVL_RANK; //rank value just above 'o' class code
 byte classcode_rank(char c); //returns priority value for class codes
 
 struct TOvlData { //describe overlap with a ref transcript
-	char ovlcode;
-	int ovlen;
-	int ovlRefstart; //start coordinate of the overlap on reference (1-based)
-	int16_t numJmatch; //number of matching junctions (not introns)
+	char ovlcode=0;
+	int ovlen=0;
+	int ovlRefstart=0; //start coordinate of the overlap on reference (1-based)
+	int numJmatch=0; //number of matching splice sites (not introns!)
 	GBitVec jbits; //bit array with 1 bit for each junction (total = 2 * num_introns)
-	           //a junction match is 1, otherwise 0
-	//TODO: populate refintrons for each overlap!
+	              //a junction match is 1, otherwise 0
+	GBitVec inbits; // bit array with 1 bit per intron; ref-matching introns are set
+
 	GBitVec rint; //reference introns matched: bit array with one bit per reference intron
 	   // (len = ref num_introns); bit is set if the ref intron was matched
-	TOvlData(char oc=0, int olen=0, int16_t nmj=0, GBitVec* jb=NULL, GBitVec* ri=NULL):ovlcode(oc),
-			ovlen(olen),ovlRefstart(0),numJmatch(nmj),jbits(jb), rint(ri) { }
+
+	//Note: skipped exons have 2 consecutive jbits set (starting at even index)
+	//      with NO corresponding bit set in inbits
+	TOvlData(char oc=0, int olen=0, int nmj=0):ovlcode(oc),
+			ovlen(olen),ovlRefstart(0),numJmatch(nmj) { }
+	TOvlData(const TOvlData& o):ovlcode(o.ovlcode), ovlen(o.ovlen),
+			ovlRefstart(o.ovlRefstart), numJmatch(o.numJmatch),
+			jbits(o.jbits), inbits(o.inbits), rint(o.rint)  {}
+	TOvlData(TOvlData&& o):ovlcode(o.ovlcode), ovlen(o.ovlen),
+				ovlRefstart(o.ovlRefstart), numJmatch(o.numJmatch) {
+				jbits=std::move(o.jbits);
+				inbits=std::move(o.inbits);
+				rint=std::move(o.rint);
+	}
+	//TODO: need move operator?
 };
 
 TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch=false, int trange=0);

@@ -3280,6 +3280,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	//-- multi-exon transfrag --
 	int imax=m.exons.Count()-1;// imax>0 here
 	odta.jbits.resize(imax << 1); //num_junctions = 2 * num_introns
+	odta.inbits.resize(imax); // num_introns
 	if (jmax==0) { //single-exon reference overlap
 		//any exon overlap?
 		GSeg rseg(r.start, r.end);
@@ -3305,7 +3306,7 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		return odta;
 	} // SET reference
 	// -- MET comparison ---
-	odta.rint.resize(jmax);
+	odta.rint.resize(jmax); //initialize bitvector of reference introns (1=intron matched)
 	// check if qry contained by a ref intron
 	for (int j=0;j<jmax;j++) {
 		if (m.end<r.exons[j+1]->start && m.start>r.exons[j]->end)
@@ -3400,7 +3401,8 @@ TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 		    junct_match=true;
 		}
 		if (smatch && ematch) {
-			//perfect match of this intron
+			//full match of this reference intron
+			odta.inbits.set(i-1);
 			odta.rint.set(j-1);
 			if (jmfirst==0) {
 				ichain_match=true;

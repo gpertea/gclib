@@ -109,8 +109,8 @@ public:
 
 
   /// GBitVec default ctor - Creates an empty GBitVec.
-  GBitVec() : Size(0), Capacity(0) {
-    fBits = 0;
+  GBitVec() : fBits(0), Size(0), Capacity(0) {
+
   }
 
   /// GBitVec ctor - Creates a GBitVec of specified number of bits. All
@@ -132,6 +132,12 @@ public:
   unsigned long getMemorySize() const {
 	   unsigned long r = ((unsigned long) Capacity) * sizeof(BitWord);
 	   return r;
+  }
+  //move constructor
+  GBitVec(GBitVec&& o):fBits(o.fBits), Size(o.Size), Capacity(o.Capacity)
+  {
+	o.fBits=nullptr;
+	o.Size=0;o.Capacity=0;
   }
 
   GBitVec(const GBitVec* RHS) {
