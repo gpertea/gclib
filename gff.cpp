@@ -2953,10 +2953,23 @@ bool GffObj::printAttrs(FILE* fout,  const char* sep, bool GTFstyle, bool cvtCha
 		  if (strcmp(attrname, "gene_id")==0) continue;
 		  if (cvtChars) {
 			  decodeHexChars(dbuf, attrval, DBUF_LEN-1);
-			  fprintf(fout,"%s%s \"%s\"", prsep, attrname, dbuf);
+			  int dl=0;
+			  char* av=dbuf;
+			  if ( (dl=strlen(av))>0) {
+				  if (av[0]=='"') ++av;
+				  if (av[dl-1]=='"') av[dl-1]=0;
+			  }
+			  fprintf(fout,"%s%s \"%s\"", prsep, attrname, av);
 		  }
-		  else
-			 fprintf(fout,"%s%s \"%s\"", prsep, attrname, attrs->Get(i)->attr_val);
+		  else {
+			  int dl=0;
+			  char* av=attrs->Get(i)->attr_val;
+			  if ( (dl=strlen(av))>0) {
+				  if (av[0]=='"') ++av;
+				  if (av[dl-1]=='"') av[dl-1]=0;
+			  }
+			 fprintf(fout,"%s%s \"%s\"", prsep, attrname, av);
+		  }
 		  prsep=sep;
 		  pr=true;
 		}
