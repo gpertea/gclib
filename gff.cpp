@@ -3226,6 +3226,7 @@ char singleExonTMatch(GffObj& m, GffObj& r, int& ovlen, int trange, int* ovlrefs
  return 0;
 }
 
+//NOTE: getOvlData() does not check the strands of the transcripts
 TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch, int trange) {
 	TOvlData odta;
 	if (!m.overlap(r.start,r.end)) return odta;
