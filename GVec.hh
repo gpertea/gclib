@@ -183,7 +183,7 @@ template <class OBJ> class GPVec {
     GPVec(GPVec<OBJ>&& list); //move construstor
     GPVec(GPVec<OBJ>* list); //similar to a copy constructor
     GPVec<OBJ>& operator=(const GPVec<OBJ>& list);
-    GPVec<OBJ>& operator=(GPVec<OBJ>&& list);//move assignment operator
+    GPVec<OBJ>& operator=(GPVec<OBJ>&& list);//move operator
     inline OBJ* Get(int i) {
     	TEST_INDEX(i);
         return fList[i];
@@ -574,14 +574,12 @@ template <class OBJ> GPVec<OBJ>::GPVec(const GPVec& list) { //copy constructor
  }
 }
 
-template <class OBJ> GPVec<OBJ>::GPVec(GPVec&& list) { //copy constructor
- fCount=list.fCount;
- fCapacity=list.fCapacity;
- fList=list.fList;
- fFreeProc=list.fFreeProc;
- list.fCount=0;
- list.fCapacity=0;
- list.fList=nullptr;
+template <class OBJ> GPVec<OBJ>::GPVec(GPVec&& other):  //move constructor
+ fList(other.fList), fCount(other.fCount), fCapacity(other.fCapacity),
+ fFreeProc(other.fFreeProc) {
+ other.fCount=0;
+ other.fCapacity=0;
+ other.fList=nullptr;
 }
 
 template <class OBJ> GPVec<OBJ>::GPVec(GPVec* plist) { //another copy constructor
@@ -616,18 +614,16 @@ template <class OBJ> GPVec<OBJ>& GPVec<OBJ>::operator=(const GPVec& list) {
  return *this;
 }
 
-template <class OBJ> GPVec<OBJ>& GPVec<OBJ>::operator=(GPVec&& list) {
- if (&list!=this) {
-     Clear();
-     fFreeProc=list.fFreeProc;
-     //Attention: only the *POINTERS* are copied,
-     // the actual objects are NOT duplicated
-     fCount=list.fCount;
-     fCapacity=list.fCapacity;
-     fList=list.fList;
-     list.fList=nullptr;
-     list.fCapacity=0;
-     list.fCount=0;
+template <class OBJ> GPVec<OBJ>& GPVec<OBJ>::operator=(GPVec&& other) { //move operator
+ if (&other!=this) {
+     Clear(); //release previous items, possibly
+     fFreeProc=other.fFreeProc;
+     fCount=other.fCount;
+     fCapacity=other.fCapacity;
+     fList=other.fList;
+     other.fList=nullptr;
+     other.fCapacity=0;
+     other.fCount=0;
      }
  return *this;
 }
@@ -719,14 +715,12 @@ template <class OBJ> void GPVec<OBJ>::deallocate_item(OBJ* &item) {
 }
 
 template <class OBJ> void GPVec<OBJ>::Clear() {
- if (FREEDATA) {
-   for (int i=0; i<fCount; i++) {
-     (*fFreeProc)(fList[i]);
-     }
-   }
- //GFREE(fList);
- delete[] fList;
- fList=nullptr;
+ if (FREEDATA && fList!=nullptr) {
+   for (int i=0; i<fCount; i++) 
+     if (fList[i]!=nullptr) (*fFreeProc)(fList[i]);
+   delete[] fList;
+   fList=nullptr;
+ }
  fCount=0;
  fCapacity=0;
 }
