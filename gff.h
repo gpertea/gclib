@@ -93,7 +93,7 @@ struct TOvlData { //describe overlap with a ref transcript
 	//TODO: need move operator?
 };
 
-TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch=false, int trange=0);
+TOvlData getOvlData(GffObj& m, GffObj& r, bool stricterMatch=false, int trange=0, bool cdsMatch=false);
 
 char transcriptMatch(GffObj& a, GffObj& b, int& ovlen, int trange=0); //generic transcript match test
 // -- return '=', '~'  or 0
