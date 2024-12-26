@@ -197,6 +197,7 @@ inline int iround(double x) {
 char* Grealpath(const char *path, char *resolved_path);
 
 int Gmkdir(const char *path, bool recursive=true, int perms = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH));
+int Grmdir(const char *path);
 
 void Gmktempdir(char* templ);
 
@@ -249,9 +250,10 @@ inline void GFree(pointer* ptr){
 
 inline bool GMalloc(pointer* ptr,unsigned long size){
     //GASSERT(ptr);
+    *ptr=nullptr;
     if (size!=0)
   	  *ptr=malloc(size);
-    return *ptr!=NULL;
+    return *ptr!=nullptr;
  }
 
 // Allocate 0-filled memory
