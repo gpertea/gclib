@@ -1,5 +1,4 @@
 INCDIRS := 
-#-I${BAM}
 
 CXX   := $(if $(CXX),$(CXX),g++)
 LINKER  := $(if $(LINKER),$(LINKER),g++)
@@ -101,24 +100,21 @@ endif
 	${CXX} ${CXXFLAGS} -c $< -o $@
 
 .PHONY : all
-all:    htest
+all:    gtest
 memcheck tsan: all
-#mdtest
 nodebug: all
 release: all
 debug: all
 
-OBJS := GBase.o GStr.o GArgs.o GResUsage.o
+OBJS := GBase.o GStr.o GArgs.o GFaSeqGet.o gff.o gdna.o codons.o GFastaIndex.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
-htest.o: htest.cpp GHashMap.hh
-htest:  $(OBJS) htest.o
+gtest.o: gtest.cpp GBase.h gff.h GFaSeqGet.h
+gtest:  $(OBJS) gtest.o
 	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
-mdtest: $(OBJS) mdtest.o
-	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
-# target for removing all object files
 
+# target for removing all object files
 .PHONY : clean
 clean:: 
-	${RM} $(OBJS) *.o mdtest$(EXE) htest$(EXE)
+	${RM} $(OBJS) *.o gtest$(EXE)
 	${RM} core.*
