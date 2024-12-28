@@ -5,16 +5,18 @@
 #include "gff.h"
 
 #define USAGE "Usage:\n\
-gtest [--bit-test|-g|--genomic-fasta <genomic_seqs_fasta>] [-c|COV=<cov%>] \n\
- [-s|--seq <seq_info.fsize>] [-o|--out <outfile.gff>] [--disable-flag] [-t|--test <string>]\n\
- [-p|PID=<pid%>] file1 [file2 file3 ..]\n\
+gtest [--bit-test|-g|--genomic-fasta <genomic_seqs_fasta>] [-w|--txseq <txseq.fa>] \n\
+  [-x|--txcds <txcds.fa>] [-y|--txprot <txprot.fa>] [-o|--out <outfile_simple.gff>] \n\
+  [-t|--test <string>] file1 \n\
  "
 enum {
  OPT_HELP=1,
  OPT_GENOMIC,
  OPT_COV,
- OPT_SEQ,
- OPT_OUTFILE,
+ OPT_TXSEQ, // transcript sequence, spliced exons only (no introns)
+ OPT_TXCDS, // transcript CDS sequence only, if CDS present
+ OPT_TXPROT, // protein translation of CDS sequence, if CDS present
+ OPT_OUTFILE, // simple gff output, only if specified
  OPT_DISABLE_FLAG,
  OPT_TEST,
  OPT_PID,
@@ -23,17 +25,19 @@ enum {
 };
 
 GArgsDef opts[] = {
-{"help",          'h', 0, OPT_HELP},
-{"genomic-fasta", 'g', 1, OPT_GENOMIC},
-{"COV",           'c', 1, OPT_COV},
-{"seq",           's', 1, OPT_SEQ},
-{"out",           'o', 1, OPT_OUTFILE},
-{"disable-flag",   0,  0, OPT_DISABLE_FLAG},
-{"test",          't', 1, OPT_TEST},
-{"PID",           'p', 1, OPT_PID},
-{"bit-test",      'B', 0, OPT_BITVEC},
-{"bignum",        'n', 1, OPT_NUM},
-{0,0,0,0}
+  {"help",          'h', 0, OPT_HELP},
+  {"genomic-fasta", 'g', 1, OPT_GENOMIC},
+  {"COV",           'c', 1, OPT_COV},
+  {"txseq",         'w', 1, OPT_TXSEQ},
+  {"txcds",         'x', 1, OPT_TXCDS},
+  {"txprot",        'y', 1, OPT_TXPROT},
+  {"out",           'o', 1, OPT_OUTFILE},
+  {"disable-flag",   0,  0, OPT_DISABLE_FLAG},
+  {"test",          't', 1, OPT_TEST},
+  {"PID",           'p', 1, OPT_PID},
+  {"bit-test",      'B', 0, OPT_BITVEC},
+  {"bignum",        'n', 1, OPT_NUM},
+  {0,0,0,0} // end of list
 };
 
 
@@ -69,9 +73,9 @@ int main(int argc, char* argv[]) {
    GMessage("\n#### Found %d non-option arguments given:\n", numargs);
    char* a=NULL;
    while ((a=args.nextNonOpt())) {
-     GMessage("%s\n",a);
+       GMessage("%s\n",a);
      }
-   }
+ }
  GStr s=args.getOpt('t');
  if (!s.is_empty()) {
     GStr token;
@@ -83,5 +87,27 @@ int main(int argc, char* argv[]) {
       c++;
       }
     }
+  // -- testing gff functions
+  if (numargs>1) {
+     GMessage("Error: only one GFF/GTF file name can be given at a time!\n");
+     exit(1);
+  }
+  else if (numargs==1) {
+      args.startNonOpt(); //reset iteration through non-option arguments
+      char* gff_fname=args.nextNonOpt();
+      if (fileExists(gff_fname)!=2) {
+        GMessage("Error: GFF file %s not found!\n", gff_fname);
+        exit(1);
+      }
+      GffReader* gffr=new GffReader(gff_fname, true, true); //transcripts only, sort chromosomes alphabetically
+      //gffr->showWarnings();
+      gffr->keepAttrs(false); //no attributes
+      gffr->readAll();
+      GMessage("GFF file %s parsed %d records:\n", gff_fname, gffr->gflst.Count());
+      for (int i=0;i<gffr->gflst.Count();++i) {
+        const char* cdsStatus = gffr->gflst[i]->hasCDS() ? "[CDS]" : "[   ]";
+        GMessage("%s\t%s\n", gffr->gflst[i]->getID(), cdsStatus);
+      }
+  }
 
 }
