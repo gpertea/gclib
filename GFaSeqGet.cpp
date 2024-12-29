@@ -250,7 +250,7 @@ const char* GFaSeqGet::subseq(uint cstart, int& clen) {
   return (const char*)(lastsub->sq+(cstart-newstart));
 }
 
-char* GFaSeqGet::copyRange(uint cstart, uint cend, bool revCmpl, bool upCase) {
+char* GFaSeqGet::copyRange(uint cstart, uint cend, bool revCmpl, bool upCase, int* retlen) {
   if (cstart>cend) { Gswap(cstart, cend); }
   int clen=cend-cstart+1;
   const char* gs=subseq(cstart, clen);
@@ -258,6 +258,7 @@ char* GFaSeqGet::copyRange(uint cstart, uint cend, bool revCmpl, bool upCase) {
   char* r=NULL;
   GMALLOC(r,clen+1);
   r[clen]=0;
+  if (retlen) *retlen=clen;
   memcpy((void*)r,(void*)gs, clen);
   if (revCmpl) reverseComplement(r,clen);
   if (upCase) {

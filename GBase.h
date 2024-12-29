@@ -271,13 +271,12 @@ inline bool GRealloc(pointer* ptr,unsigned long size){
       return true;
       }
     if (*ptr==NULL) {//simple malloc
-     void *p=malloc(size);
-     if (p != NULL) {
-       *ptr=p;
-       return true;
-       }
-      else return false;
-     }//malloc
+      void *p=malloc(size);
+      if (p != NULL) {
+        *ptr=p;
+        return true;
+      } else return false;
+    }//malloc
     else {//realloc
      void *p=realloc(*ptr,size);
      if (p) {
@@ -285,7 +284,7 @@ inline bool GRealloc(pointer* ptr,unsigned long size){
          return true;
          }
      return false;
-     }
+    }
  }
 
 template<class T> T* GDupAlloc(T& data) {
@@ -751,7 +750,7 @@ int fileExists(const char* fname);
 
 int64 fileSize(const char* fpath);
 
-//write a formatted fasta record, fasta formatted
+//write a formatted fasta record
 void writeFasta(FILE *fw, const char* seqid, const char* descr,
         const char* seq, int linelen=60, int seqlen=0);
 

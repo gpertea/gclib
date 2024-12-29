@@ -12,16 +12,10 @@ class GSubSeq {
   char* sq; //actual subsequence data will be stored here
                 // (with end-of-line characters removed)
 
-  /*char* xseq; //the exposed pointer to the last requested subsequence start
-  off_t xstart; //the coordinate start for the last requested subseq
-  off_t xlen; //the last requested subseq len*/
   GSubSeq() {
      sqstart=0;
      sqlen=0;
      sq=NULL;
-     /* xseq=NULL;
-     xstart=0;
-     xlen=0;*/
      }
   void forget() { //forget about pointer data, so we can reuse it
   	sq=NULL;
@@ -84,25 +78,27 @@ class GFaSeqGet {
     delete lastsub;
   }
 
+  // returns pointer to internal buffer+offset, not 0-terminated
   const char* seq(uint cstart=1, int clen=0) {
 	  int cend = clen==0 ? 0 : cstart+clen-1;
 	  return getRange(cstart, cend);
   }
 
-  const char* subseq(uint cstart, int& clen);
-  const char* getRange(uint cstart=1, uint cend=0) {
+  const char* subseq(uint cstart, int& clen); //pointer to internal buffer, not 0-terminated
+  const char* getRange(uint cstart=1, uint cend=0, int* retlen=NULL) {
       if (cend==0) cend=(seq_len>0)?seq_len : MAX_FASUBSEQ;
       if (cstart>cend) { Gswap(cstart, cend); }
       int clen=cend-cstart+1;
-      //int rdlen=clen;
-      return subseq(cstart, clen);
+      const char* r = subseq(cstart, clen);
+      if (retlen) *retlen=clen;
+      return r;
   }
 
-  //caller is responsible for deallocating the return string
-  char* copyRange(uint cstart, uint cend, bool revCmpl=false, bool upCase=false);
+  // returns new 0-terminated copy, caller is responsible for deallocating the return string
+  char* copyRange(uint cstart, uint cend, bool revCmpl=false, bool upCase=false, int* retlen=NULL);
 
-  //uncached, read and return allocated buffer
-  //caller is responsible for deallocating the return string
+  // uncached, read and return allocated buffer with a copy of the substring, 0-terminated
+  // caller is responsible for deallocating the return string
   char* fetchSeq(int* retlen=NULL) {
   	int clen=(seq_len>0) ? seq_len : MAX_FASUBSEQ;
   	if (lastsub) { delete lastsub; lastsub=NULL; }

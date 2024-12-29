@@ -21,7 +21,8 @@ enum {
  OPT_TEST,
  OPT_PID,
  OPT_BITVEC,
- OPT_NUM
+ OPT_NUM,
+ OPT_REGION
 };
 
 GArgsDef opts[] = {
@@ -37,6 +38,7 @@ GArgsDef opts[] = {
   {"PID",           'p', 1, OPT_PID},
   {"bit-test",      'B', 0, OPT_BITVEC},
   {"bignum",        'n', 1, OPT_NUM},
+  {"region",        'r', 1, OPT_REGION},
   {0,0,0,0} // end of list
 };
 
@@ -48,17 +50,77 @@ int main(int argc, char* argv[]) {
  args.printCmdLine(stderr);
  args.printError(USAGE, true);
  if (args.getOpt(OPT_HELP))
-     {
-     GMessage("%s\n", USAGE);
-     exit(1);
-     }
+  {
+  GMessage("%s\n", USAGE);
+  exit(1);
+  }
+
+ // Handle -g/--genomic-fasta option
+
+ GFastaIndex* fastaIndex = nullptr; // fastaIndex
+ char* gfile=args.getOpt(OPT_GENOMIC);
+ if (gfile) {
+   GStr indexFile(gfile);
+   indexFile.append(".fai");
+
+   if (fileExists(indexFile.chars())) {
+     fastaIndex = new GFastaIndex(gfile, indexFile.chars());
+   } else {
+     GMessage("Creating FASTA index for %s...\n", gfile);
+     fastaIndex=new GFastaIndex(gfile);
+     fastaIndex->buildIndex();
+     fastaIndex->storeIndex(indexFile.chars());
+     if (fileSize(indexFile.chars())<=0)
+       GError("Error: could not create FASTA index for %s\n", gfile);
+   }
+ }
+
+ // Handle -r/--region option
+ if (args.getOpt(OPT_REGION)) {
+   if (fastaIndex == nullptr) {
+     GError("Error: FASTA index is required for region extraction\n");
+   }
+   GStr region(args.getOpt(OPT_REGION));
+   GStr chr = region;
+   // Split chr:start-end
+   GStr startEnd = chr.split(':');
+   if (startEnd.is_empty()) {
+     GError("Error: invalid region format. Expected chr:start-end\n");
+   }
+
+   // Split start-end
+   GStr endStr = startEnd.split('-');
+   if (endStr.is_empty()) {
+     GError("Error: invalid region format. Expected chr:start-end\n");
+   }
+
+   int start = startEnd.asInt();
+   int end = endStr.asInt();
+   if (end<start) Gswap(start, end);
+
+   GFastaRec* rec = fastaIndex->getRecord(chr);
+   if (rec == nullptr) GError("Error: could not get sequence for %s\n", chr.chars());
+   GFaSeqGet seqGet(gfile, rec->seqlen, rec->fpos, rec->line_len, rec->line_blen);
+   int seqlen=0;
+   char* sequence=seqGet.copyRange(start, end, false, false, &seqlen);
+
+   if (sequence==nullptr) {
+      GError("Error: could not get sequence for region %s\n", region.chars());
+   }
+   GStr sname(chr);
+   sname.appendfmt("|%d-%d", start, end);
+   writeFasta(stdout, sname.chars(), NULL, sequence, 60, seqlen);
+   GFREE(sequence);
+ }
+
+ delete fastaIndex;
 
  if (args.getOpt(OPT_NUM)) {
-      GStr snum(args.getOpt(OPT_NUM));
-      int num=snum.asInt();
-      char* numstr=commaprintnum(num);
-      GMessage("Number %d written with commas: %s\n", num, numstr);
-      GFREE(numstr);
+   GStr snum(args.getOpt(OPT_NUM));
+   int num=snum.asInt();
+   char* numstr=commaprintnum(num);
+   GMessage("Number %d written with commas: %s\n", num, numstr);
+   GFREE(numstr);
  }
  int numopts=args.startOpt();
  if (numopts)
@@ -73,8 +135,8 @@ int main(int argc, char* argv[]) {
    GMessage("\n#### Found %d non-option arguments given:\n", numargs);
    char* a=NULL;
    while ((a=args.nextNonOpt())) {
-       GMessage("%s\n",a);
-     }
+    GMessage("%s\n",a);
+  }
  }
  GStr s=args.getOpt('t');
  if (!s.is_empty()) {
@@ -83,31 +145,47 @@ int main(int argc, char* argv[]) {
     s.startTokenize(";,: \t");
     int c=1;
     while (s.nextToken(token)) {
-      GMessage("token %2d : \"%s\"\n",c,token.chars());
-      c++;
-      }
+   GMessage("token %2d : \"%s\"\n",c,token.chars());
+   c++;
+   }
     }
   // -- testing gff functions
   if (numargs>1) {
-     GMessage("Error: only one GFF/GTF file name can be given at a time!\n");
-     exit(1);
+  GMessage("Error: only one GFF/GTF file name can be given at a time!\n");
+  exit(1);
   }
   else if (numargs==1) {
-      args.startNonOpt(); //reset iteration through non-option arguments
-      char* gff_fname=args.nextNonOpt();
-      if (fileExists(gff_fname)!=2) {
-        GMessage("Error: GFF file %s not found!\n", gff_fname);
-        exit(1);
-      }
-      GffReader* gffr=new GffReader(gff_fname, true, true); //transcripts only, sort chromosomes alphabetically
-      //gffr->showWarnings();
-      gffr->keepAttrs(false); //no attributes
-      gffr->readAll();
-      GMessage("GFF file %s parsed %d records:\n", gff_fname, gffr->gflst.Count());
-      for (int i=0;i<gffr->gflst.Count();++i) {
-        const char* cdsStatus = gffr->gflst[i]->hasCDS() ? "[CDS]" : "[   ]";
-        GMessage("%s\t%s\n", gffr->gflst[i]->getID(), cdsStatus);
-      }
+   args.startNonOpt(); //reset iteration through non-option arguments
+   char* gff_fname=args.nextNonOpt();
+   if (fileExists(gff_fname)!=2) {
+     GMessage("Error: GFF file %s not found!\n", gff_fname);
+     exit(1);
+   }
+   GffReader* gffr=new GffReader(gff_fname, true, true); //transcripts only, sort chromosomes alphabetically
+   //gffr->showWarnings();
+   gffr->keepAttrs(false); //no attributes
+   gffr->readAll();
+   GMessage("GFF file %s parsed %d records:\n", gff_fname, gffr->gflst.Count());
+   for (int i=0;i<gffr->gflst.Count();++i) {
+     const char* cdsStatus = gffr->gflst[i]->hasCDS() ? "[CDS]" : "[   ]";
+     GMessage("%s\t%s\n", gffr->gflst[i]->getID(), cdsStatus);
+   }
+
+   // Handle -o output file option
+   GStr outfile = args.getOpt(OPT_OUTFILE);
+   FILE* fout = stdout;
+   if (!outfile.is_empty() && outfile != "-") {
+     fout = fopen(outfile.chars(), "w");
+     if (fout == NULL)
+        GError("Error: could not open output file %s\n", outfile.chars());
+   }
+   for (int i=0;i<gffr->gflst.Count();++i) {
+     gffr->gflst[i]->printGff(fout);
+   }
+   if (fout != stdout) {
+     fclose(fout);
+     GMessage("Wrote %d records to %s\n", gffr->gflst.Count(), outfile.chars());
+   }
   }
 
 }

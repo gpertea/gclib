@@ -1,7 +1,9 @@
 INCDIRS := 
 
 CXX   := $(if $(CXX),$(CXX),g++)
+#CXX := clang++
 LINKER  := $(if $(LINKER),$(LINKER),g++)
+#LINKER  := clang++
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
 LIBS    := -lz
 
@@ -15,7 +17,6 @@ ifneq (, $(findstring linux, $(DMACH)))
  # -lrt only needed for Linux systems
  LIBS+= -lrt
 endif
-
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS

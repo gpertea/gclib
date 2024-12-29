@@ -13,13 +13,13 @@
 
 class GFastaRec {
  public:
-  const char* seqname;
+  const char* seqname; //only a pointer copy
   uint seqlen;
   off_t fpos;
   int line_len; //effective line length (without EoL)
   int line_blen; //length of line including EoL characters
   GFastaRec(uint slen=0, off_t fp=0, int llen=0, int llenb=0) {
-    seqname=NULL; //only a pointer copy
+    seqname=NULL;
     seqlen=slen;
     fpos=fp;
     line_len=llen;
