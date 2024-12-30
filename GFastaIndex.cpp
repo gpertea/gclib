@@ -165,12 +165,12 @@ int GFastaIndex::storeIndex(FILE* fai) {
   //reclist has records sorted by file offset
   for (int i=0;i<reclist.Count();i++) {
 #ifdef _WIN32
-    int written=fprintf(fai, "%s\t%d\t%ld\t%d\t%d\n",
+    int written=fprintf(fai, "%s\t%ld\t%ld\t%d\t%d\n",
             reclist[i]->seqname,reclist[i]->seqlen,(long)reclist[i]->fpos,
               reclist[i]->line_len, reclist[i]->line_blen);
 #else
-    int written=fprintf(fai, "%s\t%d\t%lld\t%d\t%d\n",
-            reclist[i]->seqname, reclist[i]->seqlen, (long long)(reclist[i]->fpos),
+    int written=fprintf(fai, "%s\t%ld\t%ld\t%d\t%d\n",
+            reclist[i]->seqname, reclist[i]->seqlen, (long)(reclist[i]->fpos),
               reclist[i]->line_len, reclist[i]->line_blen);
 #endif
     if (written>0) rcount++;

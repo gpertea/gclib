@@ -24,7 +24,7 @@ class GSubSeq {
   }
   ~GSubSeq() {
      GFREE(sq);
-     }
+  }
   // genomic, 1-based coordinates:
   void setup(uint sstart, int slen, int sovl=0, int qfrom=0, int qto=0, uint maxseqlen=0);
     //check for overlap with previous window and realloc/extend appropriately
@@ -34,38 +34,33 @@ class GSubSeq {
 
 //
 class GFaSeqGet {
-  char* fname; //file name where the sequence resides
-  FILE* fh;
-  off_t fseqstart; //file offset where the sequence actually starts
-  uint seq_len; //total sequence length, if known (when created from GFastaIndex)
-  uint line_len; //length of each line of text
-  uint line_blen; //binary length of each line
+  char* fname=NULL; //file name where the sequence resides
+  FILE* fh=NULL;
+  off_t fseqstart=-1; //file offset where the sequence actually starts
+  uint seq_len=0; //total sequence length, if known (when created from GFastaIndex)
+  uint line_len=0; //length of each line of text
+  uint line_blen=0; //binary length of each line
                  // = line_len + number of EOL character(s)
-  GSubSeq* lastsub;
+  GSubSeq* lastsub=NULL;
   void initialParse(off_t fofs=0, bool checkall=true);
   const char* loadsubseq(uint cstart, int& clen);
   void finit(const char* fn, off_t fofs, bool validate);
  public:
   //GStr seqname; //current sequence name
-  char* seqname;
-  GFaSeqGet(): fname(NULL), fh(NULL), fseqstart(0), seq_len(0),
-		  line_len(0), line_blen(0), lastsub(NULL), seqname(NULL) {
-  }
+  char* seqname=NULL;
 
-  GFaSeqGet(const char* fn, off_t fofs, bool validate=false):fname(NULL), fh(NULL),
-		    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-			lastsub(NULL), seqname(NULL) {
+  GFaSeqGet(const char* fn, off_t fofs, bool validate=false) {
      finit(fn,fofs,validate);
   }
 
-  GFaSeqGet(const char* fn, bool validate=false):fname(NULL), fh(NULL),
-		    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-			lastsub(NULL), seqname(NULL) {
+  GFaSeqGet(const char* fn, bool validate=false) {
      finit(fn,0,validate);
   }
 
   GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, int l_blen);
   //constructor from GFastaIndex record
+  GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx);
+
 
   GFaSeqGet(FILE* f, off_t fofs=0, bool validate=false);
 
@@ -133,6 +128,23 @@ class GFaSeqGet {
   int getLineLen() { return line_len; }
   int getLineBLen() { return line_blen; }
   //reads a subsequence starting at genomic coordinate cstart (1-based)
+
+  size_t getMemoryFootprint() {
+      size_t totalSize = sizeof(*this); // Base size of the object
+
+      // Add size of dynamically allocated fname
+      if (this->fname != NULL)
+          totalSize += strlen(this->fname) + 1; // +1 for the null-terminator
+      if (this->seqname != NULL)
+          totalSize += strlen(this->seqname) + 1;
+      if (this->lastsub != NULL) {
+          totalSize += sizeof(GSubSeq); // Size of GSubSeq object itself
+          if (this->lastsub->sq != NULL)
+              totalSize += this->lastsub->sqlen; // Add the length of the sequence buffer
+      }
+
+      return totalSize;
+    }
  };
 
 //multi-fasta sequence handling
@@ -252,6 +264,8 @@ class GFastaDb {
 	GFREE(s);
   }
 
+ //fetches the whole sequence (chromosome) by its name
+ // uses the index if available
  GFaSeqGet* fetch(const char* gseqname) {
     if (fastaPath==NULL) return NULL;
     if (last_seqname!=NULL && (strcmp(gseqname, last_seqname)==0)
@@ -301,7 +315,8 @@ class GFastaDb {
      }
 };
 
-
+// fetch full sequence of a chromosome/FASTA record by seq ID, using an index if available
+// -- should NOT be used for large chromosomes
 GFaSeqGet* fastaSeqGet(GFastaDb& gfasta, const char* seqid);
 
 #endif

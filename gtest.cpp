@@ -98,9 +98,10 @@ int main(int argc, char* argv[]) {
    int end = endStr.asInt();
    if (end<start) Gswap(start, end);
 
-   GFastaRec* rec = fastaIndex->getRecord(chr);
-   if (rec == nullptr) GError("Error: could not get sequence for %s\n", chr.chars());
-   GFaSeqGet seqGet(gfile, rec->seqlen, rec->fpos, rec->line_len, rec->line_blen);
+   //GFastaRec* rec = fastaIndex->getRecord(chr);
+   //if (rec == nullptr) GError("Error: could not get sequence for %s\n", chr.chars());
+   //GFaSeqGet seqGet(gfile, rec->seqlen, rec->fpos, rec->line_len, rec->line_blen);
+   GFaSeqGet seqGet(gfile, chr.chars(), *fastaIndex);
    int seqlen=0;
    char* sequence=seqGet.copyRange(start, end, false, false, &seqlen);
 

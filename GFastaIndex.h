@@ -14,7 +14,7 @@
 class GFastaRec {
  public:
   const char* seqname; //only a pointer copy
-  uint seqlen;
+  long seqlen;
   off_t fpos;
   int line_len; //effective line length (without EoL)
   int line_blen; //length of line including EoL characters

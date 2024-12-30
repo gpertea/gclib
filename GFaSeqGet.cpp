@@ -37,9 +37,7 @@ void GFaSeqGet::finit(const char* fn, off_t fofs, bool validate) {
  lastsub=new GSubSeq();
 }
 
-GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, int l_blen):fname(NULL),
-		fh(NULL), fseqstart(0), seq_len(0), line_len(0),
-		line_blen(0), lastsub(NULL), seqname(NULL) {
+GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, int l_blen) {
 //for GFastaIndex use mostly -- the important difference is that
 //the file offset is to the sequence, not to the defline
   fh=fopen(faname,"rb");
@@ -54,8 +52,30 @@ GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, 
        GError("Error (GFaSeqGet): invalid line length info (len=%d, blen=%d)\n",
               line_len, line_blen);
   fseqstart=fseqofs;
+  lastsub=new GSubSeq(); //nothing is read yet
+}
+
+GFaSeqGet::GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx) {
+  GFastaRec* farec=faidx.getRecord(chr);
+  if (farec==NULL) {
+    GError("Error (GFaSeqGet): couldn't find FASTA record for '%s'!\n",chr);
+    return;
+  }
+  fh=fopen(faname,"rb");
+  if (fh==NULL) {
+    GError("Error (GFaSeqGet) opening file '%s'\n",faname);
+    }
+  fname=Gstrdup(faname);
+  line_len=farec->line_len;
+  line_blen=farec->line_blen;
+  seq_len=farec->seqlen;
+  if (line_blen<line_len)
+       GError("Error (GFaSeqGet): invalid line length info (len=%d, blen=%d)\n",
+              line_len, line_blen);
+  fseqstart=farec->fpos;
   lastsub=new GSubSeq();
 }
+
 
 GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs, bool validate):fname(NULL), fh(NULL),
 	    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
