@@ -1,16 +1,24 @@
-INCDIRS := 
+HTSLIB_PREFIX := .    
+## can be replaced with a pre-installed prefix
+## otherwise this script will install it there
+
+HTSLIB_PREFIX := $(strip $(HTSLIB_PREFIX))
+HTSLIB := $(HTSLIB_PREFIX)/lib/libhts.a
+HTSINC := $(HTSLIB_PREFIX)/include
+
+INCDIRS := -I$(HTSINC)
+
 
 CXX   := $(if $(CXX),$(CXX),g++)
-#CXX := clang++
 LINKER  := $(if $(LINKER),$(LINKER),g++)
-#LINKER  := clang++
-LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g)
-LIBS    := -lz
+LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g -L $(HTSLIB_PREFIX)/lib)
 
-DMACH := $(shell ${CXX} -dumpmachine)
+LIBS    := $(HTSLIB) -lz -lm -lpthread
+
+DMACH := $(shell $(CXX) -dumpmachine)
 
 ifneq (, $(findstring mingw32, $(DMACH)))
-WINDOWS=1
+ WINDOWS=1
 endif
 
 ifneq (, $(findstring linux, $(DMACH)))
@@ -21,7 +29,7 @@ endif
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
  DMACH := windows
- ifeq ($(findstring 4.5.,$(shell ${CXX} -dumpversion)), 4.5.)
+ ifeq ($(findstring 4.5.,$(shell $(CXX) -dumpversion)), 4.5.)
   LDFLAGS += -static-libstdc++ -static-libgcc
  endif
   LIBS += -lregex -lws2_32
@@ -29,7 +37,7 @@ endif
 
 # Misc. system commands
 # assuming on Windows this is run under MSYS
-RM = rm -f
+RM = /usr/bin/rm -f
 
 # File endings
 ifdef WINDOWS
@@ -38,7 +46,7 @@ else
 EXE =
 endif
 
-BASEFLAGS  := -std=c++11 -Wall -Wextra ${INCDIRS} $(MARCH) \
+BASEFLAGS  := -std=c++11 -Wall -Wextra $(INCDIRS) $(MARCH) \
  -D_REENTRANT -fno-exceptions -fno-rtti
 
 GCCVER5 := $(shell expr `${CXX} -dumpversion | cut -f1 -d.` \>= 5)
@@ -86,7 +94,7 @@ else
        #CXXFLAGS += -fcheck-pointer-bounds -mmpx
      endif
      CXXFLAGS += -DDEBUG -D_DEBUG -DGDEBUG -fno-common -fstack-protector
-     LIBS := ${SANLIBS} -lubsan -ldl ${LIBS}
+     LIBS := $(SANLIBS) -lubsan -ldl $(LIBS)
    else
    # -- plain debug build
     CXXFLAGS := $(if $(CXXFLAGS),$(CXXFLAGS), -O0 -g)
@@ -97,25 +105,37 @@ else
    endif
 endif
 
-%.o : %.cpp
-	${CXX} ${CXXFLAGS} -c $< -o $@
+all: gtest
 
-.PHONY : all
-all:    gtest
+%.o : %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(HTSLIB):
+	./build_htslib_static.sh $(realpath $(HTSLIB_PREFIX))
+
 memcheck tsan: all
 nodebug: all
 release: all
 debug: all
 
-OBJS := GBase.o GStr.o GArgs.o GFaSeqGet.o gff.o gdna.o codons.o GFastaIndex.o
+OBJS := GBase.o GStr.o GArgs.o GFaSeqGet.o GFastaIndex.o gff.o gdna.o codons.o
 
 version: ; @echo "GCC Version is: "$(GCC_MAJOR)":"$(GCC_MINOR)":"$(GCC_SUB)
-gtest.o: gtest.cpp GBase.h gff.h GFaSeqGet.h
-gtest:  $(OBJS) gtest.o
-	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
-
+GFastaIndex.o: $(HTSLIB) GFastaIndex.h GFastaIndex.cpp
+gtest.o: $(HTSLIB) gtest.cpp GBase.h gff.h GFaSeqGet.h GFastaIndex.o
+gtest:  $(HTSLIB) $(OBJS) gtest.o
+	$(LINKER) $(LDFLAGS) -o $@ $(filter-out %.a %.so, $^) $(LIBS)
+HTSLIB_BUILT := ./.htslib.built
 # target for removing all object files
 .PHONY : clean
 clean:: 
-	${RM} $(OBJS) *.o gtest$(EXE)
-	${RM} core.*
+	$(RM) $(OBJS) *.o gtest$(EXE)
+	$(RM) core.*
+cleanall:: 
+	$(RM) -r htslib-* $(OBJS) *.o gtest$(EXE)
+	$(RM) core.*
+ifneq ("$(wildcard $(HTSLIB_BUILT))","")
+	@echo "   HTSLIB was built by our script. Cleaning up..."
+	$(RM) $(HTSLIB_BUILT) $(HTSLIB) $(HTSLIB_PREFIX)/bin/bgzip $(HTSLIB_PREFIX)/bin/tabix $(HTSLIB_PREFIX)/bin/htsfile $(HTSLIB_PREFIX)/bin/annot-tsv
+	$(RM) -r $(HTSINC)/htslib
+endif

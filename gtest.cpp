@@ -239,7 +239,7 @@ int main(int argc, char* argv[]) {
           int aalen=0;
           char* protseq = translateDNA(sequence, aalen, seqlen);
           if (protseq[aalen-1]=='.') { aalen--; protseq[aalen]='\0'; }//remove stop codon
-          GMessage("Translated %s to protein (%d aa)\n", gobj->getID(), aalen);
+          //GMessage("Translated %s to protein (%d aa)\n", gobj->getID(), aalen);
           writeFasta(txprotout, gobj->getID(), NULL, protseq, 70, aalen);
           GFREE(protseq);
         }
