@@ -114,9 +114,7 @@ int main(int argc, char* argv[]) {
    GFREE(sequence);
  }
 
- delete fastaIndex;
-
- if (args.getOpt(OPT_NUM)) {
+  if (args.getOpt(OPT_NUM)) {
    GStr snum(args.getOpt(OPT_NUM));
    int num=snum.asInt();
    char* numstr=commaprintnum(num);
@@ -152,41 +150,106 @@ int main(int argc, char* argv[]) {
     }
   // -- testing gff functions
   if (numargs>1) {
-  GMessage("Error: only one GFF/GTF file name can be given at a time!\n");
-  exit(1);
+    GMessage("Error: only one GFF/GTF file name can be given at a time!\n");
+    exit(1);
   }
   else if (numargs==1) {
-   args.startNonOpt(); //reset iteration through non-option arguments
-   char* gff_fname=args.nextNonOpt();
-   if (fileExists(gff_fname)!=2) {
-     GMessage("Error: GFF file %s not found!\n", gff_fname);
-     exit(1);
-   }
-   GffReader* gffr=new GffReader(gff_fname, true, true); //transcripts only, sort chromosomes alphabetically
-   //gffr->showWarnings();
-   gffr->keepAttrs(false); //no attributes
-   gffr->readAll();
-   GMessage("GFF file %s parsed %d records:\n", gff_fname, gffr->gflst.Count());
-   for (int i=0;i<gffr->gflst.Count();++i) {
-     const char* cdsStatus = gffr->gflst[i]->hasCDS() ? "[CDS]" : "[   ]";
-     GMessage("%s\t%s\n", gffr->gflst[i]->getID(), cdsStatus);
-   }
+    args.startNonOpt(); //reset iteration through non-option arguments
+    char* gff_fname=args.nextNonOpt();
+    if (fileExists(gff_fname)!=2) {
+      GMessage("Error: GFF file %s not found!\n", gff_fname);
+      exit(1);
+    }
+    GffReader* gffr=new GffReader(gff_fname, true, true); //transcripts only, sort chromosomes alphabetically
+    //gffr->showWarnings();
+    gffr->keepAttrs(false); //no attributes
+    gffr->readAll();
+    GMessage("GFF file %s parsed %d records:\n", gff_fname, gffr->gflst.Count());
+    for (int i=0;i<gffr->gflst.Count();++i) {
+      const char* cdsStatus = gffr->gflst[i]->hasCDS() ? "[CDS]" : "[   ]";
+      GMessage("%s\t%s\n", gffr->gflst[i]->getID(), cdsStatus);
+    }
 
-   // Handle -o output file option
-   GStr outfile = args.getOpt(OPT_OUTFILE);
-   FILE* fout = stdout;
-   if (!outfile.is_empty() && outfile != "-") {
-     fout = fopen(outfile.chars(), "w");
-     if (fout == NULL)
-        GError("Error: could not open output file %s\n", outfile.chars());
-   }
-   for (int i=0;i<gffr->gflst.Count();++i) {
-     gffr->gflst[i]->printGff(fout);
-   }
-   if (fout != stdout) {
-     fclose(fout);
-     GMessage("Wrote %d records to %s\n", gffr->gflst.Count(), outfile.chars());
-   }
+    // Handle -o output file option
+    GStr outfile = args.getOpt(OPT_OUTFILE);
+    FILE* fout = NULL;
+    if (!outfile.is_empty()) {
+      if (outfile == "-") fout = stdout;
+      else {
+          fout = fopen(outfile.chars(), "w");
+          if (fout == NULL)
+            GError("Error: could not open output file %s\n", outfile.chars());
+      }
+      for (int i=0;i<gffr->gflst.Count();++i) {
+        gffr->gflst[i]->printGff(fout);
+      }
+      if (fout != stdout) {
+        fclose(fout);
+        //GMessage("Wrote %d records to %s\n", gffr->gflst.Count(), outfile.chars());
+      }
+    }
+  // Handle -w output, requires fastaIndex
+    char* txseqfile = args.getOpt(OPT_TXSEQ);
+    char* txcdsfile = args.getOpt(OPT_TXCDS);
+    char* txprotfile = args.getOpt(OPT_TXPROT);
+    bool getCDS = (txcdsfile != NULL || txprotfile != NULL);
+    if ( txseqfile != NULL || getCDS ) {
+      if (fastaIndex == nullptr) {
+        GError("Error: FASTA index is required for transcript sequence extraction\n");
+      }
+      // let's make -w exclusive with -x and -y, keep it simple
+      if (txseqfile != NULL && getCDS) {
+        GError("Error: -w option is exclusive with -x and/or -y\n");
+      }
+      FILE* txseqout = NULL;
+      FILE* txprotout = NULL;
+      if (txcdsfile!=NULL) txseqfile=txcdsfile;
+      if (txseqfile) {
+        txseqout=stdout;
+        if (strcmp(txseqfile, "-")!=0) txseqout = fopen(txseqfile, "w");
+        if (txseqout == NULL) {
+          GError("Error: could not open transcript sequence output file %s\n", txseqfile);
+        }
+      }
+      if (txprotfile != NULL) {
+        txprotout = stdout;
+        if (strcmp(txprotfile, "-")!=0) txprotout = fopen(txprotfile, "w");
+        if (txprotout == NULL) {
+          GError("Error: could not open protein output file %s\n", txprotfile);
+        }
+      }
+      for (int i=0;i<gffr->gflst.Count();++i) {
+        GffObj* gobj = gffr->gflst[i];
+        if (gobj->exons.Count() == 0) {
+          GMessage("Warning: no exons found for %s\n", gobj->getID());
+          continue;
+        }
+        if (getCDS && !gobj->hasCDS()) continue;
+        GFaSeqGet seqGet(gfile, gobj->getRefName(), *fastaIndex);
+        int seqlen=0;
+        char* sequence = gobj-> getSpliced(&seqGet, getCDS, &seqlen);
+        if (sequence == nullptr) {
+          GMessage("Warning: could not get sequence for %s\n", gobj->getID());
+          continue;
+        }
+        if (txseqout)
+           writeFasta(txseqout, gobj->getID(), NULL, sequence, 70, seqlen);
+        if (txprotout) {
+          // translate to protein and write to file
+          int aalen=0;
+          char* protseq = translateDNA(sequence, aalen, seqlen);
+          if (protseq[aalen-1]=='.') { aalen--; protseq[aalen]='\0'; }//remove stop codon
+          GMessage("Translated %s to protein (%d aa)\n", gobj->getID(), aalen);
+          writeFasta(txprotout, gobj->getID(), NULL, protseq, 70, aalen);
+          GFREE(protseq);
+        }
+        GFREE(sequence);
+      }
+      if (txprotout && txprotout != stdout) fclose(txprotout);
+      if (txseqout && txseqout != stdout) fclose(txseqout);
+    }
+    delete gffr;
   }
+  delete fastaIndex;
 
 }
