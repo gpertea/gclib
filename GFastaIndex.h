@@ -10,20 +10,16 @@
 
 #include "GHashMap.hh"
 #include "GList.hh"
+#include "htslib/faidx.h"
 
-class GFastaRec {
- public:
-  const char* seqname; //only a pointer copy
-  long seqlen;
-  off_t fpos;
-  int line_len; //effective line length (without EoL)
-  int line_blen; //length of line including EoL characters
-  GFastaRec(uint slen=0, off_t fp=0, int llen=0, int llenb=0) {
-    seqname=NULL;
-    seqlen=slen;
-    fpos=fp;
-    line_len=llen;
-    line_blen=llenb;
+struct GFastaRec {
+  const char* seqname=NULL; //only a pointer copy
+  long seqlen=0; //sequence length (bases)
+  off_t fpos=0; //file offset of the FASTA record
+  int line_len=0; //effective line length (actual bases, excluding EoL characters)
+  int line_blen=0; //length of line including EoL characters
+  GFastaRec(uint slen=0, off_t fp=0, int llen=0, int llenb=0):
+    seqlen(slen), fpos(fp), line_len(llen), line_blen(llenb) {
     }
   bool operator==(GFastaRec& d){
       return (fpos==d.fpos);
@@ -41,8 +37,10 @@ class GFastaIndex {
   char* fa_name;
   char* fai_name;
   bool haveFai;
+  faidx_t* fai;
  public:
-  GHash<GFastaRec*> records;
+ bool compressed; //true if this is for a compressed fasta file (.gz)
+ GHash<GFastaRec*> records;
   void addRecord(const char* seqname, uint seqlen,
                     off_t foffs, int llen, int llen_full);
 

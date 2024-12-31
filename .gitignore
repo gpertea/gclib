@@ -4,7 +4,20 @@
 *.lo
 *.o
 *.obj
-
+/include/
+/bin/
+/lib/
+.cache
+/.htslib*
+/*.gff
+/*.gtf
+/*.fa*
+/htslib-*
+/compile_commands.json
+/gtest
+/testing/*.fa*
+/testing/*.g?f
+/gfftest
 # Precompiled Headers
 *.gch
 *.pch
