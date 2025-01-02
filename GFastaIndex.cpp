@@ -64,27 +64,32 @@ int GFastaIndex::loadIndex(bool autoCreate) {
       g_faidx1_t* val = &kh_val(fai->hash, k);
 
       GFastaRec* rec = new GFastaRec(val->len, val->seq_offset, val->line_len, val->line_blen);
-      //rec->fofs = val->seq_offset; // uncompressed offset, not useful for compressed files
       rec->seqname = fai->name[i];
+      uint64_t seq_offset=val->seq_offset;
+      uint64_t caddr=0, inblock_offset=0;
+      // locate virtual offset based on seq_offset
       if (compressed && gzi) {
-          // clamped binary search: start from bgzf_idx_start
+          // clamped binary search: start from last_found
           int ilo = last_found, ihi = gzi->noffs - 1;
           while (ilo <= ihi) {
-              int idx_i = (ilo + ihi) / 2; // we could use a better pivot
-              if (rec->fofs < gzi->offs[idx_i].uaddr) {
+              int idx_i = (ilo + ihi) / 2; // we could use a better pivot?
+              if (seq_offset < gzi->offs[idx_i].uaddr) {
                   ihi = idx_i - 1;
-              } else if (rec->fofs >= gzi->offs[idx_i + 1].uaddr) {
+              } else if (seq_offset >= gzi->offs[idx_i + 1].uaddr) {
                   ilo = idx_i + 1;
               } else {
-                  // Found the matching entry, set the compressed offset
-                  rec->fofs = gzi->offs[idx_i].caddr;
-                  // Set the bgzip in-block offset
-                  rec->bgz_ofs = val->seq_offset - gzi->offs[idx_i].uaddr;
-                  last_found = idx_i; // Update the lower bound for the next search
+                  // found the matching entry, set the compressed offset
+                  caddr = gzi->offs[idx_i].caddr;
+                  // set the bgzip in-block offset
+                  inblock_offset = val->seq_offset - gzi->offs[idx_i].uaddr;
+                  last_found = idx_i; // update the lower bound for the next search
                   break;
               }
           }
+       // reassemble the virtual offset from caddr and inblock_offset to store in rec->bgz_voffs
+       rec->bgz_voffs = (caddr << 16) | (inblock_offset & 0xFFFF);
       } //compressed case
+
       records.Add(fai->name[i], rec);
   }
 

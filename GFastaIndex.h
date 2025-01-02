@@ -17,18 +17,18 @@
 struct GFastaRec {
   const char* seqname=NULL; //only a pointer copy
   long seqlen=0; //sequence length (bases)
-  off_t rec_fofs=0; //file offset of the FASTA record; for bgzip-compressed files, this is the file offset
-                //of the compressed block containing the FASTA record
-  off_t rec_bgz_ofs=0; //for compressed files, in-block offset of the FASTA record in the uncompressed block
-  off_t fofs=0;    //file offset of the first base in the sequence
-  off_t bgz_ofs=0; //for compressed files, in-block offset of the first base in the sequence
-  int line_len=0; //effective line length (actual bases, excluding EoL characters)
+  off_t seq_offset=0; //offset of the first base in the uncompressed file (even for bgzf)
+  uint64_t bgz_voffs=0; //virtual offset of the first base in the sequence for bgzf
+  int line_len=0;  // effective line length (actual bases, excluding EoL characters)
   int line_blen=0; //length of line including EoL characters
+  // --TODO: implement these later, by parsing the file from the last base of the previous record
+  //off_t rec_offset=0;  // file offset of the FASTA record start in the uncompressed file
+  //off_t rec_bgz_voffs=0; //for compressed files, bgzf virtual offset of the FASTA record start
   GFastaRec(uint slen=0, off_t fp=0, int llen=0, int llenb=0, off_t bgzfp=0):
-     seqlen(slen), fofs(fp), line_len(llen), line_blen(llenb), bgz_ofs(bgzfp) { }
-  bool operator==(GFastaRec& d) { return (fofs==d.fofs); }
-  bool operator>(GFastaRec& d)  {  return (fofs>d.fofs);  }
-  bool operator<(GFastaRec& d)  {  return (fofs<d.fofs);  }
+     seqlen(slen), seq_offset(fp), line_len(llen), line_blen(llenb), bgz_voffs(bgzfp) { }
+  bool operator==(GFastaRec& d) { return (seq_offset==d.seq_offset); }
+  bool operator>(GFastaRec& d)  {  return (seq_offset>d.seq_offset);  }
+  bool operator<(GFastaRec& d)  {  return (seq_offset<d.seq_offset);  }
 };
 
 // -- expose htslib faidx_t structures (from faidx.c)
@@ -69,6 +69,10 @@ class GFastaIndex {
   int buildIndex() { //unneeded, unless clear()/setFiles() was called after construction
     return loadIndex(true);
   }
+
+  //TODO:  get virtual offset of a specific base location in a sequence
+  // this will also allow us to seek to the end of a sequence to read the header of the next FASTA
+  //uint64_t getSeqOffset(const char* seqname, int64_t loc=1);
 
   int getCount() { return records.Count(); }
 

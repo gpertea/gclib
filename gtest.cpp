@@ -67,11 +67,7 @@ int main(int argc, char* argv[]) {
      fastaIndex = new GFastaIndex(gfile, indexFile.chars());
    } else {
      GMessage("Creating FASTA index for %s...\n", gfile);
-     fastaIndex=new GFastaIndex(gfile);
-     fastaIndex->buildIndex();
-     fastaIndex->storeIndex(indexFile.chars());
-     if (fileSize(indexFile.chars())<=0)
-       GError("Error: could not create FASTA index for %s\n", gfile);
+     fastaIndex=new GFastaIndex(gfile); //loads or creates the index as needed
    }
  }
 
