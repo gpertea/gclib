@@ -847,7 +847,7 @@ int fileExists(const char* fname) {
 int64 fileSize(const char* fpath) {
 #ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA fad;
-    
+
     if (!GetFileAttributesEx(fpath, GetFileExInfoStandard, &fad))
       return -1; // error condition, could call GetLastError to find out more
     LARGE_INTEGER size;

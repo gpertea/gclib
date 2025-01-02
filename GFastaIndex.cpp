@@ -1,182 +1,96 @@
 /*
  * GFastaIndex.cpp
  *
- *  Created on: Aug 25, 2010
- *      Author: gpertea
  */
 
 #include "GFastaIndex.h"
-#define ERR_FAIDXLINE "Error parsing fasta index line: \n%s\n"
-#define ERR_FALINELEN "Error: sequence lines in a FASTA record must have the same length!\n"
-void GFastaIndex::addRecord(const char* seqname, uint seqlen, off_t foffs, int llen, int llen_full) {
-     GFastaRec* farec=records.Find(seqname);
-     if (farec!=NULL) {
-          GMessage("Warning: duplicate sequence ID (%s) added to the fasta index! Only last entry data will be kept.\n");
-          farec->seqlen=seqlen;
-          farec->fpos=foffs;
-          farec->line_len=llen;
-          farec->line_blen=llen_full;
-          }
-     else {
-         farec=new GFastaRec(seqlen,foffs,llen,llen_full);
-         records.Add(seqname,farec);
-         farec->seqname=records.getLastKey();
-         }
+#include "htslib/bgzf.h" // Add this line to include the definition of BGZF
+
+//expose BGZF index structures (from bgzf.c)
+struct g_bgzidx1_t {
+  uint64_t uaddr;  // offset w.r.t. uncompressed data
+  uint64_t caddr;  // offset w.r.t. compressed data
+};
+
+struct g_bgzidx_t {
+  int noffs, moffs;       // the size of the index, n:used, m:allocated
+  g_bgzidx1_t *offs;     // offsets
+  uint64_t ublock_addr;   // offset of the current block (uncompressed data)
+};
+
+
+bool GFastaIndex::hasSeq(const char* seqname) {
+  return faidx_has_seq((faidx_t*)fai, seqname);
 }
 
-int GFastaIndex::loadIndex(const char* finame) { //load record info from existing fasta index
-    if (finame==NULL) finame=fai_name;
-    if (finame!=fai_name) {
-      fai_name=Gstrdup(finame);
-      }
-    if (fai_name==NULL) GError("Error: GFastaIndex::loadIndex() called with no file name!\n");
-    records.Clear();
-    haveFai=false;
-    FILE* fi=fopen(fai_name,"rb");
-    if (fi==NULL) {
-       GMessage("Warning: cannot open fasta index file: %s!\n",fai_name);
-       return 0;
-       }
-    GLineReader fl(fi);
-    char* s=NULL;
-    while ((s=fl.nextLine())!=NULL) {
-      if (*s=='#') continue;
-      char* p=strchrs(s,"\t ");
-      if (p==NULL) GError(ERR_FAIDXLINE,s);
-      *p=0; //s now holds the genomic sequence name
-      p++;
-      uint len=0;
-      int line_len=0, line_blen=0;
-#ifdef _WIN32
-         long offset=-1;
-         sscanf(p, "%d%ld%d%d", &len, &offset, &line_len, &line_blen);
-#else
-         long long offset=-1;
-         sscanf(p, "%u%lld%d%d", &len, &offset, &line_len, &line_blen);
-#endif
-      if (len==0 || line_len==0 || line_blen==0 || line_blen<line_len)
-          GError(ERR_FAIDXLINE,p);
-      addRecord(s,len,offset,line_len, line_blen);
-      }
-    fclose(fi);
-    haveFai=(records.Count()>0);
-    return records.Count();
+const char* GFastaIndex::getSeqName(int i) {
+  return faidx_iseq((faidx_t*)fai, i);
 }
 
-int GFastaIndex::buildIndex() {
-    //this parses the whole fasta file, so it could be slow for large files
-	//builds the index in memory only
-    if (fa_name==NULL)
-       GError("Error: GFastaIndex::buildIndex() called with no fasta file!\n");
-    FILE* fa=fopen(fa_name,"rb");
-    if (fa==NULL) {
-       GMessage("Warning: cannot open fasta index file: %s!\n",fa_name);
-       return 0;
-       }
-    records.Clear();
-    GLineReader fl(fa);
-    char* s=NULL;
-    uint seqlen=0;
-    int line_len=0,line_blen=0;
-    bool newSeq=false; //set when FASTA header is encountered
-    off_t newSeqOffset=0;
-    //int prevOffset=0;
-    char* seqname=NULL;
-    int last_len=0;
-    bool mustbeLastLine=false; //true if the line length decreases
-    while ((s=fl.nextLine())!=NULL) {
-     if (s[0]=='>') {
-        if (seqname!=NULL) {
-         if (seqlen==0)
-            GError("Warning: empty FASTA record skipped (%s)!\n",seqname);
-         else { //seqlen!=0
-           addRecord(seqname, seqlen,newSeqOffset, line_len, line_blen);
-           }
-         }
-        char *p=s;
-        while (*p > 32) p++;
-        *p=0;
-        GFREE(seqname);
-        seqname=Gstrdup(&s[1]);
-        newSeq=true;
-        newSeqOffset=fl.getfpos();
-        last_len=0;
-        line_len=0;
-        line_blen=0;
-        seqlen=0;
-        mustbeLastLine=false;
-     } //defline parsing
-     else { //sequence line
-       int llen=fl.tlength();
-       int lblen=fl.blength(); //fl.getFpos()-prevOffset;
-       if (newSeq) { //first sequence line after defline
-          line_len=llen;
-          line_blen=lblen;
-        }
-        else {//next seq lines after first
-          if (mustbeLastLine) {
-              //could be empty line, adjust for possible spaces
-              if (llen>0) {
-                char *p=s;
-                //trim spaces, tabs etc. on the last line
-                while (*p > 32) ++p;
-                llen=(p-s);
-              }
-              if (llen>0) GError(ERR_FALINELEN);
-          }
-          else {
-              if (llen<last_len) mustbeLastLine=true;
-                 else if (llen>last_len) GError(ERR_FALINELEN);
-          }
-        }
-        seqlen+=llen;
-        last_len=llen;
-        newSeq=false;
-     } //sequence line
-     //prevOffset=fl.getfpos();
-     }//for each line of the fasta file
-    if (seqlen>0)
-       addRecord(seqname, seqlen, newSeqOffset, line_len, line_blen);
-    GFREE(seqname);
-    fclose(fa);
-    return records.Count();
-}
-
-
-int GFastaIndex::storeIndex(const char* finame) { //write the hash to a file
-    if (records.Count()==0)
-       GError("Error at GFastaIndex:storeIndex(): no records found!\n");
-    FILE* fai=fopen(finame, "w");
-    if (fai==NULL) GError("Error creating fasta index file: %s\n",finame);
-    int rcount=storeIndex(fai);
-    GFREE(fai_name);
-    fai_name=Gstrdup(finame);
-    return rcount;
-}
-
-int GFastaIndex::storeIndex(FILE* fai) {
-  int rcount=0;
-  GList<GFastaRec> reclist(true,false,true); //sorted, don't free members, unique
-  records.startIterate();
-  GFastaRec* rec=NULL;
-  while ((rec=records.NextData())!=NULL) {
-    reclist.Add(rec);
+int GFastaIndex::loadIndex(bool autoCreate) {
+  if (fa_name==nullptr) GError("Error: no FASTA file name set!\n");
+  clear(true); //preserve file names
+  //clunky, format could be put into flags and just use fai_load3()
+  fai=(g_faidx_t*)fai_load3_format(fa_name, fai_name, gzi_name, autoCreate?FAI_CREATE:0, FAI_FASTA);
+  if (!fai) {
+    if (autoCreate) GMessage("Error: could not load/create FASTA index for %s\n",fa_name);
+    else GMessage("Error: could not load FASTA index for %s\n",fa_name);
+    return -1;
   }
-  //reclist has records sorted by file offset
-  for (int i=0;i<reclist.Count();i++) {
-#ifdef _WIN32
-    int written=fprintf(fai, "%s\t%ld\t%ld\t%d\t%d\n",
-            reclist[i]->seqname,reclist[i]->seqlen,(long)reclist[i]->fpos,
-              reclist[i]->line_len, reclist[i]->line_blen);
-#else
-    int written=fprintf(fai, "%s\t%ld\t%ld\t%d\t%d\n",
-            reclist[i]->seqname, reclist[i]->seqlen, (long)(reclist[i]->fpos),
-              reclist[i]->line_len, reclist[i]->line_blen);
-#endif
-    if (written>0) rcount++;
-       else break; //couldn't write anymore
+  compressed=(fai->bgzf && fai->bgzf->is_compressed);
+
+  /*  //faster traversal than using the kh_get() hash search by name
+   for (khint_t k = kh_begin(fai->hash); k != kh_end(fai->hash); ++k) {
+      if (!kh_exist(fai->hash, k)) continue;
+      g_faidx1_t& rec=kh_val(fai->hash, k);
+      const char* seqname=kh_key(fai->hash, k);
+      GFastaRec* r=new GFastaRec(rec.len, rec.seq_offset, rec.line_len, rec.line_blen);
+      r->seqname=seqname;
+      ...
     }
-  fclose(fai);
-  haveFai=(rcount>0);
-  return rcount;
+  */
+  g_bgzidx_t* gzi = NULL;
+  if (compressed) {
+     gzi = (g_bgzidx_t*) fai->bgzf->idx; // Access the internal bgzidx_t
+  }
+
+  int last_found = 0; // Lower bound of the search space in bgzf_idx
+
+  for (int i = 0; i < fai->n; ++i) {
+      khiter_t k = kh_get(s, fai->hash, fai->name[i]);
+      if (k == kh_end(fai->hash)) {
+          continue;
+      }
+      g_faidx1_t* val = &kh_val(fai->hash, k);
+
+      GFastaRec* rec = new GFastaRec(val->len, val->seq_offset, val->line_len, val->line_blen);
+      //rec->fofs = val->seq_offset; // uncompressed offset, not useful for compressed files
+      rec->seqname = fai->name[i];
+      if (compressed && gzi) {
+          // clamped binary search: start from bgzf_idx_start
+          int ilo = last_found, ihi = gzi->noffs - 1;
+          while (ilo <= ihi) {
+              int idx_i = (ilo + ihi) / 2; // we could use a better pivot
+              if (rec->fofs < gzi->offs[idx_i].uaddr) {
+                  ihi = idx_i - 1;
+              } else if (rec->fofs >= gzi->offs[idx_i + 1].uaddr) {
+                  ilo = idx_i + 1;
+              } else {
+                  // Found the matching entry, set the compressed offset
+                  rec->fofs = gzi->offs[idx_i].caddr;
+                  // Set the bgzip in-block offset
+                  rec->bgz_ofs = val->seq_offset - gzi->offs[idx_i].uaddr;
+                  last_found = idx_i; // Update the lower bound for the next search
+                  break;
+              }
+          }
+      } //compressed case
+      records.Add(fai->name[i], rec);
+  }
+
+
+  return records.Count();
 }
+
+
+
