@@ -2665,7 +2665,7 @@ char* GffObj::getUnspliced(GFaSeqGet* faseq, int* rlen, GMapSegments* seglst) {
     }
     //restore normal coordinates:
     if (exons.Count()==0) return NULL;
-    int fspan=end-start+1;
+    int64_t fspan=end-start+1;
     const char* gsubseq=faseq->subseq(start, fspan);
     if (gsubseq==NULL) {
         GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);
@@ -2743,7 +2743,7 @@ char* GffObj::getSpliced(GFaSeqGet* faseq, bool CDSonly, int* rlen, uint* cds_st
   if (CDSonly && this->cdss!=NULL)
 	  xsegs=this->cdss;
   if (xsegs->Count()==0) return NULL;
-  int fspan=end-start+1;
+  int64_t fspan=end-start+1;
   const char* gsubseq=faseq->subseq(start, fspan);
   if (gsubseq==NULL) {
         GError("Error getting subseq for %s (%d..%d)!\n", gffID, start, end);

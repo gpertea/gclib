@@ -13,7 +13,10 @@ CXX   := $(if $(CXX),$(CXX),g++)
 LINKER  := $(if $(LINKER),$(LINKER),g++)
 LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g -L $(HTSLIB_PREFIX)/lib)
 
-LIBS    := $(HTSLIB) -lz -lm -lpthread
+HTS_XLIBS := -lbz2 -llzma
+LIBS := $(HTSLIB) -lz -lm $(HTS_XLIBS) -lpthread
+
+
 
 DMACH := $(shell $(CXX) -dumpmachine)
 

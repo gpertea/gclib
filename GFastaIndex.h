@@ -18,9 +18,9 @@ struct GFastaRec {
   const char* seqname=NULL; //only a pointer copy
   long seqlen=0; //sequence length (bases)
   off_t seq_offset=0; //offset of the first base in the uncompressed file (even for bgzf)
-  uint64_t bgz_voffs=0; //virtual offset of the first base in the sequence for bgzf
   int line_len=0;  // effective line length (actual bases, excluding EoL characters)
   int line_blen=0; //length of line including EoL characters
+  uint64_t bgz_voffs=0; //virtual offset of the first base in the sequence for bgzf
   // --TODO: implement these later, by parsing the file from the last base of the previous record
   //off_t rec_offset=0;  // file offset of the FASTA record start in the uncompressed file
   //off_t rec_bgz_voffs=0; //for compressed files, bgzf virtual offset of the FASTA record start
@@ -50,21 +50,27 @@ struct g_faidx_t {
   enum fai_format_options format;
 };
 
+#define GFAIDX_ERROR_NO_FAIDX "Error: no FASTA index loaded!\n"
+
 class GFastaIndex {
   char* fa_name=nullptr;  // could be bgzip-compressed
   char* fai_name=nullptr; // .fai index file name - only needed if not fa_name+".fai"/".gzi"
   char* gzi_name=nullptr; // .gzi index file name - only if user insists on using a different name
-  g_faidx_t* fai;
+  g_faidx_t* fai=nullptr;
  public:
   bool compressed=false; //true if this is for a compressed fasta file (.gz)
   GHashMap<const char*, GFastaRec*> records; //keys are sequence names in fai
   GFastaRec* getRecord(const char* seqname) {
       return records.Find(seqname);
   }
+
   bool hasSeq(const char* seqname); //check if sequence exists in index
+
   const char* getSeqName(int i); //retrieve sequence name by index
 
   int loadIndex(bool autoCreate=true);
+
+  bool hasIndex() { return (fai!=nullptr) && records.Count()>0; }
 
   int buildIndex() { //unneeded, unless clear()/setFiles() was called after construction
     return loadIndex(true);
@@ -81,7 +87,7 @@ class GFastaIndex {
     if (fileExists(fname)!=2) GError("Error: FASTA file %s not found!\n",fname);
     if (fileSize(fname)<=3) GError("Error: invalid fasta file %s !\n",fname);
     fa_name=Gstrdup(fname);
-    //compressed=endsWith(fa_name,"gz"); let the faidx_load3() figure this out
+    //compressed=endsWith(fa_name,"gz"); let faidx_load3() figure this out
     if (fainame) fai_name=Gstrdup(fainame);
     if (gziname) gzi_name=Gstrdup(gziname);
   }
@@ -91,6 +97,14 @@ class GFastaIndex {
     loadIndex(autoCreate);
   }
 
+  // for the following fetch methods, the caller is responsible for freeing
+  // the returned sequence
+  char* fetchSeq(const char* seqname, int64_t cstart, int64_t cend=-1, int64_t* retlen=NULL);
+
+  char* fetchSeq(const char* seqname, int64_t* retlen=NULL) {
+    return fetchSeq(seqname, 1, -1, retlen);
+  }
+
   void clear(bool keepNames=false) {
     records.Clear();
     if (!keepNames) {
@@ -98,7 +112,10 @@ class GFastaIndex {
       GFREE(fai_name);
       GFREE(gzi_name);
     }
-    if (fai!=NULL) fai_destroy((faidx_t*)fai);
+    if (fai!=nullptr) {
+      fai_destroy((faidx_t*)fai);
+      fai=nullptr;
+    }
   }
 
   ~GFastaIndex() {

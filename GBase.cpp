@@ -825,6 +825,7 @@ const char* getFileExt(const char* filepath) {
  return (dp>sep) ? dp : NULL ;
 }
 
+//returns 1 if the given path is a directory, 2 if it's a regular file
 int fileExists(const char* fname) {
   struct stat stFileInfo;
   int r=0;

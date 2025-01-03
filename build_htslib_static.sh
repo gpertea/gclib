@@ -30,12 +30,14 @@ fi
 # Check if install-lib-static target exists in the Makefile
 if ! grep -q "^install-lib-static:" Makefile; then
   echo "Adding install-lib-static target to the Makefile..."
-  perl -i -pe 's/^install:/install-lib-static: lib-static \$(BUILT_PROGRAMS)\
+  perl -i -pe 's/^install:/install-lib-static: lib-static \$(BUILT_PROGRAMS) install-pkgconfig\
 \t\$(INSTALL_DIR) \$(DESTDIR)\$(bindir) \$(DESTDIR)\$(includedir) \$(DESTDIR)\$(includedir)\/htslib \$(DESTDIR)\$(libdir)\
 \t\$(INSTALL_PROGRAM) \$(BUILT_PROGRAMS) \$(DESTDIR)\$(bindir)\
 \t\$(INSTALL_DATA) libhts.a \$(DESTDIR)\$(libdir)\/libhts.a\
 \t\$(INSTALL_DATA) \$(SRC)htslib\/\*.h \$(DESTDIR)\$(includedir)\/htslib\
 \ninstall:/' Makefile
+  perl -i -pe '$_="" if m/HAVE_LIBCURL 1/' Makefile
+  perl -i -pe 's/ \-lcurl//' Makefile
 fi
 
 # Build the static library

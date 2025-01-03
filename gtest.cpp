@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
    //if (rec == nullptr) GError("Error: could not get sequence for %s\n", chr.chars());
    //GFaSeqGet seqGet(gfile, rec->seqlen, rec->fpos, rec->line_len, rec->line_blen);
    GFaSeqGet seqGet(gfile, chr.chars(), *fastaIndex);
-   int seqlen=0;
+   int64_t seqlen=0;
    char* sequence=seqGet.copyRange(start, end, false, false, &seqlen);
 
    if (sequence==nullptr) {

@@ -93,9 +93,18 @@ int GFastaIndex::loadIndex(bool autoCreate) {
       records.Add(fai->name[i], rec);
   }
 
-
   return records.Count();
 }
 
+char* GFastaIndex::fetchSeq(const char* seqname, int64_t cstart, int64_t cend, int64_t* retlen) {
+  if (fai==nullptr) GError(GFAIDX_ERROR_NO_FAIDX);
+  int64_t seqlen=faidx_seq_len64((faidx_t *)fai, seqname);
+  if (seqlen<0) return nullptr;
+  if (cend<0) cend=seqlen;
+  int64_t len=0;
+  char* seq=faidx_fetch_seq64((faidx_t*)fai, seqname, cstart-1, cend-1, &len);
+  if (retlen) *retlen=len;
+  return seq;
+}
 
 

@@ -7,20 +7,19 @@ GFaSeqGet* fastaSeqGet(GFastaDb& gfasta, const char* seqid) {
   return gfasta.fetch(seqid);
 }
 
-
-void GSubSeq::setup(uint sstart, int slen, int sovl, int qfrom, int qto, uint maxseqlen) {
-     if (sovl==0) {
+void GSubSeq::setup(int64_t sstart, int64_t slen, int64_t sovl, int64_t old_from, int64_t new_to, int64_t maxseqlen) {
+  if (sovl==0) { //no overlap, allocate blank space for new sequence
        GFREE(sq);
-       sqstart=sstart;
+       sqstart=sstart; //offset in sq
        uint max_len=(maxseqlen>0) ? maxseqlen : MAX_FASUBSEQ;
        sqlen = (slen==0 ? max_len : slen);
        GMALLOC(sq, sqlen);
        return;
-       }
-  //overlap -- copy the overlapping region
+  }
+  // preserve (copy) the overlapping region
   char* newsq=NULL;
   GMALLOC(newsq, slen);
-  memcpy((void*)&newsq[qto], (void*)&sq[qfrom], sovl);
+  memcpy((void*)&newsq[new_to], (void*)&sq[old_from], sovl);
   GFREE(sq);
   sq=newsq;
   sqstart=sstart;
@@ -37,9 +36,10 @@ void GFaSeqGet::finit(const char* fn, off_t fofs, bool validate) {
  lastsub=new GSubSeq();
 }
 
-GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, int l_blen) {
-//for GFastaIndex use mostly -- the important difference is that
-//the file offset is to the sequence, not to the defline
+GFaSeqGet::GFaSeqGet(const char* faname, int64_t seqlen, off_t fseqofs, int l_len, int l_blen) {
+ //indirect GFastaIndex use -- the important difference is that
+ //the file offset is to the sequence, not to the defline
+ // so fseqstart can be directly provided
   fh=fopen(faname,"rb");
   if (fh==NULL) {
     GError("Error (GFaSeqGet) opening file '%s'\n",faname);
@@ -55,6 +55,7 @@ GFaSeqGet::GFaSeqGet(const char* faname, uint seqlen, off_t fseqofs, int l_len, 
   lastsub=new GSubSeq(); //nothing is read yet
 }
 
+//legacy incidental GFastaIndex use (without switching in faidx mode)
 GFaSeqGet::GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx) {
   GFastaRec* farec=faidx.getRecord(chr);
   if (farec==NULL) {
@@ -72,17 +73,31 @@ GFaSeqGet::GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx) {
   if (line_blen<line_len)
        GError("Error (GFaSeqGet): invalid line length info (len=%d, blen=%d)\n",
               line_len, line_blen);
-  fseqstart=farec->fpos;
+  fseqstart=farec->seq_offset;
   lastsub=new GSubSeq();
 }
 
 
-GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs, bool validate):fname(NULL), fh(NULL),
-	    fseqstart(0), seq_len(0), line_len(0), line_blen(0),
-		lastsub(NULL), seqname(NULL) {
+GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs, bool validate) {
   if (f==NULL) GError("Error (GFaSeqGet) : null file handle!\n");
   fh=f;
   initialParse(fofs, validate);
+  lastsub=new GSubSeq();
+}
+
+GFaSeqGet::GFaSeqGet(GFastaIndex* fa_idx, const char* sname) { //full faidx mode
+  if (fa_idx==NULL) GError("Error (GFaSeqGet): no FASTA index provided!\n");
+  if (fa_idx->getCount()==0) GError("Error (GFaSeqGet): empty FASTA index!\n");
+  faidx=fa_idx; //faidx mode engaged
+  if (sname) {
+    GFastaRec* farec=fa_idx->getRecord(sname);
+    if (farec==NULL) GError("Error (GFaSeqGet): sequence '%s' not found in FASTA index!\n",sname);
+    seqname=Gstrdup(sname);
+    seq_len=farec->seqlen;
+    line_len=farec->line_len;
+    line_blen=farec->line_blen;
+    fseqstart=farec->seq_offset;
+  }
   lastsub=new GSubSeq();
 }
 
@@ -169,9 +184,21 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
  fseeko(fh,fseqstart,SEEK_SET);
 }
 
-const char* GFaSeqGet::subseq(uint cstart, int& clen) {
+void GFaSeqGet::initSubseq(int64_t cstart, int64_t clen, int64_t seq_len) {
+  if (faidx) {
+    int64_t retlen=NULL;
+    char* seq=faidx->fetchSeq(seqname, cstart, cstart+clen-1, &retlen);
+    lastsub->takeOver(seq, cstart, retlen);
+  } else {
+    lastsub->setup(cstart, clen, 0, 0, 0, seq_len); // this only allocates the buffer
+    loadSubseq(cstart, clen);
+    lastsub->sqlen=clen;
+  }
+}
+
+const char* GFaSeqGet::subseq(int64_t cstart, int64_t& clen) {
   //cstart is 1-based genomic coordinate within current fasta sequence
-   int maxlen=(seq_len>0)?seq_len : MAX_FASUBSEQ;
+  int64_t maxlen=(seq_len>0)?seq_len : MAX_FASUBSEQ;
    //GMessage("--> call: subseq(%u, %d)\n", cstart, clen);
   if (clen>maxlen) {
     GMessage("Error (GFaSeqGet): subsequence cannot be larger than %d\n", maxlen);
@@ -182,28 +209,26 @@ const char* GFaSeqGet::subseq(uint cstart, int& clen) {
      //Adjust request:
      clen=seq_len-cstart+1;
      }
-  if (lastsub->sq==NULL || lastsub->sqlen==0) {
-    lastsub->setup(cstart, clen, 0,0,0,seq_len);
-    loadsubseq(cstart, clen);
-    lastsub->sqlen=clen;
+  if (lastsub->sq==NULL || lastsub->sqlen==0) { //no previous subseq allocated
+    initSubseq(cstart, clen, seq_len);
     return (const char*)lastsub->sq;
     }
   //allow extension up to MAX_FASUBSEQ
-  uint bstart=lastsub->sqstart;
-  uint bend=lastsub->sqstart+lastsub->sqlen-1;
-  uint cend=cstart+clen-1;
-  int qlen=0; //only the extra len to be allocated/appended/prepended
-  uint qstart=cstart; //start coordinate of the new seq block of length qlen to be read from file
-  int newlen=0; //the new total length of the buffered sequence lastsub->sq
-  int kovl=0;
-  int czfrom=0;//0-based offsets for copying a previously read sequence chunk
-  int czto=0;
-  uint newstart=cstart;
+  int64_t bstart=lastsub->sqstart;
+  int64_t bend=lastsub->sqstart+lastsub->sqlen-1;
+  int64_t cend=cstart+clen-1;
+  int64_t qlen=0; //only the extra len to be allocated/appended/prepended
+  int64_t qstart=cstart; //start coordinate of the new seq block of length qlen to be read from file
+  int64_t newlen=0; //the new total length of the buffered sequence lastsub->sq
+  int64_t kovl=0;
+  int64_t czfrom=0;//0-based offsets for copying a previously read sequence chunk
+  int64_t czto=0;
+  int64_t newstart=cstart;
   if (cstart>=bstart && cend<=bend) { //new reg contained within existing buffer
      return (const char*) &(lastsub->sq[cstart-bstart]) ;
     }
   //extend downward
-  uint newend=GMAX(cend, bend);
+  int64_t newend=GMAX(cend, bend);
   if (cstart<bstart) { //requested start < old buffer start
     newstart=cstart;
     newlen=(newend-newstart+1);
@@ -219,10 +244,10 @@ const char* GFaSeqGet::subseq(uint cstart, int& clen) {
          czto=bstart-cstart;
          lastsub->setup(newstart, newlen, kovl, czfrom, czto, seq_len); //this should realloc and copy the kovl subseq
          qlen=bstart-cstart;
-         loadsubseq(newstart, qlen);
+         loadSubseq(newstart, qlen);
          qlen=newend-bend;
          int toread=qlen;
-         loadsubseq(bend+1, qlen);
+         loadSubseq(bend+1, qlen);
          clen-=(toread-qlen);
          lastsub->sqlen=clen;
          return (const char*)lastsub->sq;
@@ -264,15 +289,15 @@ const char* GFaSeqGet::subseq(uint cstart, int& clen) {
   lastsub->setup(newstart, newlen, kovl, czfrom, czto, seq_len); //this should realloc but copy any overlapping region
   lastsub->sqlen-=qlen; //appending may result in a premature eof
   int toread=qlen;
-  loadsubseq(qstart, qlen); //read the missing chunk, if any
+  loadSubseq(qstart, qlen); //read the missing chunk, if any
   clen-=(toread-qlen);
   lastsub->sqlen+=qlen;
   return (const char*)(lastsub->sq+(cstart-newstart));
 }
 
-char* GFaSeqGet::copyRange(uint cstart, uint cend, bool revCmpl, bool upCase, int* retlen) {
+char* GFaSeqGet::copyRange(int64_t cstart, int64_t cend, bool revCmpl, bool upCase, int64_t* retlen) {
   if (cstart>cend) { Gswap(cstart, cend); }
-  int clen=cend-cstart+1;
+  int64_t clen=cend-cstart+1;
   const char* gs=subseq(cstart, clen);
   if (gs==NULL) return NULL;
   char* r=NULL;
@@ -288,15 +313,28 @@ char* GFaSeqGet::copyRange(uint cstart, uint cend, bool revCmpl, bool upCase, in
   return r;
  }
 
-const char* GFaSeqGet::loadsubseq(uint cstart, int& clen) {
+const char* GFaSeqGet::loadSubseq(int64_t cstart, int64_t& clen) {
   //assumes enough lastsub->sq space allocated previously
   //only loads the requested clen chars from file, at offset &lastsub->sq[cstart-lastsub->sqstart]
   if (cstart>seq_len || lastsub->sqstart>cstart) {
 	   clen=0; //invalid request
 	   return NULL;
   }
-  int eol_size=line_blen-line_len;
+
   char* seqp=lastsub->sq+(int)(cstart-lastsub->sqstart); //should be positive offset?
+
+  if (faidx) { //faidx mode
+    int64_t retlen=0;
+    char* rseq=faidx->fetchSeq(seqname, cstart, cstart+clen-1, &retlen);
+    //copy to &lastsub->sq[cstart-lastsub->sqstart]
+    memcpy((void*)seqp, (void*)rseq, retlen);
+    clen=retlen;
+    GFREE(rseq);
+    return (const char*)seqp;
+  }
+
+
+  int eol_size=line_blen-line_len;
   //find the proper file offset and read the appropriate lines
   cstart--; //seq start offset, 0-based
   int lineofs = cstart % line_len;
@@ -310,7 +348,7 @@ const char* GFaSeqGet::loadsubseq(uint cstart, int& clen) {
   int bytes_toRead=f_end-f_start;
   f_start+=fseqstart; // file offset from the beginning of the file
   fseeko(fh, f_start, SEEK_SET);
-  size_t actual_read=0;
+  int64_t actual_read=0;
   char* smem=NULL;
   GMALLOC(smem, bytes_toRead);
   actual_read=fread((void*)smem, 1, bytes_toRead, fh);
@@ -319,12 +357,12 @@ const char* GFaSeqGet::loadsubseq(uint cstart, int& clen) {
 	  clen=0;
 	  return (const char*)seqp;
   }
-  uint mp=0; //current read offset in smem
-  uint sublen=0; //current sequence letter storage offset in seqp
+  int64_t mp=0; //current read offset in smem
+  int64_t sublen=0; //current sequence letter storage offset in seqp
   //copySeqOnly(seqp, smem, actualrlen);
   bool rdone=false;
   if (lineofs>0) { //read the partial first line
-    uint reqrlen=line_len-lineofs;
+    int64_t reqrlen=line_len-lineofs;
     if (reqrlen>letters_toread) {
     	reqrlen=letters_toread; //in case we need to read just a few chars
     	rdone=true;
