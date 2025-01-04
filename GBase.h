@@ -68,6 +68,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <type_traits>
 
@@ -246,7 +247,7 @@ template<class T>
 
 inline void GFree(pointer* ptr){
      GASSERT(ptr);
-     if (*ptr) free(*ptr);
+     free(*ptr);
      *ptr=NULL;
  }
 
@@ -515,7 +516,7 @@ template<class OBJ> class GDynArray {
     if (preSpace == 0) return;
     int64_t newcap = fCount + preSpace + alsoGrowBy;
     OBJ* newArr;
-    GMALLOC((pointer*)&newArr, newcap * sizeof(OBJ));
+    GMALLOC(newArr, newcap * sizeof(OBJ));
     if (fCount > 0) {
       memcpy(newArr + preSpace, fArray, fCount * sizeof(OBJ));
     }

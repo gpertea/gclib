@@ -186,7 +186,7 @@ void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
 
 void GFaSeqGet::initSubseq(int64_t cstart, int64_t clen, int64_t seq_len) {
   if (faidx) {
-    int64_t retlen=NULL;
+    int64_t retlen;
     char* seq=faidx->fetchSeq(seqname, cstart, cstart+clen-1, &retlen);
     lastsub->takeOver(seq, cstart, retlen);
   } else {

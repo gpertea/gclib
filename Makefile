@@ -1,22 +1,16 @@
-HTSLIB_PREFIX := .    
-## can be replaced with a pre-installed prefix
-## otherwise this script will install it there
-
-HTSLIB_PREFIX := $(strip $(HTSLIB_PREFIX))
-HTSLIB := $(HTSLIB_PREFIX)/lib/libhts.a
-HTSINC := $(HTSLIB_PREFIX)/include
+HTSLIB_DIR := htslib
+HTSLIB := $(HTSLIB_DIR)/libhts.a
+HTSINC := $(HTSLIB_DIR)
 
 INCDIRS := -I$(HTSINC)
 
-
 CXX   := $(if $(CXX),$(CXX),g++)
 LINKER  := $(if $(LINKER),$(LINKER),g++)
-LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g -L $(HTSLIB_PREFIX)/lib)
+LDFLAGS := $(if $(LDFLAGS),$(LDFLAGS),-g -L $(HTSLIB_DIR)/lib)
 
-HTS_XLIBS := -lbz2 -llzma
+## this comes from how we built htslib (build_htslib_static.h)
+HTS_XLIBS := -lbz2 -ldeflate -llzma
 LIBS := $(HTSLIB) -lz -lm $(HTS_XLIBS) -lpthread
-
-
 
 DMACH := $(shell $(CXX) -dumpmachine)
 
@@ -114,7 +108,7 @@ all: gtest
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(HTSLIB):
-	./build_htslib_static.sh $(realpath $(HTSLIB_PREFIX))
+	./build_htslib_static.sh
 
 memcheck tsan: all
 nodebug: all
@@ -128,17 +122,11 @@ GFastaIndex.o: $(HTSLIB) GFastaIndex.h GFastaIndex.cpp
 gtest.o: $(HTSLIB) gtest.cpp GBase.h gff.h GFaSeqGet.h GFastaIndex.o
 gtest:  $(HTSLIB) $(OBJS) gtest.o
 	$(LINKER) $(LDFLAGS) -o $@ $(filter-out %.a %.so, $^) $(LIBS)
-HTSLIB_BUILT := ./.htslib.built
+
 # target for removing all object files
-.PHONY : clean
-clean:: 
+.PHONY : clean clean-all
+clean:
 	$(RM) $(OBJS) *.o gtest$(EXE)
 	$(RM) core.*
-cleanall:: 
-	$(RM) -r htslib-* $(OBJS) *.o gtest$(EXE)
-	$(RM) core.*
-ifneq ("$(wildcard $(HTSLIB_BUILT))","")
-	@echo "   HTSLIB was built by our script. Cleaning up..."
-	$(RM) $(HTSLIB_BUILT) $(HTSLIB) $(HTSLIB_PREFIX)/bin/bgzip $(HTSLIB_PREFIX)/bin/tabix $(HTSLIB_PREFIX)/bin/htsfile $(HTSLIB_PREFIX)/bin/annot-tsv
-	$(RM) -r $(HTSINC)/htslib
-endif
+clean-all: clean
+	$(RM) -r htslib*

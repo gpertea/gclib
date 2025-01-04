@@ -1,5 +1,5 @@
 /*
- * GFaIdx.h
+ * GFastaIndex.h
  *
  *  Created on: Aug 25, 2010
  *      Author: gpertea
