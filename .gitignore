@@ -4,7 +4,6 @@
 *.lo
 *.o
 *.obj
-/include/
 /bin/
 /lib/
 .cache
@@ -12,7 +11,7 @@
 /*.gff
 /*.gtf
 /*.fa*
-/htslib-*
+/htslib*
 /compile_commands.json
 /gtest
 /testing/*.fa*
@@ -21,7 +20,6 @@
 # Precompiled Headers
 *.gch
 *.pch
-
 # Compiled Dynamic libraries
 *.so
 *.dylib

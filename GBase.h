@@ -82,6 +82,8 @@ typedef unsigned char uchar;
 typedef uint8_t byte;
 typedef unsigned int uint;
 
+typedef unsigned long ulong; //note: long is 32-bit on 64-bit Windows!
+
 typedef void* pointer;
 
 
@@ -487,7 +489,7 @@ struct GRangeParser: GSeg {
 //which can only grow (reallocate) as needed
 
 //optimize index test
-#define GDynArray_INDEX_ERR "Error: use of index (%d) in GDynArray of size %d!\n"
+#define GDynArray_INDEX_ERR "Error: use of index (%" PRId64 ") in GDynArray of size %" PRId64 "!\n"
  #if defined(NDEBUG) || defined(NODEBUG) || defined(_NDEBUG) || defined(NO_DEBUG)
  #define GDynArray_TEST_INDEX(x)
 #else
@@ -495,19 +497,47 @@ struct GRangeParser: GSeg {
  if (fCount==0 || x>=fCount) GError(GDynArray_INDEX_ERR, x, fCount)
 #endif
 
-#define GDynArray_MAXCOUNT UINT_MAX-1
-#define GDynArray_NOIDX UINT_MAX
+#define GDynArray_MAXCOUNT INT64_MAX
 
 //basic dynamic array (vector) template for simple/primitive types or structs
 //Warning: uses malloc so it will never call the item's default constructor when growing
 
 template<class OBJ> class GDynArray {
  protected:
-	bool byptr; //in-place copy (pointer) takeover of existing OBJ[]
+	  bool byptr; //in-place copy (pointer), take over existing OBJ[] - no deallocation
     OBJ *fArray;
-    uint fCount;
-    uint fCapacity; // size of allocated memory
+    int64_t fCount;
+    int64_t fCapacity; // size of allocated memory
 	const static uint dyn_array_defcap = 16; // initial capacity (in elements)
+  void grow_pre(uint preSpace, uint alsoGrowBy=0) { //prepend empty space - just to be used for prepend() methods
+    // NOTE: fCount is nonsensical here, the created gap at the beginning of fArray has to be filled by the caller
+    // alsoGrowBy can be added to the memory reallocation, to optimize duplex prepend+append operations
+    if (preSpace == 0) return;
+    int64_t newcap = fCount + preSpace + alsoGrowBy;
+    OBJ* newArr;
+    GMALLOC((pointer*)&newArr, newcap * sizeof(OBJ));
+    if (fCount > 0) {
+      memcpy(newArr + preSpace, fArray, fCount * sizeof(OBJ));
+    }
+    if (byptr) byptr=false; else GFREE(fArray);
+    fArray = newArr;
+    fCapacity = newcap;
+  }
+  inline OBJ* _realloc(int64_t newcap) { // byptr aware realloc
+    OBJ* oldPtr = fArray;
+    if (byptr) { // GREALLOC would free the original pointer, which we can't do
+       byptr=false; //we will manually reallocate the array, losing the original pointer
+       OBJ* newArr;
+       GMALLOC(newArr, newcap * sizeof(OBJ));
+       memcpy(newArr, fArray, fCount*sizeof(OBJ));
+       fArray = newArr;
+      } else {
+        GREALLOC(fArray, newcap*sizeof(OBJ));
+      }
+      fCapacity=newcap;
+      return oldPtr;
+  }
+
  public:
     GDynArray(int initcap=dyn_array_defcap):byptr(false), fArray(NULL), fCount(0),
 	     fCapacity(initcap) { // constructor
@@ -519,7 +549,7 @@ template<class OBJ> class GDynArray {
         GMALLOC(fArray, sizeof(OBJ)*a.fCapacity);
         memcpy(fArray, a.fArray, sizeof(OBJ)* a.fCapacity);
     }
-    GDynArray(OBJ* ptr, uint pcap):byptr(true), fArray(ptr), fCount(0), fCapacity(pcap) {
+    GDynArray(OBJ* ptr, int64_t pcap):byptr(true), fArray(ptr), fCount(0), fCapacity(pcap) {
     	//this will never deallocate the passed pointer
     }
 
@@ -536,7 +566,7 @@ template<class OBJ> class GDynArray {
         return *this;
     }
 
-    OBJ& operator[] (uint idx) {// get array item
+    OBJ& operator[] (int64_t idx) {// get array item
     	GDynArray_TEST_INDEX(idx);
     	return fArray[idx];
     }
@@ -549,23 +579,23 @@ template<class OBJ> class GDynArray {
     	growTo(fCapacity + delta);
     }
 #define GDynArray_ADD(item) \
-    	if (fCount==MAX_UINT-1) GError("Error at GDynArray: cannot add item, maximum count reached!\n"); \
+    	if (fCount==INT64_MAX) GError("Error at GDynArray: cannot add item, maximum count reached!\n"); \
     	if ((++fCount) > fCapacity) Grow(); \
     	fArray[fCount-1] = item;
 
-    uint Add(OBJ* item) { // Add item to the end of array
+      int64_t Add(OBJ* item) { // Add item to the end of array
       //element given by pointer
-      if (item==NULL) return GDynArray_NOIDX;
+      if (item==NULL) return -1;
   	  GDynArray_ADD( (*item) );
   	  return (fCount-1);
     }
 
-    uint Add(OBJ item) { // Add OBJ copy to the end of array
+    int64_t Add(OBJ item) { // Add OBJ copy to the end of array
 	  GDynArray_ADD(item);
 	  return (fCount-1);
     }
 
-    uint Push(OBJ item) { //same as Add
+    int64_t Push(OBJ item) { //same as Add
     	GDynArray_ADD(item);
     	return (fCount-1);
     }
@@ -576,13 +606,12 @@ template<class OBJ> class GDynArray {
     	return fArray[fCount];
     }
 
-    uint Count() { return fCount; } // get size of array (elements)
-    uint Capacity() { return fCapacity; }
+    int64_t Count() { return fCount; } // get size of array (elements)
+    int64_t Capacity() { return fCapacity; }
     void growTo(uint newcap) {
     	if (newcap==0) { Clear(); return; }
     	if (newcap <= fCapacity) return; //never shrink! (use Pack() for shrinking)
-    	GREALLOC(fArray, newcap*sizeof(OBJ));
-    	fCapacity=newcap;
+    	_realloc(newcap);
     }
 
     void append(OBJ* arr, uint count) {
@@ -599,7 +628,30 @@ template<class OBJ> class GDynArray {
     	fCount+=arr.fCount;
     }
 
-    void Trim(int tcount=1) {
+    void prepend(OBJ* arr, uint count, OBJ* arrAppend=nullptr, uint appendCount=0) {
+      if (count==0) return;
+      grow_pre(count, appendCount);
+      memcpy(fArray, arr, count*sizeof(OBJ));
+      fCount+=count;
+      if (arrAppend && appendCount>0) {
+        memcpy(fArray+fCount, arrAppend, appendCount*sizeof(OBJ));
+        fCount += appendCount;
+      }
+    }
+
+    void prepend(GDynArray<OBJ> arr, GDynArray<OBJ>* arrAppend=nullptr) {
+        if (arr.fCount==0) return;
+        int64_t appendCount = (arrAppend) ? arrAppend->fCount : 0;
+        grow_pre(arr.fCount, appendCount);
+        memcpy(fArray, arr.fArray, arr.fCount*sizeof(OBJ));
+        fCount += arr.fCount;
+        if (appendCount>0) {
+          memcpy(fArray+fCount, arrAppend->fArray, appendCount*sizeof(OBJ));
+          fCount += appendCount;
+        }
+    }
+
+    void Trim(uint tcount=1) {
     	//simply cut (discard) the last tcount items
     	//new Count is now fCount-tcount
     	//does NOT shrink capacity accordingly!
@@ -608,36 +660,32 @@ template<class OBJ> class GDynArray {
 
     void Pack() { //shrink capacity to fCount+dyn_array_defcap
     	if (fCapacity-fCount<=dyn_array_defcap) return;
-    	int newcap=fCount+dyn_array_defcap;
-    	GREALLOC(fArray, newcap*sizeof(OBJ));
-    	fCapacity=newcap;
+    	int64_t newcap=fCount+dyn_array_defcap;
+    	_realloc(newcap);
     }
 
     void zPack(OBJ z) { //shrink capacity to fCount+1 and adds a z terminator
     	if (fCapacity-fCount<=1) { fArray[fCount]=z; return; }
-    	int newcap=fCount+1;
-    	GREALLOC(fArray, newcap*sizeof(OBJ));
-    	fCapacity=newcap;
+    	int64_t newcap=fCount+1;
+    	_realloc(newcap);
     	fArray[fCount]=z;
     }
 
 
     inline void Shrink() { Pack(); }
 
-    void Delete(uint idx) {
+    void Delete(int64_t idx) {
 	  GDynArray_TEST_INDEX(idx);
 	  --fCount;
 	  if (idx<fCount)
 		  memmove(&fArray[idx], &fArray[idx+1], (fCount-idx)*sizeof(OBJ));
     }
 
-    inline void Remove(uint idx) { Delete(idx); }
+    inline void Remove(int64_t idx) { Delete(idx); }
 
-    void Clear() { // clear array, shrinking its allocated memory
+    void Clear(int64_t newcap=dyn_array_defcap) { // clear array, shrinking its allocated memory
     	fCount = 0;
-    	GREALLOC(fArray, sizeof(OBJ)*dyn_array_defcap);
-    	// set initial memory size again
-    	fCapacity = dyn_array_defcap;
+    	_realloc(newcap);
     }
 
     void Reset() {// fast clear array WITHOUT deallocating it

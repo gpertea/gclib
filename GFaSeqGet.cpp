@@ -198,21 +198,21 @@ void GFaSeqGet::initSubseq(int64_t cstart, int64_t clen, int64_t seq_len) {
 
 const char* GFaSeqGet::subseq(int64_t cstart, int64_t& clen) {
   //cstart is 1-based genomic coordinate within current fasta sequence
-  int64_t maxlen=(seq_len>0)?seq_len : MAX_FASUBSEQ;
-   //GMessage("--> call: subseq(%u, %d)\n", cstart, clen);
+  int64_t maxlen=(seq_len>0) ? seq_len : MAX_FASUBSEQ;
+  //GMessage("--> call: subseq(%u, %d)\n", cstart, clen);
   if (clen>maxlen) {
     GMessage("Error (GFaSeqGet): subsequence cannot be larger than %d\n", maxlen);
     return NULL;
-    }
+  }
   if (seq_len>0 && clen+cstart-1>seq_len) {
-     //GMessage("Error (GFaSeqGet): end coordinate (%d) cannot be larger than sequence length %d\n", clen+cstart-1, seq_len);
-     //Adjust request:
-     clen=seq_len-cstart+1;
-     }
+    //GMessage("Error (GFaSeqGet): end coordinate (%d) cannot be larger than sequence length %d\n", clen+cstart-1, seq_len);
+    //Adjust request:
+    clen=seq_len-cstart+1;
+  }
   if (lastsub->sq==NULL || lastsub->sqlen==0) { //no previous subseq allocated
     initSubseq(cstart, clen, seq_len);
     return (const char*)lastsub->sq;
-    }
+  }
   //allow extension up to MAX_FASUBSEQ
   int64_t bstart=lastsub->sqstart;
   int64_t bend=lastsub->sqstart+lastsub->sqlen-1;
@@ -225,67 +225,65 @@ const char* GFaSeqGet::subseq(int64_t cstart, int64_t& clen) {
   int64_t czto=0;
   int64_t newstart=cstart;
   if (cstart>=bstart && cend<=bend) { //new reg contained within existing buffer
-     return (const char*) &(lastsub->sq[cstart-bstart]) ;
-    }
+    return (const char*)&(lastsub->sq[cstart-bstart]);
+  }
   //extend downward
   int64_t newend=GMAX(cend, bend);
   if (cstart<bstart) { //requested start < old buffer start
     newstart=cstart;
     newlen=(newend-newstart+1);
     if (newlen>MAX_FASUBSEQ) {
-       newlen=MAX_FASUBSEQ;
-       newend=cstart+newlen-1; //keep newstart, set newend
-       }
+      newlen=MAX_FASUBSEQ;
+      newend=cstart+newlen-1; //keep newstart, set newend
+    }
     qlen=bstart-cstart;
     if (newend>bstart) { //overlap
-       if (newend>bend) {// new region is larger & around the old one - so we have two regions to update
-         kovl=bend-bstart+1;
-         czfrom=0;
-         czto=bstart-cstart;
-         lastsub->setup(newstart, newlen, kovl, czfrom, czto, seq_len); //this should realloc and copy the kovl subseq
-         qlen=bstart-cstart;
-         loadSubseq(newstart, qlen);
-         qlen=newend-bend;
-         int toread=qlen;
-         loadSubseq(bend+1, qlen);
-         clen-=(toread-qlen);
-         lastsub->sqlen=clen;
-         return (const char*)lastsub->sq;
-         }
-        //newend<=bend
-       kovl=newend-bstart+1;
-       }
-     else { //no overlap with previous buffer
-       if (newend>bend) kovl=bend-bstart+1;
-                   else kovl=newend-bstart+1;
-       }
-     qlen=bstart-cstart;
-     czfrom=0;
-     czto=qlen;
-    } //cstart<bstart
-   else { //cstart>=bstart, possibly extend upwards
+      if (newend>bend) {// new region is larger & around the old one - so we have two regions to update
+        kovl=bend-bstart+1;
+        czfrom=0;
+        czto=bstart-cstart;
+        lastsub->setup(newstart, newlen, kovl, czfrom, czto, seq_len); //this should realloc and copy the kovl subseq
+        qlen=bstart-cstart;
+        loadSubseq(newstart, qlen);
+        qlen=newend-bend;
+        int toread=qlen;
+        loadSubseq(bend+1, qlen);
+        clen-=(toread-qlen);
+        lastsub->sqlen=clen;
+        return (const char*)lastsub->sq;
+      }
+      //newend<=bend
+      kovl=newend-bstart+1;
+    } else { //no overlap with previous buffer
+      if (newend>bend) kovl=bend-bstart+1;
+      else kovl=newend-bstart+1;
+    }
+    qlen=bstart-cstart;
+    czfrom=0;
+    czto=qlen;
+  } //cstart<bstart
+  else { //cstart>=bstart, possibly extend upwards
     newstart=bstart;
     newlen=(newend-newstart+1);
     if (newlen>MAX_FASUBSEQ) {
-       newstart=bstart+(newlen-MAX_FASUBSEQ);//keep newend, assign newstart
-       newlen=MAX_FASUBSEQ;
-       if (newstart<=bend) { //overlap with old buffer
-          kovl=bend-newstart+1;
-          czfrom=newstart-bstart;
-          czto=0;
-          }
-       else { //not overlapping old buffer
-         kovl=0;
-         }
-       } //newstart reassigned
+      newstart=bstart+(newlen-MAX_FASUBSEQ);//keep newend, assign newstart
+      newlen=MAX_FASUBSEQ;
+      if (newstart<=bend) { //overlap with old buffer
+        kovl=bend-newstart+1;
+        czfrom=newstart-bstart;
+        czto=0;
+      } else { //not overlapping old buffer
+        kovl=0;
+      }
+    } //newstart reassigned
     else { //we can extend the buffer to include the old one
       qlen=newend-bend; //how much to read from file
       qstart=bend+1;
       kovl=bend-bstart+1;
       czfrom=0;
       czto=0;
-      }
     }
+  }
   lastsub->setup(newstart, newlen, kovl, czfrom, czto, seq_len); //this should realloc but copy any overlapping region
   lastsub->sqlen-=qlen; //appending may result in a premature eof
   int toread=qlen;

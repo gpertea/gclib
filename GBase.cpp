@@ -16,7 +16,7 @@
 
 //************************* Debug helpers **************************
 // Assert failed routine
-void GAssert(const char* expression, const char* filename, unsigned int lineno){
+void GAssert(const char* expression, const char* filename, uint lineno){
   char msg[4096];
   sprintf(msg,"%s(%d): ASSERT(%s) failed.\n",filename,lineno,expression);
   fprintf(stderr,"%s",msg);
@@ -950,8 +950,8 @@ bool strToUInt(char* p, uint& i) {
 	//now p is on a non-digit;
 	if (start==p) return false;
 	char* endptr=NULL;
-	unsigned long l=strtoul(start,&endptr,10);
-	i=(uint) l;
+	ulong l=strtoul(start,&endptr,10);
+  i=(uint) l;
 	if (endptr!=p || endptr==start || i!=l)
 		return false;
 	return true;
@@ -971,7 +971,7 @@ bool parseUInt(char* &p, uint& i) { //pointer p is advanced after the number
 	 return false;
  }
  char* endptr=NULL;
- unsigned long l=strtoul(start,&endptr,10);
+ ulong l=strtoul(start,&endptr,10);
  i=(uint) l;
  if (endptr!=p || endptr==start || i!=l) {
 	 p=p0;
@@ -992,7 +992,7 @@ bool parseHex(char* &p, uint& i) {
  char saved=*p;
  *p='\0';
  char* endptr=p;
- unsigned long l=strtoul(start,&endptr,16);
+ ulong l=strtoul(start,&endptr,16);
  i=(uint) l;
  *p=saved;
  if (endptr!=p || i!=l) return false;
