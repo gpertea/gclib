@@ -2,152 +2,109 @@
 #define GFASEQGET_H
 #include "GFastaIndex.h"
 
-#define MAX_FASUBSEQ 0xF0000000L
-//max 4GB sequence data held in memory at a time
 
-class GSubSeq { //virtual subsequence from a larger sequence/chr
- public:
-  int64_t sqstart=0; //1-based coord of subseq start on sequence
-  int64_t sqlen=0;   //length of subseq loaded
-  char* sq=nullptr; //actual subsequence data (end-of-line characters removed)
-
-  GSubSeq(char* p=NULL, int64_t chr_start=0, int64_t seqlen=0) {
-     if (p) takeOver(p, chr_start, seqlen);
-  }
-
-
-  void forget() { //forget about pointer data, so we can reuse it
-  	sq=NULL;
-  	sqstart=0;
-  	sqlen=0;
-  }
-  //take over subseq data, e.g. from GFastaIndex::fetchSeq()
-  void takeOver(char* p, int64_t chr_start, int64_t seqlen) {
-     clear();
-     sq=p;
-     sqstart=chr_start;
-     sqlen=seqlen;
-  }
-
-  void clear() {
-     GFREE(sq);
-     sqstart=0;
-     sqlen=0;
-  }
-
-  ~GSubSeq() {
-     GFREE(sq);
-  }
-
-  //allocates slen+1 memory for subsequence
-  // if sovl>0, it will copy the overlap region from previous subseq (old_from, sovl) to (new_to, sovl)
-  void setup(int64_t sstart, int64_t slen, int64_t sovl=0, int64_t old_from=0, int64_t new_to=0, int64_t maxseqlen=0);
-    //check for overlap with previous window and realloc/extend appropriately
-    // the window will keep extending until MAX_FASUBSEQ is reached
-};
-
-//
 class GFaSeqGet {
+ protected:
   char* fname=nullptr; //file name where the sequence resides (NULL if faidx mode)
   FILE* fh=nullptr;   // stays NULL in faidx mode
   GFastaIndex* faidx=nullptr; //faidx mode if not null, use faidx->fetchSeq() to serve sequence
   off_t fseqstart=-1; //file offset where the sequence actually starts
   int64_t seq_len=0; //total sequence length, if known (when created from GFastaIndex)
   uint line_len=0; //length of each line of text
-  uint line_blen=0; //binary length of each line
-                 // = line_len + number of EOL character(s)
-  GSubSeq* lastsub=nullptr;
-  void initialParse(off_t fofs=0, bool checkall=true);
-  void initSubseq(int64_t cstart, int64_t clen, int64_t seq_len);
-  const char* loadSubseq(int64_t cstart, int64_t& clen);
+  uint line_blen=0; //binary length of each line, includes EOL character(s)
+  const static int64_t MAX_CACHE = 0xF0000000L;
+  GDynArray<char> seq_cache; // cache buffer for the sequence
+  int64_t c_start=0; // 1-based start coordinate of the cached region
+  int64_t c_end=0;   // 1-based (inclusive) end coordinate of cached sequence
+  void initialParse(off_t fofs = 0, bool checkall = true);
+  char* loadSeq(int64_t cstart, int64_t& clen);
   void finit(const char* fn, off_t fofs, bool validate);
+  void initCache(int64_t cstart, int64_t clen) {
+   char* seq;
+   if (faidx) {
+     seq = faidx->fetchSeq(seqname, cstart, cstart + clen - 1, &clen);
+   } else {
+     seq = loadSeq(cstart, clen);
+   }
+   seq_cache.takeOver(seq, clen);
+   c_start = cstart;
+   c_end = cstart + clen - 1;
+ }
  public:
-  //GStr seqname; //current sequence name
-  char* seqname=nullptr;
-
-  GFaSeqGet(const char* fn, off_t fofs, bool validate=false) {
-     finit(fn,fofs,validate);
+  char* seqname; //curent FASTA record sequence name
+  GFaSeqGet(const char* fn, off_t fofs, bool validate = false) {
+    finit(fn, fofs, validate);
   }
-
-  GFaSeqGet(const char* fn, bool validate=false) {
-     finit(fn,0,validate);
+  GFaSeqGet(const char* fn, bool validate = false) {
+    finit(fn, 0, validate);
   }
-
   GFaSeqGet(const char* faname, int64_t seqlen, off_t fseqofs, int l_len, int l_blen);
-   //indirect GFastaIndex use
-
   GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx);
-  //legacy incidental GFastaIndex use (without switching in faidx mode)
-
-  GFaSeqGet(GFastaIndex* fa_idx, const char* seqname=NULL); //full faidx mode
-
-  GFaSeqGet(FILE* f, off_t fofs=0, bool validate=false);
-
+  GFaSeqGet(GFastaIndex* fa_idx, const char* seqname = NULL);
+  GFaSeqGet(FILE* f, off_t fofs = 0, bool validate = false);
   ~GFaSeqGet() {
-    if (fname!=NULL) {
-       GFREE(fname);
-       fclose(fh);
+    if (fname != NULL) {
+      GFREE(fname);
+      fclose(fh);
     }
     GFREE(seqname);
-    delete lastsub;
   }
 
-  // returns pointer to internal buffer+offset, not 0-terminated
-  const char* seq(int64_t cstart=1, int64_t clen=0) {
-	  int cend = clen==0 ? 0 : cstart+clen-1;
-	  return getRange(cstart, cend);
-  }
+  //fetch sequence as needed, return sequence pointer (not null-terminated)
+  //length is returned in clen
+  const char* subseq(int64_t n_start, int64_t& n_len, bool clear = false);
 
-  const char* subseq(int64_t cstart, int64_t& clen); //pointer to internal buffer, not 0-terminated
-  const char* getRange(int64_t cstart=1, int64_t cend=0, int* retlen=NULL) {
-      if (cend==0) cend=(seq_len>0)?seq_len : MAX_FASUBSEQ;
-      if (cstart>cend) { Gswap(cstart, cend); }
-      int64_t clen=cend-cstart+1;
-      const char* r = subseq(cstart, clen);
+  //get sequence range pointer with optional length return; not null-terminated
+  const char* getRange(int64_t cstart = 1, int64_t cend = 0, int* retlen = NULL) {
+    if (cend == 0) cend = (seq_len > 0) ? seq_len : MAX_CACHE;
+    if (cstart > cend) Gswap(cstart, cend);
+    int64_t clen = cend - cstart + 1;
+    const char* r = subseq(cstart, clen);
+    if (retlen) *retlen = clen;
+    return r;
+  }
+  //returns new allocated copy of sequence range, null terminated
+  char* copyRange(int64_t cstart, int64_t cend, bool revCmpl = false, bool upCase = false,
+                  int64_t* retlen = NULL);
+
+   //returns a null-terminated copy of the entire chromosome/contig
+   char* fetchSeq(int* retlen=nullptr) {
+      int64_t clen=(seq_len>0) ? seq_len : MAX_CACHE;
+      subseq(1, clen);
       if (retlen) *retlen=clen;
+      char* r=NULL;
+      GMALLOC(r, clen+1);
+      memcpy(r, seq_cache(), clen);
+      r[clen]=0;
       return r;
-  }
+   }
 
-  // returns new 0-terminated copy, caller is responsible for deallocating the return string
-  char* copyRange(int64_t cstart, int64_t cend, bool revCmpl=false, bool upCase=false, int64_t* retlen=NULL);
-
-  // uncached, read and return allocated buffer with a copy of the substring, 0-terminated
-  // caller is responsible for deallocating the return string
-  char* fetchSeq(int* retlen=NULL) {
-   int64_t clen=(seq_len>0) ? seq_len : MAX_FASUBSEQ;
-  	if (lastsub) { delete lastsub; lastsub=NULL; }
-  	subseq(1, clen);
-  	if (retlen) *retlen=clen;
-  	char* r=lastsub->sq;
-  	lastsub->forget();
-  	if (clen>0) {
-  	   r[clen]=0;
-  	}
-  	else {
-  		r=NULL;
-  	}
-  	return r;
-  }
-
-  void loadall(uint32 max_len=0) {
-    //TODO: better read the whole sequence differently here - line by line
-    //so when EOF or another '>' line is found, the reading stops!
-    int64_t clen=(seq_len>0) ? seq_len : ((max_len>0) ? max_len : MAX_FASUBSEQ);
+   //fetch from base 1 to seq_len (if known) falling back on max_len or MAX_CACHE
+   // (the reading will stop at the end of the FASTA record anyway)
+   void loadall(int64_t max_len = 0) {
+    int64_t clen = (seq_len > 0) ? seq_len : ((max_len > 0) ? max_len : MAX_CACHE);
     subseq(1, clen);
-    }
-  void load(uint cstart, uint cend) {
-     //cache as much as possible
-      if (seq_len>0 && cend>seq_len) cend=seq_len; //correct a bad request
-      int64_t clen=cend-cstart+1;
-      subseq(cstart, clen);
-     }
-  int getsublen() { return lastsub!=NULL ? lastsub->sqlen : 0 ; }
-  int getseqlen() { return seq_len; } //known when loaded with GFastaIndex
-  off_t getseqofs() { return fseqstart; }
-  int getLineLen() { return line_len; }
-  int getLineBLen() { return line_blen; }
-  //reads a subsequence starting at genomic coordinate cstart (1-based)
+  }
 
+  void load(int64_t cstart, int64_t cend) {
+    if (seq_len > 0 && cend > seq_len) cend = seq_len;
+    int64_t clen = cend - cstart + 1;
+    subseq(cstart, clen);
+  }
+
+  //return sequence pointer (not null-terminated)
+  const char* seq(int64_t cstart = 1, int64_t clen = 0) {
+      int cend = clen == 0 ? 0 : cstart + clen - 1;
+      return getRange(cstart, cend);
+  }
+
+  //length of cached sequence starting at c_start
+  int64_t getCachedlen() {     return c_end - c_start + 1;  }
+  int64_t getCachedStart() {   return c_start;  }
+  int64_t getSeqlen() {    return seq_len;  }
+  off_t getSeqofs() {    return fseqstart;  }
+  int getLineLen() {    return line_len;  }
+  int getLineBLen() {    return line_blen;  }
   size_t getMemoryFootprint() {
       size_t totalSize = sizeof(*this); // Base size of the object
       // Add size of dynamically allocated fname
@@ -155,15 +112,10 @@ class GFaSeqGet {
           totalSize += strlen(this->fname) + 1; // +1 for the null-terminator
       if (this->seqname != NULL)
           totalSize += strlen(this->seqname) + 1;
-      if (this->lastsub != NULL) {
-          totalSize += sizeof(GSubSeq); // Size of GSubSeq object itself
-          if (this->lastsub->sq != NULL)
-              totalSize += this->lastsub->sqlen; // Add the length of the sequence buffer
-      }
+      totalSize += seq_cache.getCapacity()+sizeof(seq_cache); // Size of GSubSeq object itself
       return totalSize;
     }
 };
-
 
 //multi-fasta sequence handling
 class GFastaDb {

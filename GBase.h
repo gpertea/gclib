@@ -386,7 +386,7 @@ struct GSeg {
         else { start=s;end=e; }
   }
   //check for overlap with other segment
-  uint len() { return end-start+1; }
+  inline uint len() { return end-start+1; }
   bool overlap(GSeg* d) {
      return (start<=d->end && end>=d->start);
   }
@@ -672,7 +672,6 @@ template<class OBJ> class GDynArray {
     	fArray[fCount]=z;
     }
 
-
     inline void Shrink() { Pack(); }
 
     void Delete(int64_t idx) {
@@ -700,6 +699,22 @@ template<class OBJ> class GDynArray {
     void ForgetPtr() { byptr=true;  }
     void DetachPtr() { byptr=true;  }
 
+    void zEnd(OBJ* z) { //add a zero terminator
+    	if (fCount==fCapacity) growTo(fCount+1); //Grow();
+    	fArray[fCount]=z;fCount++;
+    }
+    // -- attach to a new array, taking of the responsibility of deallocating it
+    // this could be handy for e.g. taking over a newly allocated char* instead of copying it
+    OBJ* takeOver(OBJ* ptr, int64_t count, int64_t add_cap=0) {
+      OBJ* prev_ptr = fArray;
+    	if (!byptr) GFREE(fArray); //this invalidates prev_ptr
+    	fArray=ptr;
+    	fCount=count;
+    	fCapacity=count+add_cap;
+    	byptr=false; //we are now responsible for deallocating this pointer
+      return prev_ptr; //this will be useless (deallocated) unless byptr was true
+    }
+    int64_t getCapacity() { return fCapacity; }
 };
 
 

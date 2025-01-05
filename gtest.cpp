@@ -60,15 +60,7 @@ int main(int argc, char* argv[]) {
  GFastaIndex* fastaIndex = nullptr; // fastaIndex
  char* gfile=args.getOpt(OPT_GENOMIC);
  if (gfile) {
-   GStr indexFile(gfile);
-   indexFile.append(".fai");
-
-   if (fileExists(indexFile.chars())) {
-     fastaIndex = new GFastaIndex(gfile, indexFile.chars());
-   } else {
-     GMessage("Creating FASTA index for %s...\n", gfile);
-     fastaIndex=new GFastaIndex(gfile); //loads or creates the index as needed
-   }
+  fastaIndex=new GFastaIndex(gfile); //loads or creates the index as needed
  }
 
  // Handle -r/--region option
@@ -94,10 +86,9 @@ int main(int argc, char* argv[]) {
    int end = endStr.asInt();
    if (end<start) Gswap(start, end);
 
-   //GFastaRec* rec = fastaIndex->getRecord(chr);
-   //if (rec == nullptr) GError("Error: could not get sequence for %s\n", chr.chars());
-   //GFaSeqGet seqGet(gfile, rec->seqlen, rec->fpos, rec->line_len, rec->line_blen);
-   GFaSeqGet seqGet(gfile, chr.chars(), *fastaIndex);
+
+   //GFaSeqGet seqGet(gfile, chr.chars(), *fastaIndex);
+   GFaSeqGet seqGet(fastaIndex, chr.chars());
    int64_t seqlen=0;
    char* sequence=seqGet.copyRange(start, end, false, false, &seqlen);
 
