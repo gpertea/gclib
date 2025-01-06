@@ -2,18 +2,20 @@
 #include "gdna.h"
 #include <ctype.h>
 
+#define gfa_ERRPARSE "Error (GFaSeqGet): invalid FASTA record format.\n"
+
 GFaSeqGet* fastaSeqGet(GFastaDb& gfasta, const char* seqid) {
   if (gfasta.fastaPath==NULL) return NULL;
   return gfasta.fetch(seqid);
 }
 
-void GFaSeqGet::finit(const char* fn, off_t fofs, bool validate) {
+void GFaSeqGet::finit(const char* fn, off_t fofs) {
   fh = fopen(fn, "rb");
   if (fh == NULL) {
     GError("Error (GFaSeqGet) opening file '%s'\n", fn);
   }
   fname = Gstrdup(fn);
-  initialParse(fofs, validate);
+  parseRecord(fofs);
   c_start = 0;
 }
 
@@ -57,11 +59,11 @@ GFaSeqGet::GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx) {
   fseqstart=farec->seq_offset;
 }
 
-
-GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs, bool validate) {
+//fofs is expected to be the offset of the FASTA RECORD start, not sequence start
+GFaSeqGet::GFaSeqGet(FILE* f, off_t fofs) { //checks the FASTA record starting at fofs
   if (f==NULL) GError("Error (GFaSeqGet) : null file handle!\n");
   fh=f;
-  initialParse(fofs, validate);
+  parseRecord(fofs);
 }
 
 
@@ -80,92 +82,115 @@ GFaSeqGet::GFaSeqGet(GFastaIndex* fa_idx, const char* sname) { //full faidx mode
   }
 }
 
-void GFaSeqGet::initialParse(off_t fofs, bool checkall) {
- static const char gfa_ERRPARSE[]="Error (GFaSeqGet): invalid FASTA file format.\n";
- if (fofs!=0) { fseeko(fh,fofs,SEEK_SET); } //e.g. for offsets provided by fasta indexing
- //read the first two lines to determine fasta parameters
- GFREE(seqname);
- GDynArray<char> fseqname(64);
- fseqname.DetachPtr();  // will not free the allocated memory
- fseqstart = fofs;
- int c = getc(fh);
- fseqstart++;
- if (c != '>')  // fofs must be at the beginning of a FASTA record!
-   GError("Error (GFaSeqGet): not a FASTA record?\n");
- bool getName = true;
- while ((c = getc(fh)) != EOF) {
-   fseqstart++;
-   if (getName) {
-     if (c <= 32)
-       getName = false;
-     else
-       fseqname.Add((char)c);
-   }
-   if (c == '\n' || c == '\r') {
-     break;
-   }  // end of defline
- }
- fseqname.Add('\0');       // terminate the string
- seqname = fseqname();  // takeover the string pointer
- if (c == EOF) GError(gfa_ERRPARSE);
- line_len = 0;
- uint lendlen = 0;
- while ((c = getc(fh)) != EOF) {
-   if (c == '\n' || c == '\r') {  // end of line encountered
-     if (line_len > 0) {         // end of the first "sequence" line
-       lendlen++;
-       break;
-     } else {  // another EoL char at the end of defline
-       fseqstart++;
-       continue;
-     }
-   }  // end-of-line characters
-   line_len++;
- }
- // we are at the end of first sequence line
- while ((c = getc(fh)) != EOF) {
-   if (c == '\n' || c == '\r')
-     lendlen++;
-   else {
-     ungetc(c, fh);
-     break;
-   }
- }
- line_blen = line_len + lendlen;
- if (c == EOF) return;
- // -- you don't need to check it all if you're sure it's safe
- if (checkall) {  // validate the rest of the FASTA records
-   uint llen = 0;  // last line length
-   uint elen = 0;  // length of last line ending
-   bool waseol = true;
-   while ((c = getc(fh)) != EOF) {
-     if (c == '>' && waseol) {
-       ungetc(c, fh);
-       break;
-     }
-     if (c == '\n' || c == '\r') {
-       // eol char
-       elen++;
-       if (waseol) continue;  // 2nd eol char
-       waseol = true;
-       elen = 1;
-       continue;
-     }
-     if (c <= 32) GError(gfa_ERRPARSE);  // invalid character encountered
-     // --- on a seq char here:
-     if (waseol) {  // beginning of a seq line
-       if (elen && (llen != line_len || elen != lendlen))
-         // GError(gfa_ERRPARSE);
-         GError("Error: invalid FASTA format for GFaSeqGet; make sure that\n"
-                "the sequence lines have the same length (except last)\n");
-       waseol = false;
-       llen = 0;
-       elen = 0;
-     }
-     llen++;
-   }  // while reading chars
- }    // FASTA checking was requested
- fseeko(fh, fseqstart, SEEK_SET);
+
+#define CRLF(c) ((c)=='\n' || (c)=='\r')
+//parse the entire FASTA record starting at fofs, recording sequence length and line lengths
+void GFaSeqGet::parseRecord(off_t fofs, GFastaRec* rec, char** seqptr) {
+  if (fofs!=0) { fseeko(fh, fofs, SEEK_SET); } //e.g. for offsets provided by fasta indexing
+  //read the first two lines to determine fasta parameters
+  GFREE(seqname);
+  GDynArray<char> fseqname(64);
+  GDynArray<int> line_lengths(2);
+  GDynArray<int> line_lends(2);
+
+  GDynArray<char>* seq=seqptr ? new GDynArray<char>(1024) : NULL;
+  if (seqptr) *seqptr=NULL;
+  fseqname.DetachPtr();  // will not free the allocated memory
+  fseqstart = fofs;
+  int c = getc(fh);
+  fseqstart++;
+  if (c != '>') GError(gfa_ERRPARSE); // fofs must be at the beginning of a FASTA record!
+  bool getName = true; // in the sequence name
+  while ((c = getc(fh)) != EOF) {
+    fseqstart++;
+    if (getName) {
+      if (c <= 32) getName = false;
+              else fseqname.Add((char)c);
+    }
+    if (CRLF(c)) break; // end of defline
+  }
+  fseqname.Add('\0');       // terminate the string
+  seqname = fseqname();  // takeover the string pointer
+  if (rec) rec->seqname = seqname;
+  if (c == EOF) GError(gfa_ERRPARSE);
+  uint llen=0;
+  seq_len=0;
+  uint lendlen = 0;
+  bool eos=false; // end of sequence condition
+  while ((c = getc(fh)) != EOF) {
+    if (CRLF(c)) {  // end of line encountered
+      if (llen) {  // end of a first line of sequence
+        lendlen++; // count EoL characters
+        line_lengths.Add(llen);
+        llen = 0; //reset
+        break;
+      } else {  // still in defline, another EoL char at the end?
+        fseqstart++; // increase offset of the first base in the sequence
+        continue;
+      }
+    }  // EoL char
+    //in the first sequence line
+    if (c=='>') GError(gfa_ERRPARSE); // '>' in the first line of sequence
+    if (seq && c > ' ' && c <= '~') seq->Add((char)c);
+    seq_len++;
+    llen++;
+  }
+  // at the end of first sequence line
+  if (c == EOF) eos=true;
+  if (!eos) {
+    bool waseol=CRLF(c);
+    // get the rest of the sequence lines if any
+    while (!eos && (c = getc(fh)) != EOF) {
+      if (CRLF(c)) {
+        if (!waseol) { //sequence line just ended
+          line_lengths.Add(llen);
+          llen = 0; //reset
+        }
+        waseol=true;
+        lendlen++;
+      }
+      else { // sequence line non-CRLF char
+        if (waseol) { // new sequence line
+          line_lends.Add(lendlen);
+          lendlen=0;
+        }
+        waseol=false;
+        if (c == '>') { // next record
+          eos=true;
+          break;
+        }
+        if (seq && c > ' ' && c <= '~') seq->Add((char)c);
+        seq_len++;
+        llen++;
+      }
+    }
+  }
+  if (llen) line_lengths.Add(llen);
+  if (lendlen) line_lends.Add(lendlen);
+  //check that all lines except last have the same length
+  int nlines = line_lengths.Count();
+  if (nlines > 2) {
+    for (int i = 1; i < nlines-1; i++) {
+      if (line_lengths[i] != line_lengths[0])
+        GError("Error (GFaSeqGet): inconsistent line lengths in FASTA record %s!\n", seqname);
+      if (line_lends[i] != line_lends[0])
+        GError("Error (GFaSeqGet): inconsistent line endings in FASTA record %s!\n", seqname);
+    }
+  }
+  line_len = line_lengths[0]; lendlen = line_lends[0];
+  line_blen = line_len + lendlen;
+  if (rec) {
+    rec->line_len = line_len;
+    rec->line_blen = line_blen;
+    rec->seq_offset = fseqstart;
+    rec->seqlen = seq_len;
+  }
+  if (seqptr) {
+    seq->Add('\0');
+    *seqptr = seq->DetachPtr();
+  }
+  delete seq;
+  //fseeko(fh, fseqstart, SEEK_SET); // rewind to the beginning of the sequence?
 }
 
 
@@ -194,87 +219,68 @@ char* GFaSeqGet::copyRange(int64_t cstart, int64_t cend, bool revCmpl, bool upCa
   //returns an allocated buffer with the requested sequence
   //cstart is 1-based coordinate
   //updates clen with actual sequence length read
-  if (cstart > seq_len || clen==0) {
+  bool known_seqlen = (seq_len > 0);
+  if ((known_seqlen && cstart > seq_len) || clen<=0) {
     clen = 0;
     return nullptr;
   }
-  char* seqdata=nullptr;
-  GMALLOC(seqdata, clen);
+  int64_t cend = cstart + clen - 1;
+  if (known_seqlen && cend > seq_len) cend = seq_len;
   if (faidx) {
     int64_t retlen=0;
-    char* seq=faidx->fetchSeq(seqname, cstart, cstart+clen-1, &retlen);
+    char* seq=faidx->fetchSeq(seqname, cstart, cend, &retlen);
     if (seq==nullptr) {
-      GFREE(seqdata);
       clen=0;
       return nullptr;
     }
-    if (retlen<clen) {
-      GREALLOC(seqdata, retlen);
-      clen=retlen;
+    clen=retlen;
+    return seq;
+  }
+  //-- direct file reading mode, code from GFastaIndex::fetchSeq
+  if (fh==NULL) GError("Error (GFaSeqGet): no file handle for direct reading!\n");
+  int64_t beg=cstart-1, end=cend-1;
+  off_t fofs=fseqstart + beg / line_blen * line_len
+             + beg % line_blen;
+  int ret=fseeko(fh, fofs, SEEK_SET);
+  if (ret<0) {
+       GMessage("Warning: could not seek to FASTA offset %lld\n for %s", (long long)fofs,
+                      seqname);
+       clen=0;
+       return nullptr;
+  }
+
+    size_t l = 0;
+    char* seq;
+    GMALLOC(seq, (size_t) end - beg + 2);
+    int c = 0;;
+    size_t maxl = (size_t)end-beg;
+    if (known_seqlen) { // we can preallocate
+      while ( l < maxl && (c=fgetc(fh))>=0 )
+          if (c > ' ' && c <= '~') seq[l++] = c;
+      if (c < 0) {
+          GMessage("Warning fetchSeq failed to retrieve chunk: %s",
+              c == -1 ? "unexpected end of file" : "error reading file");
+          GFREE(seq);
+          return nullptr;
+      }
+    } else { // open-ended, must check for end of record
+      bool eol=false;
+      while ( l < maxl && (c=fgetc(fh))>=0 ) {
+        if (c==-1 || (eol && c=='>')) {
+          break; // end of file or start of next record
+        }
+        eol=(c=='\n' || c=='\r');
+        if (c > ' ' && c <= '~') seq[l++] = c;
+      }
     }
-    memcpy(seqdata, seq, retlen);
-    GFREE(seq);
-    return seqdata;
+    seq[l] = '\0';
+    clen=l;
+    return seq;
   }
-  //direct file reading mode:
-  cstart--; //convert to 0-based offset for file ops
-  int64_t lineofs = cstart % line_len;
-  off_t f_start = ((int)(cstart/line_len)) * line_blen + lineofs;
-  int64_t letters_toread = clen;
-  int64_t maxlen = (seq_len>0) ? seq_len-cstart : MAX_CACHE;
-  if (letters_toread > maxlen) letters_toread = maxlen;
-  int64_t c_end = cstart + letters_toread;
-  off_t f_end = ((int)(c_end/line_len)) * line_blen + c_end % line_len;
-  int64_t bytes_toRead = f_end - f_start;
-  f_start += fseqstart; //absolute file offset
-  fseeko(fh, f_start, SEEK_SET);
-  char* filebuf=nullptr;
-  GMALLOC(filebuf, bytes_toRead);
-  int64_t actual_read = fread(filebuf, 1, bytes_toRead, fh);
-  if (actual_read == 0) {
-    GFREE(filebuf);
-    GFREE(seqdata);
-    clen = 0;
-    return nullptr;
-  }
-  //copy sequence data from file buffer, skipping line endings
-  int eol_size = line_blen - line_len;
-  int64_t spos = 0; //position in seqdata
-  int64_t fpos = 0; //position in file buffer
-  //handle first partial line
-  if (lineofs > 0) {
-    int64_t cplen = line_len - lineofs;
-    if (cplen > letters_toread) cplen = letters_toread;
-    if (cplen > actual_read) cplen = actual_read;
-    memcpy(seqdata, filebuf, cplen);
-    letters_toread -= cplen;
-    spos += cplen;
-    fpos += cplen + eol_size;
-  }
-  //copy full lines
-  while (letters_toread >= line_len && fpos + line_len <= actual_read) {
-    memcpy(&seqdata[spos], &filebuf[fpos], line_len);
-    spos += line_len;
-    letters_toread -= line_len;
-    fpos += line_blen;
-  }
-  //copy last partial line
-  if (fpos < actual_read && letters_toread > 0) {
-    int64_t last_copy = (actual_read - fpos < letters_toread) ?
-                        actual_read - fpos : letters_toread;
-    memcpy(&seqdata[spos], &filebuf[fpos], last_copy);
-    spos += last_copy;
-  }
-  GFREE(filebuf);
-  if (spos < clen) {
-    GREALLOC(seqdata, spos);
-    clen = spos;
-  }
-  return seqdata;
-}
+
 
 const char* GFaSeqGet::subseq(int64_t n_start, int64_t& n_len, bool clear) {
-  static const int MAX_TOTAL_CACHE = 50*1024*1024; //50MB max cache
+  static const int MAX_NONOVL_EXT = 50*1024*1024; //50MB max cache for non-overlapping sequences
   static const int PROXIMITY_THRESHOLD = 1024*1024; //1MB proximity
   if (n_len==0) return nullptr;
   int64_t n_end = n_start + n_len - 1;
@@ -295,7 +301,7 @@ const char* GFaSeqGet::subseq(int64_t n_start, int64_t& n_len, bool clear) {
   if (overlap_len > cache_len/3) { //significant overlap
     if (n_start < c_start && n_end <= c_end) { //extend left only
       int64_t prep_len = c_start - n_start;
-      if (cache_len + prep_len <= MAX_TOTAL_CACHE) {
+      if (cache_len + prep_len <= MAX_CACHE) {
         char* prep_seq = loadSeq(n_start, prep_len);
         if (prep_seq) {
           seq_cache.prepend(prep_seq, prep_len);
@@ -306,7 +312,7 @@ const char* GFaSeqGet::subseq(int64_t n_start, int64_t& n_len, bool clear) {
       }
     } else if (n_start >= c_start && n_end > c_end) { //extend right only
       int64_t app_len = n_end - c_end;
-      if (cache_len + app_len <= MAX_TOTAL_CACHE) {
+      if (cache_len + app_len <= MAX_CACHE) {
         char* app_seq = loadSeq(c_end + 1, app_len);
         if (app_seq) {
           seq_cache.append(app_seq, app_len);
@@ -324,7 +330,7 @@ const char* GFaSeqGet::subseq(int64_t n_start, int64_t& n_len, bool clear) {
       gap = n_start - c_end - 1;
     if (gap < PROXIMITY_THRESHOLD) {
       int64_t new_len = n_end - n_start + 1;
-      if (cache_len + new_len <= MAX_TOTAL_CACHE) {
+      if (cache_len + new_len <= MAX_NONOVL_EXT) {
         char* new_seq = loadSeq(n_start, new_len);
         if (new_seq) {
           if (n_end < c_start) {

@@ -8,17 +8,16 @@ class GFaSeqGet {
   char* fname=nullptr; //file name where the sequence resides (NULL if faidx mode)
   FILE* fh=nullptr;   // stays NULL in faidx mode
   GFastaIndex* faidx=nullptr; //faidx mode if not null, use faidx->fetchSeq() to serve sequence
-  off_t fseqstart=-1; //file offset where the sequence actually starts
-  int64_t seq_len=0; //total sequence length, if known (when created from GFastaIndex)
+  off_t fseqstart=-1; //file offset where the sequence actually starts (seq_offset in GFastaRec)
+  int64_t seq_len=0; //total sequence length, if known
   uint line_len=0; //length of each line of text
   uint line_blen=0; //binary length of each line, includes EOL character(s)
   const static int64_t MAX_CACHE = 0xF0000000L;
   GDynArray<char> seq_cache; // cache buffer for the sequence
   int64_t c_start=0; // 1-based start coordinate of the cached region
   int64_t c_end=0;   // 1-based (inclusive) end coordinate of cached sequence
-  void initialParse(off_t fofs = 0, bool checkall = true);
   char* loadSeq(int64_t cstart, int64_t& clen);
-  void finit(const char* fn, off_t fofs, bool validate);
+  void finit(const char* fn, off_t fofs);
   void initCache(int64_t cstart, int64_t clen) {
    char* seq;
    if (faidx) {
@@ -32,16 +31,24 @@ class GFaSeqGet {
  }
  public:
   char* seqname; //curent FASTA record sequence name
-  GFaSeqGet(const char* fn, off_t fofs, bool validate = false) {
-    finit(fn, fofs, validate);
+  GFaSeqGet(const char* fn, off_t fofs) {
+    finit(fn, fofs);
   }
-  GFaSeqGet(const char* fn, bool validate = false) {
-    finit(fn, 0, validate);
+
+  GFaSeqGet(const char* fn) { //only for first sequence in file
+    finit(fn, 0);
   }
+
+  // parse a FASTA record starting at fofs (e.g. for cdbfasta index)
+  // optionally populates a GFastaRec object and puts the whole sequence in
+  // the given sequence pointer
+  void parseRecord(off_t fofs = 0, GFastaRec* rec = nullptr, char** seqptr = nullptr);
+
+
   GFaSeqGet(const char* faname, int64_t seqlen, off_t fseqofs, int l_len, int l_blen);
   GFaSeqGet(const char* faname, const char* chr, GFastaIndex& faidx);
   GFaSeqGet(GFastaIndex* fa_idx, const char* seqname = NULL);
-  GFaSeqGet(FILE* f, off_t fofs = 0, bool validate = false);
+  GFaSeqGet(FILE* f, off_t fofs = 0);
   ~GFaSeqGet() {
     if (fname != NULL) {
       GFREE(fname);

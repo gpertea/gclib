@@ -692,12 +692,11 @@ template<class OBJ> class GDynArray {
     	fCount = 0;
     }
 
-    OBJ* operator()() { return fArray; }
-
+    OBJ* operator()() { return fArray; } // careful with this!
     //use methods below in order to prevent deallocation of fArray pointer on destruct
     //could be handy for adopting stack objects (e.g. cheap dynamic strings)
-    void ForgetPtr() { byptr=true;  }
-    void DetachPtr() { byptr=true;  }
+    OBJ* ForgetPtr() { byptr=true;  return fArray; }
+    OBJ* DetachPtr() { byptr=true;  return fArray; }
 
     void zEnd(OBJ* z) { //add a zero terminator
     	if (fCount==fCapacity) growTo(fCount+1); //Grow();
