@@ -2434,7 +2434,7 @@ void BED_addAttribute(FILE* fout, int& acc, const char* format,... ) {
 
 void GffObj::printBED(FILE* fout, bool cvtChars) {
 //print a BED-12 line + GFF3 attributes in 13th field
- const int DBUF_LEN=1024; //there should not be attribute values longer than 1K!
+ const int DBUF_LEN=4096; //there should not be attribute values longer than 4K!
  char dbuf[DBUF_LEN];
 
  int cd_start=CDstart>0? CDstart-1 : start-1;
@@ -2920,7 +2920,7 @@ void GffObj::printGTab(FILE* fout, char** extraAttrs) {
 
 void GffObj::printGxfExon(FILE* fout, const char* tlabel, const char* gseqname, bool iscds,
                              GffExon* exon, bool gff3, bool cvtChars) {
-  const int DBUF_LEN=1024; //there should not be attribute values longer than 1K!
+  const int DBUF_LEN=4096; //there should not be attribute values longer than 4K!
   char dbuf[DBUF_LEN];
   exon->score.sprint(dbuf);
   if (exon->phase==0 || !iscds) exon->phase='.';
@@ -3000,7 +3000,7 @@ bool GffObj::printAttrs(FILE* fout,  const char* sep, bool GTFstyle, bool cvtCha
  //* this prints sep FIRST and then the list of attributes separated by sep
  //* does NOT print sep and newline at the end!
  // returns false if no attribute was printed at all
- const int DBUF_LEN=1024; //there should not be attribute values longer than 1K!
+ const int DBUF_LEN=4096; //there should not be attribute values longer than 4K!
  char dbuf[DBUF_LEN];
  const char* prsep=sepFirst ? sep : "";
  //assumes ID or transcript_ID was already printed (without ending)
@@ -3085,7 +3085,7 @@ bool GffObj::printAttrs(FILE* fout,  const char* sep, bool GTFstyle, bool cvtCha
 
 void GffObj::printGxf(FILE* fout, GffPrintMode gffp,
                    const char* tlabel, const char* gfparent, bool cvtChars) {
- char dbuf[10];
+ char dbuf[1024];
  if (tlabel==NULL) {
     tlabel=track_id>=0 ? names->tracks.Get(track_id)->name :
          (char*)"gffobj" ;
