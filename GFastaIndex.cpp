@@ -85,6 +85,9 @@ int GFastaIndex::buildIndex() {
     int last_len=0;
     bool mustbeLastLine=false; //true if the line length decreases
     while ((s=fl.nextLine())!=NULL) {
+     //skip comment lines starting with ';' (the original FASTA
+     //comment convention) before the first record
+     if (seqname==NULL && s[0]==';') continue;
      if (s[0]=='>') {
         if (seqname!=NULL) {
          if (seqlen==0)
